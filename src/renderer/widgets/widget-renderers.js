@@ -52,7 +52,17 @@ export function createWidgetChart(ctx, definition) {
     options: {
       responsive: true,
       animation: false,
-      plugins: { legend: { display: definition.mode === 'snapshot-series' } }
+      plugins: {
+        legend: {
+          display: false,
+          labels: {
+            boxWidth: 8,
+            boxHeight: 8,
+            padding: 8,
+            font: { size: 10 }
+          }
+        }
+      }
     }
   });
 }

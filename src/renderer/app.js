@@ -275,12 +275,14 @@ function refreshCharts() {
         }];
       }
 
+      chart.options.plugins.legend.display = chart.data.datasets.length > 1;
       chart.update();
       continue;
     }
 
     chart.data.labels = history.map((x) => new Date(x.time).toLocaleTimeString());
     chart.data.datasets[0].data = history.map((x) => x[metric]);
+    chart.options.plugins.legend.display = false;
     chart.update();
   }
 }
