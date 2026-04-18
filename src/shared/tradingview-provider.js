@@ -132,6 +132,17 @@ function buildPutBidIvByStrike(byTypeStrike) {
   return out;
 }
 
+function buildPutStrikesDesc(byTypeStrike) {
+  const strikes = [];
+  for (const [key, row] of byTypeStrike.entries()) {
+    if (!key.startsWith('put:')) continue;
+    if (row?.strike == null) continue;
+    strikes.push(row.strike);
+  }
+
+  return strikes.sort((a, b) => b - a);
+}
+
 function computeMetrics(metricDefinitions, basePoint) {
   const values = {};
   for (const metric of metricDefinitions) {
@@ -178,7 +189,8 @@ export class TradingViewProvider {
       atmCallIv: atmCall?.iv ?? null,
       putTailIv: putTail?.bid_iv ?? null,
       callTailIv: callTail?.bid_iv ?? null,
-      putBidIvByStrike: buildPutBidIvByStrike(byTypeStrike)
+      putBidIvByStrike: buildPutBidIvByStrike(byTypeStrike),
+      putStrikesDesc: buildPutStrikesDesc(byTypeStrike)
     };
 
     const metrics = computeMetrics(metricDefinitions, basePoint);
