@@ -43,7 +43,7 @@ const DEFAULT_STATE = {
           id: 'w-ndate-1',
           type: 'ndate-put-skew-line',
           title: 'nDate-Put-Skew',
-          config: { baseStrike: 500 }
+          config: { baseStrike: 500, expiry: "" }
         }
       ]
     }

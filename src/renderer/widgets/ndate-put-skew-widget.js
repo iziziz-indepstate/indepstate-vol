@@ -21,7 +21,8 @@ export const nDatePutSkewWidget = {
   defaultTitle: 'nDate-Put-Skew',
   color: '#7dffb3',
   defaultConfig: {
-    baseStrike: 500
+    baseStrike: 500,
+    expiry: ""
   },
   buildSnapshotSeries: (snapshot, widget) => {
     const putByStrike = snapshot?.putBidIvByStrike || {};

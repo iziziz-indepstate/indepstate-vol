@@ -158,6 +158,17 @@ function renderWidgets() {
     });
   });
 
+  root.querySelectorAll('[data-widget-expiry-id]').forEach((input) => {
+    input.addEventListener('change', (evt) => {
+      const wid = evt.target.getAttribute('data-widget-expiry-id');
+      const target = tab.widgets.find((w) => w.id === wid);
+      if (!target) return;
+      target.config ||= {};
+      target.config.expiry = String(evt.target.value || '').trim();
+      persist();
+    });
+  });
+
   refreshCharts();
 }
 
@@ -172,7 +183,8 @@ function refreshCharts() {
     const { chart, mode, metric, definition, widget } = entry;
 
     if (mode === 'snapshot-series' && typeof definition.buildSnapshotSeries === 'function') {
-      const series = definition.buildSnapshotSeries(latest, widget);
+      const widgetSnapshot = latest?.widgetSnapshots?.[widget.id] || latest;
+      const series = definition.buildSnapshotSeries(widgetSnapshot, widget);
       chart.data.labels = series?.labels || [];
       chart.data.datasets[0].data = series?.values || [];
       chart.update();
@@ -243,6 +255,26 @@ async function tick() {
   try {
     setStatus('Loading snapshot...');
     const point = await provider.fetchSnapshot(tab.providerConfig, skewMetrics);
+    point.widgetSnapshots = {};
+
+    for (const widget of tab.widgets || []) {
+      const definition = getWidgetDefinition(widget.type);
+      if (!definition || definition.mode !== 'snapshot-series') continue;
+
+      const widgetExpiry = String(widget?.config?.expiry || '').trim();
+      if (!widgetExpiry || widgetExpiry === String(tab.providerConfig.expiry || '').trim()) continue;
+
+      try {
+        const widgetPoint = await provider.fetchSnapshot(
+          { ...tab.providerConfig, expiry: widgetExpiry },
+          skewMetrics
+        );
+        point.widgetSnapshots[widget.id] = widgetPoint;
+      } catch (_err) {
+        // keep fallback to tab-level snapshot
+      }
+    }
+
     state.historyByTab[tab.id] ||= [];
     state.historyByTab[tab.id].push(point);
 
