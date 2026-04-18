@@ -130,22 +130,23 @@ canvas {
 .widget-control {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   color: var(--muted);
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
 .widget-control input {
-  width: 120px;
+  width: 92px;
 }
 
 .widget-controls {
   display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap;
   margin-bottom: 8px;
+  overflow-x: auto;
 }
 
-.widget-symbol-input {
-  width: 170px !important;
+.widget-ticker-input {
+  width: 120px !important;
 }

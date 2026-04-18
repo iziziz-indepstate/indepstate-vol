@@ -31,12 +31,13 @@ function defaultExpiry() {
 }
 
 
-function parseTickerRoot(value) {
-  const raw = String(value || '').trim();
-  if (!raw) return { ticker: null, root: null };
+function parseWidgetTicker(value) {
+  const ticker = String(value || '').trim();
+  if (!ticker) return { ticker: null, root: null };
 
-  const [ticker, root] = raw.split(';').map((x) => x?.trim());
-  if (!ticker || !root) return { ticker: null, root: null };
+  const root = ticker.includes(':') ? ticker.split(':').pop()?.trim() : ticker;
+  if (!root) return { ticker: null, root: null };
+
   return { ticker, root };
 }
 
@@ -179,13 +180,13 @@ function renderWidgets() {
     });
   });
 
-  root.querySelectorAll('[data-widget-symbol-id]').forEach((input) => {
+  root.querySelectorAll('[data-widget-ticker-id]').forEach((input) => {
     input.addEventListener('change', (evt) => {
-      const wid = evt.target.getAttribute('data-widget-symbol-id');
+      const wid = evt.target.getAttribute('data-widget-ticker-id');
       const target = tab.widgets.find((w) => w.id === wid);
       if (!target) return;
       target.config ||= {};
-      target.config.tickerRoot = String(evt.target.value || '').trim();
+      target.config.ticker = String(evt.target.value || '').trim();
       persist();
     });
   });
@@ -283,7 +284,7 @@ async function tick() {
       if (!definition || definition.mode !== 'snapshot-series') continue;
 
       const widgetExpiry = String(widget?.config?.expiry || '').trim();
-      const { ticker: widgetTicker, root: widgetRoot } = parseTickerRoot(widget?.config?.tickerRoot);
+      const { ticker: widgetTicker, root: widgetRoot } = parseWidgetTicker(widget?.config?.ticker);
 
       const requestConfig = {
         ...tab.providerConfig,

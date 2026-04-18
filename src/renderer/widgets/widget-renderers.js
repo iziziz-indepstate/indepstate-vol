@@ -4,19 +4,18 @@ export function createWidgetCard(widget, definition) {
 
   const strikeValue = Number(widget?.config?.baseStrike ?? definition?.defaultConfig?.baseStrike ?? 500);
   const expiryValue = String(widget?.config?.expiry ?? definition?.defaultConfig?.expiry ?? '');
-
-  const symbolValue = String(widget?.config?.tickerRoot ?? definition?.defaultConfig?.tickerRoot ?? '');
+  const tickerValue = String(widget?.config?.ticker ?? definition?.defaultConfig?.ticker ?? '');
 
   const controls = definition.mode === 'snapshot-series'
     ? `<div class="widget-controls">
          <label class="widget-control">Strike
            <input type="number" class="widget-strike-input" data-widget-strike-id="${widget.id}" value="${strikeValue}" step="1" />
          </label>
-         <label class="widget-control">Expiry (YYYYMMDD)
+         <label class="widget-control">Expiry
            <input type="text" class="widget-expiry-input" data-widget-expiry-id="${widget.id}" value="${expiryValue}" placeholder="20260227" />
          </label>
-         <label class="widget-control">Ticker;Root
-           <input type="text" class="widget-symbol-input" data-widget-symbol-id="${widget.id}" value="${symbolValue}" placeholder="AMEX:SPY;SPY" />
+         <label class="widget-control">Ticker
+           <input type="text" class="widget-ticker-input" data-widget-ticker-id="${widget.id}" value="${tickerValue}" placeholder="AMEX:SPY" />
          </label>
        </div>`
     : '';

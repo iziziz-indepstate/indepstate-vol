@@ -30,7 +30,7 @@ export const nDatePutSkewWidget = {
   defaultConfig: {
     baseStrike: 500,
     expiry: '',
-    tickerRoot: ''
+    ticker: ''
   },
   buildSnapshotSeries: (snapshot, widget) => {
     const putByStrike = snapshot?.putBidIvByStrike || {};
