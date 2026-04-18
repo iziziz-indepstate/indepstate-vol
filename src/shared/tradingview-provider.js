@@ -122,10 +122,24 @@ function getRow(map, type, strike) {
   return map.get(`${type}:${strike}`) || null;
 }
 
+function computeMetrics(metricDefinitions, basePoint) {
+  const values = {};
+  for (const metric of metricDefinitions) {
+    if (!metric?.key || typeof metric.compute !== 'function') continue;
+    try {
+      values[metric.key] = metric.compute(basePoint);
+    } catch (_err) {
+      values[metric.key] = null;
+    }
+  }
+
+  return values;
+}
+
 export class TradingViewProvider {
   key = 'tradingview';
 
-  async fetchSnapshot(config) {
+  async fetchSnapshot(config, metricDefinitions = []) {
     const px = await fetchYahooLastClose(config.yahooSymbol || 'SPY');
     if (px == null) {
       throw new Error('Could not fetch underlying price from Yahoo');
@@ -137,7 +151,6 @@ export class TradingViewProvider {
 
     const atmPut = getRow(byTypeStrike, 'put', lower);
     const atmCall = getRow(byTypeStrike, 'call', upper);
-    const dAtm = atmPut?.iv != null && atmCall?.iv != null ? atmCall.iv - atmPut.iv : null;
 
     const tailSteps = Math.max(1, Number(config.tailSteps) || 3);
     const putTailStrike = lowerIdx - tailSteps >= 0 ? strikesSorted[lowerIdx - tailSteps] : null;
@@ -145,15 +158,24 @@ export class TradingViewProvider {
 
     const putTail = getRow(byTypeStrike, 'put', putTailStrike);
     const callTail = getRow(byTypeStrike, 'call', callTailStrike);
-    const dTail = putTail?.bid_iv != null && callTail?.bid_iv != null ? putTail.bid_iv - callTail.bid_iv : null;
 
-    return {
+    const basePoint = {
       time: new Date().toISOString(),
       px,
       lower,
       upper,
-      dAtm,
-      dTail
+      atmPutIv: atmPut?.iv ?? null,
+      atmCallIv: atmCall?.iv ?? null,
+      putTailIv: putTail?.bid_iv ?? null,
+      callTailIv: callTail?.bid_iv ?? null
+    };
+
+    const metrics = computeMetrics(metricDefinitions, basePoint);
+
+    return {
+      ...basePoint,
+      ...metrics,
+      metrics
     };
   }
 }

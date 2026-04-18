@@ -1,6 +1,7 @@
 import { TradingViewProvider } from '../shared/tradingview-provider.js';
 import { getWidgetDefinition } from './widgets/index.js';
 import { createWidgetCard, createWidgetChart } from './widgets/widget-renderers.js';
+import { skewMetrics } from './widgets/metrics.js';
 
 const providers = {
   tradingview: new TradingViewProvider()
@@ -201,7 +202,7 @@ async function tick() {
 
   try {
     setStatus('Loading snapshot...');
-    const point = await provider.fetchSnapshot(tab.providerConfig);
+    const point = await provider.fetchSnapshot(tab.providerConfig, skewMetrics);
     state.historyByTab[tab.id] ||= [];
     state.historyByTab[tab.id].push(point);
 
