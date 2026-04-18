@@ -7,25 +7,25 @@ export function createWidgetCard(widget, definition) {
   const tickerValue = String(widget?.config?.ticker ?? definition?.defaultConfig?.ticker ?? '');
 
   const controls = definition.mode === 'snapshot-series'
-    ? `<div class="widget-controls">
-         <label class="widget-control">Strike
+    ? `<div class="widget-controls widget-controls-inline">
+         <label class="widget-control">S
            <input type="number" class="widget-strike-input" data-widget-strike-id="${widget.id}" value="${strikeValue}" step="1" />
          </label>
-         <label class="widget-control">Expiry
+         <label class="widget-control">E
            <input type="text" class="widget-expiry-input" data-widget-expiry-id="${widget.id}" value="${expiryValue}" placeholder="20260227" />
          </label>
-         <label class="widget-control">Ticker
+         <label class="widget-control">T
            <input type="text" class="widget-ticker-input" data-widget-ticker-id="${widget.id}" value="${tickerValue}" placeholder="AMEX:SPY" />
          </label>
        </div>`
     : '';
 
   card.innerHTML = `
-    <h3 class="widget-title">
-      <span>${widget.title || definition.defaultTitle}</span>
-      <button class="btn" data-widget-id="${widget.id}">Remove</button>
-    </h3>
-    ${controls}
+    <div class="widget-title">
+      <h3>${widget.title || definition.defaultTitle}</h3>
+      ${controls}
+      <button class="btn btn-icon" data-widget-id="${widget.id}" aria-label="Remove widget" title="Remove widget">✕</button>
+    </div>
     <canvas id="canvas-${widget.id}"></canvas>
   `;
 
