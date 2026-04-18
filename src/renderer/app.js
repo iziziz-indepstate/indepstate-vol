@@ -118,8 +118,11 @@ function renderTabs() {
   tabsRoot.innerHTML = '';
 
   for (const tab of state.tabs) {
+    const item = document.createElement('div');
+    item.className = `tab ${tab.id === state.activeTabId ? 'active' : ''}`;
+
     const btn = document.createElement('button');
-    btn.className = `tab ${tab.id === state.activeTabId ? 'active' : ''}`;
+    btn.className = 'tab-title';
     btn.textContent = tab.title;
     btn.onclick = () => {
       state.activeTabId = tab.id;
@@ -128,7 +131,32 @@ function renderTabs() {
       renderWidgets();
       persist();
     };
-    tabsRoot.appendChild(btn);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'tab-remove';
+    removeBtn.textContent = '✕';
+    removeBtn.title = 'Remove tab';
+    removeBtn.onclick = () => {
+      if (state.tabs.length <= 1) return;
+      const idx = state.tabs.findIndex((x) => x.id === tab.id);
+      if (idx === -1) return;
+      state.tabs.splice(idx, 1);
+      delete state.historyByTab[tab.id];
+
+      if (state.activeTabId === tab.id) {
+        const next = state.tabs[idx] || state.tabs[idx - 1] || state.tabs[0];
+        state.activeTabId = next?.id || null;
+      }
+
+      if (state.activeTabId) applyTabToForm(activeTab());
+      renderTabs();
+      renderWidgets();
+      persist();
+    };
+
+    item.appendChild(btn);
+    item.appendChild(removeBtn);
+    tabsRoot.appendChild(item);
   }
 }
 
@@ -429,10 +457,13 @@ function bindEvents() {
   $('startBtn').addEventListener('click', start);
   $('stopBtn').addEventListener('click', stop);
   $('addTabBtn').addEventListener('click', addTab);
-  $('addAtmWidgetBtn').addEventListener('click', () => addWidget('atm-skew-line'));
-  $('addTailWidgetBtn').addEventListener('click', () => addWidget('tail-skew-line'));
-  $('addNDateWidgetBtn').addEventListener('click', () => addWidget('ndate-put-skew-line'));
-  $('addNDateCallWidgetBtn').addEventListener('click', () => addWidget('ndate-call-skew-line'));
+  $('addWidgetBtn').addEventListener('click', () => addWidget($('widgetTypeSelect').value));
+  $('toggleConfigBtn').addEventListener('click', () => {
+    const body = $('configBody');
+    const collapsed = body.classList.toggle('is-collapsed');
+    $('toggleConfigBtn').textContent = collapsed ? 'Show config' : 'Hide config';
+    $('toggleConfigBtn').setAttribute('aria-expanded', String(!collapsed));
+  });
 
   ['providerKey', 'apiBase', 'ticker', 'root', 'expiry', 'yahooSymbol', 'pollSec', 'tailSteps', 'keepPoints'].forEach((id) => {
     $(id).addEventListener('change', () => {

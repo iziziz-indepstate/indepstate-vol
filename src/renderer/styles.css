@@ -46,6 +46,7 @@ h1 { margin: 0; font-size: 20px; }
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
 }
 
 .tabs {
@@ -55,14 +56,37 @@ h1 { margin: 0; font-size: 20px; }
 }
 
 .tab {
-  padding: 6px 10px;
+  padding: 4px 8px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--panel2);
-  cursor: pointer;
+  color: var(--text);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .tab.active { border-color: #7aa2ff; }
+
+.tab-title {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0;
+}
+
+.tab-remove {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+}
+
+.tab-remove:hover { color: var(--text); }
 
 .btn {
   padding: 8px 10px;
@@ -73,10 +97,50 @@ h1 { margin: 0; font-size: 20px; }
   cursor: pointer;
 }
 
+.btn-compact {
+  padding: 6px 8px;
+}
+
+.widget-add-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.widget-add-inline select {
+  width: auto;
+  min-width: 170px;
+}
+
 .config-grid {
   display: grid;
   gap: 10px;
   grid-template-columns: repeat(3, minmax(180px, 1fr));
+}
+
+.config-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.config-header h2 {
+  margin: 0;
+}
+
+.config-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.config-body {
+  margin-top: 10px;
+}
+
+.config-body.is-collapsed {
+  display: none;
 }
 
 .config-grid label {

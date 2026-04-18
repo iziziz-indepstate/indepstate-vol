@@ -19,48 +19,58 @@
     <section class="tabs-toolbar">
       <div id="tabs" class="tabs"></div>
       <button id="addTabBtn" class="btn">+ Add Tab</button>
+      <div class="widget-add-inline">
+        <select id="widgetTypeSelect">
+          <option value="atm-skew-line">ATM Skew</option>
+          <option value="tail-skew-line">Tail Skew</option>
+          <option value="ndate-put-skew-line">nDate Put Skew</option>
+          <option value="ndate-call-skew-line">nDate Call Skew</option>
+        </select>
+        <button id="addWidgetBtn" class="btn">+ Add Widget</button>
+      </div>
     </section>
 
     <section class="panel config-panel">
-      <h2>Data source config</h2>
-      <div class="config-grid">
-        <label>Provider
-          <select id="providerKey">
-            <option value="tradingview">TradingView</option>
-          </select>
-        </label>
-        <label>API Base
-          <input id="apiBase" />
-        </label>
-        <label>Ticker
-          <input id="ticker" />
-        </label>
-        <label>Root
-          <input id="root" />
-        </label>
-        <label>Expiry (YYYYMMDD)
-          <input id="expiry" />
-        </label>
-        <label>Yahoo Symbol
-          <input id="yahooSymbol" />
-        </label>
-        <label>Poll sec
-          <input id="pollSec" type="number" min="1" />
-        </label>
-        <label>Tail steps
-          <input id="tailSteps" type="number" min="1" />
-        </label>
-        <label>Keep points
-          <input id="keepPoints" type="number" min="20" />
-        </label>
+      <div class="config-header">
+        <h2>Data source config</h2>
+        <div class="config-header-actions">
+          <button id="startBtn" class="btn">Start</button>
+          <button id="stopBtn" class="btn" disabled>Stop</button>
+          <button id="toggleConfigBtn" class="btn btn-compact" aria-expanded="false">Show config</button>
+        </div>
       </div>
-      <div class="btn-row">
-        <button id="startBtn" class="btn">Start</button>
-        <button id="stopBtn" class="btn" disabled>Stop</button>
-        <button id="addAtmWidgetBtn" class="btn">+ ATM Widget</button>
-        <button id="addTailWidgetBtn" class="btn">+ Tail Widget</button>
-        <button id="addNDateWidgetBtn" class="btn">+ nDate Put Widget</button>
-        <button id="addNDateCallWidgetBtn" class="btn">+ nDate Call Widget</button>
+      <div id="configBody" class="config-body is-collapsed">
+        <div class="config-grid">
+          <label>Provider
+            <select id="providerKey">
+              <option value="tradingview">TradingView</option>
+            </select>
+          </label>
+          <label>API Base
+            <input id="apiBase" />
+          </label>
+          <label>Ticker
+            <input id="ticker" />
+          </label>
+          <label>Root
+            <input id="root" />
+          </label>
+          <label>Expiry (YYYYMMDD)
+            <input id="expiry" />
+          </label>
+          <label>Yahoo Symbol
+            <input id="yahooSymbol" />
+          </label>
+          <label>Poll sec
+            <input id="pollSec" type="number" min="1" />
+          </label>
+          <label>Tail steps
+            <input id="tailSteps" type="number" min="1" />
+          </label>
+          <label>Keep points
+            <input id="keepPoints" type="number" min="20" />
+          </label>
+        </div>
       </div>
     </section>
 
