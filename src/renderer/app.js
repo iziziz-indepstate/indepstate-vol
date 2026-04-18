@@ -15,6 +15,7 @@ const state = {
 
 let timer = null;
 const chartInstances = new Map();
+let tabContextTargetId = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -131,33 +132,63 @@ function renderTabs() {
       renderWidgets();
       persist();
     };
-
-    const removeBtn = document.createElement('button');
-    removeBtn.className = 'tab-remove';
-    removeBtn.textContent = '✕';
-    removeBtn.title = 'Remove tab';
-    removeBtn.onclick = () => {
-      if (state.tabs.length <= 1) return;
-      const idx = state.tabs.findIndex((x) => x.id === tab.id);
-      if (idx === -1) return;
-      state.tabs.splice(idx, 1);
-      delete state.historyByTab[tab.id];
-
-      if (state.activeTabId === tab.id) {
-        const next = state.tabs[idx] || state.tabs[idx - 1] || state.tabs[0];
-        state.activeTabId = next?.id || null;
-      }
-
-      if (state.activeTabId) applyTabToForm(activeTab());
-      renderTabs();
-      renderWidgets();
-      persist();
-    };
+    item.addEventListener('contextmenu', (evt) => {
+      evt.preventDefault();
+      showTabContextMenu(tab.id, evt.clientX, evt.clientY);
+    });
 
     item.appendChild(btn);
-    item.appendChild(removeBtn);
     tabsRoot.appendChild(item);
   }
+}
+
+function hideTabContextMenu() {
+  const menu = $('tabContextMenu');
+  menu.hidden = true;
+  tabContextTargetId = null;
+}
+
+function showTabContextMenu(tabId, x, y) {
+  const menu = $('tabContextMenu');
+  tabContextTargetId = tabId;
+  menu.hidden = false;
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+  $('tabDeleteAction').disabled = state.tabs.length <= 1;
+}
+
+function deleteTabById(tabId) {
+  if (!tabId || state.tabs.length <= 1) return;
+
+  const idx = state.tabs.findIndex((x) => x.id === tabId);
+  if (idx === -1) return;
+
+  state.tabs.splice(idx, 1);
+  delete state.historyByTab[tabId];
+
+  if (state.activeTabId === tabId) {
+    const next = state.tabs[idx] || state.tabs[idx - 1] || state.tabs[0];
+    state.activeTabId = next?.id || null;
+  }
+
+  if (state.activeTabId) applyTabToForm(activeTab());
+  renderTabs();
+  renderWidgets();
+  persist();
+}
+
+function renameTabById(tabId) {
+  const tab = state.tabs.find((x) => x.id === tabId);
+  if (!tab) return;
+
+  const nextTitle = window.prompt('Rename tab', tab.title);
+  if (nextTitle == null) return;
+
+  const trimmed = nextTitle.trim();
+  if (!trimmed) return;
+  tab.title = trimmed;
+  renderTabs();
+  persist();
 }
 
 function destroyCharts() {
@@ -463,6 +494,18 @@ function bindEvents() {
     const collapsed = body.classList.toggle('is-collapsed');
     $('toggleConfigBtn').textContent = collapsed ? 'Show config' : 'Hide config';
     $('toggleConfigBtn').setAttribute('aria-expanded', String(!collapsed));
+  });
+  $('tabRenameAction').addEventListener('click', () => {
+    renameTabById(tabContextTargetId);
+    hideTabContextMenu();
+  });
+  $('tabDeleteAction').addEventListener('click', () => {
+    deleteTabById(tabContextTargetId);
+    hideTabContextMenu();
+  });
+  document.addEventListener('click', () => hideTabContextMenu());
+  document.addEventListener('contextmenu', (evt) => {
+    if (!evt.target.closest('.tab')) hideTabContextMenu();
   });
 
   ['providerKey', 'apiBase', 'ticker', 'root', 'expiry', 'yahooSymbol', 'pollSec', 'tailSteps', 'keepPoints'].forEach((id) => {
