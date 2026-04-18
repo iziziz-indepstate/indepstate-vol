@@ -5,5 +5,6 @@ export const nDatePutSkewWidget = createNDateSkewWidget({
   title: 'nDate-Put-Skew',
   color: '#7dffb3',
   side: 'put',
-  direction: 'down'
+  direction: 'down',
+  xOrder: 'asc'
 });

@@ -64,7 +64,7 @@ function safeStrikes(snapshot, side) {
   return Object.keys(strikeMap).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
 }
 
-export function createNDateSkewWidget({ type, title, color, side, direction }) {
+export function createNDateSkewWidget({ type, title, color, side, direction, xOrder = 'natural' }) {
   const mapKey = side === 'call' ? 'callBidIvByStrike' : 'putBidIvByStrike';
 
   return {
@@ -101,6 +101,11 @@ export function createNDateSkewWidget({ type, title, color, side, direction }) {
         } else {
           values.push(curr.bidIv - prev.bidIv);
         }
+      }
+
+      if (xOrder === 'asc') {
+        labels.reverse();
+        values.reverse();
       }
 
       return { labels, values };
