@@ -81,6 +81,16 @@
     <button id="tabRenameAction" class="context-menu-item">Rename tab</button>
     <button id="tabDeleteAction" class="context-menu-item">Delete tab</button>
   </div>
+  <div id="renameTabModal" class="modal-backdrop" hidden>
+    <div class="modal-card">
+      <h3>Rename tab</h3>
+      <input id="renameTabInput" type="text" />
+      <div class="modal-actions">
+        <button id="renameTabCancelBtn" class="btn">Cancel</button>
+        <button id="renameTabSaveBtn" class="btn">Save</button>
+      </div>
+    </div>
+  </div>
 
   <script src="../../node_modules/chart.js/dist/chart.umd.js"></script>
   <script type="module" src="./app.js"></script>

@@ -192,6 +192,37 @@ input, select {
   cursor: default;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-card {
+  width: 320px;
+  max-width: calc(100vw - 24px);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(18, 21, 29, 0.98);
+  padding: 12px;
+}
+
+.modal-card h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.modal-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .widget-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));

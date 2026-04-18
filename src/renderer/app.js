@@ -16,6 +16,7 @@ const state = {
 let timer = null;
 const chartInstances = new Map();
 let tabContextTargetId = null;
+let renameTargetTabId = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -177,19 +178,29 @@ function deleteTabById(tabId) {
   persist();
 }
 
-function renameTabById(tabId) {
+function renameTabById(tabId, nextTitleRaw) {
   const tab = state.tabs.find((x) => x.id === tabId);
   if (!tab) return;
-
-  if (typeof window.prompt !== 'function') return;
-  const nextTitle = window.prompt('Rename tab', tab.title);
-  if (nextTitle == null) return;
-
-  const trimmed = nextTitle.trim();
+  const trimmed = String(nextTitleRaw || '').trim();
   if (!trimmed) return;
   tab.title = trimmed;
   renderTabs();
   persist();
+}
+
+function openRenameTabModal(tabId) {
+  const tab = state.tabs.find((x) => x.id === tabId);
+  if (!tab) return;
+  renameTargetTabId = tabId;
+  $('renameTabInput').value = tab.title;
+  $('renameTabModal').hidden = false;
+  $('renameTabInput').focus();
+  $('renameTabInput').select();
+}
+
+function closeRenameTabModal() {
+  $('renameTabModal').hidden = true;
+  renameTargetTabId = null;
 }
 
 function destroyCharts() {
@@ -497,7 +508,7 @@ function bindEvents() {
     $('toggleConfigBtn').setAttribute('aria-expanded', String(!collapsed));
   });
   $('tabRenameAction').addEventListener('click', () => {
-    renameTabById(tabContextTargetId);
+    openRenameTabModal(tabContextTargetId);
     hideTabContextMenu();
   });
   $('tabDeleteAction').addEventListener('click', () => {
@@ -511,6 +522,21 @@ function bindEvents() {
   });
   document.addEventListener('contextmenu', (evt) => {
     if (!evt.target.closest('.tab')) hideTabContextMenu();
+  });
+  $('renameTabSaveBtn').addEventListener('click', () => {
+    renameTabById(renameTargetTabId, $('renameTabInput').value);
+    closeRenameTabModal();
+  });
+  $('renameTabCancelBtn').addEventListener('click', closeRenameTabModal);
+  $('renameTabInput').addEventListener('keydown', (evt) => {
+    if (evt.key === 'Enter') {
+      renameTabById(renameTargetTabId, $('renameTabInput').value);
+      closeRenameTabModal();
+    }
+    if (evt.key === 'Escape') closeRenameTabModal();
+  });
+  $('renameTabModal').addEventListener('click', (evt) => {
+    if (evt.target === $('renameTabModal')) closeRenameTabModal();
   });
 
   ['providerKey', 'apiBase', 'ticker', 'root', 'expiry', 'yahooSymbol', 'pollSec', 'tailSteps', 'keepPoints'].forEach((id) => {
