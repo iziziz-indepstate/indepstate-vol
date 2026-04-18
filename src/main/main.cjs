@@ -23,6 +23,29 @@ const DEFAULT_STATE = {
         { id: 'w-atm-1', type: 'atm-skew-line', title: 'ATM Call-Put Skew' },
         { id: 'w-tail-1', type: 'tail-skew-line', title: '±3 Strike Put-Call Skew' }
       ]
+    },
+    {
+      id: 'tab-2',
+      title: 'nDate Put Skew',
+      providerKey: 'tradingview',
+      providerConfig: {
+        apiBase: 'https://scanner.tradingview.com',
+        ticker: 'AMEX:SPY',
+        root: 'SPY',
+        expiry: '',
+        yahooSymbol: 'SPY',
+        tailSteps: 3,
+        pollSec: 5,
+        keepPoints: 200
+      },
+      widgets: [
+        {
+          id: 'w-ndate-1',
+          type: 'ndate-put-skew-line',
+          title: 'nDate-Put-Skew',
+          config: { baseStrike: 500 }
+        }
+      ]
     }
   ]
 };

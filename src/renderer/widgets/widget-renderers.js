@@ -1,11 +1,19 @@
 export function createWidgetCard(widget, definition) {
   const card = document.createElement('article');
   card.className = 'widget-card';
+
+  const strikeControl = definition.mode === 'snapshot-series'
+    ? `<label class="widget-control">Strike
+         <input type="number" class="widget-strike-input" data-widget-strike-id="${widget.id}" value="${Number(widget?.config?.baseStrike ?? definition?.defaultConfig?.baseStrike ?? 500)}" step="1" />
+       </label>`
+    : '';
+
   card.innerHTML = `
     <h3 class="widget-title">
       <span>${widget.title || definition.defaultTitle}</span>
       <button class="btn" data-widget-id="${widget.id}">Remove</button>
     </h3>
+    ${strikeControl}
     <canvas id="canvas-${widget.id}"></canvas>
   `;
 

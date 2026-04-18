@@ -107,6 +107,14 @@ function renderWidgets() {
   for (const widget of tab.widgets) {
     const definition = getWidgetDefinition(widget.type);
     if (!definition) continue;
+
+    if (definition.defaultConfig) {
+      widget.config ||= {};
+      Object.entries(definition.defaultConfig).forEach(([k, v]) => {
+        if (widget.config[k] == null) widget.config[k] = v;
+      });
+    }
+
     grid.appendChild(createWidgetCard(widget, definition));
   }
 
@@ -115,11 +123,18 @@ function renderWidgets() {
   for (const widget of tab.widgets) {
     const definition = getWidgetDefinition(widget.type);
     if (!definition) continue;
+
     const ctx = document.getElementById(`canvas-${widget.id}`)?.getContext('2d');
     if (!ctx) continue;
 
     const chart = createWidgetChart(ctx, definition);
-    chartInstances.set(widget.id, { chart, metric: definition.metric });
+    chartInstances.set(widget.id, {
+      chart,
+      mode: definition.mode || 'timeseries',
+      metric: definition.metric,
+      definition,
+      widget
+    });
   }
 
   root.querySelectorAll('[data-widget-id]').forEach((btn) => {
@@ -127,6 +142,18 @@ function renderWidgets() {
       const wid = evt.target.getAttribute('data-widget-id');
       tab.widgets = tab.widgets.filter((w) => w.id !== wid);
       renderWidgets();
+      persist();
+    });
+  });
+
+  root.querySelectorAll('[data-widget-strike-id]').forEach((input) => {
+    input.addEventListener('change', (evt) => {
+      const wid = evt.target.getAttribute('data-widget-strike-id');
+      const target = tab.widgets.find((w) => w.id === wid);
+      if (!target) return;
+      target.config ||= {};
+      target.config.baseStrike = Number(evt.target.value) || target.config.baseStrike;
+      refreshCharts();
       persist();
     });
   });
@@ -139,7 +166,19 @@ function refreshCharts() {
   if (!tab) return;
 
   const history = state.historyByTab[tab.id] || [];
-  for (const { chart, metric } of chartInstances.values()) {
+  const latest = history[history.length - 1] || null;
+
+  for (const entry of chartInstances.values()) {
+    const { chart, mode, metric, definition, widget } = entry;
+
+    if (mode === 'snapshot-series' && typeof definition.buildSnapshotSeries === 'function') {
+      const series = definition.buildSnapshotSeries(latest, widget);
+      chart.data.labels = series?.labels || [];
+      chart.data.datasets[0].data = series?.values || [];
+      chart.update();
+      continue;
+    }
+
     chart.data.labels = history.map((x) => new Date(x.time).toLocaleTimeString());
     chart.data.datasets[0].data = history.map((x) => x[metric]);
     chart.update();
@@ -156,7 +195,8 @@ function addWidget(type) {
   tab.widgets.push({
     id: widgetId,
     type,
-    title: definition.defaultTitle
+    title: definition.defaultTitle,
+    config: { ...(definition.defaultConfig || {}) }
   });
   renderWidgets();
   persist();
@@ -246,6 +286,7 @@ function bindEvents() {
   $('addTabBtn').addEventListener('click', addTab);
   $('addAtmWidgetBtn').addEventListener('click', () => addWidget('atm-skew-line'));
   $('addTailWidgetBtn').addEventListener('click', () => addWidget('tail-skew-line'));
+  $('addNDateWidgetBtn').addEventListener('click', () => addWidget('ndate-put-skew-line'));
 
   ['providerKey', 'apiBase', 'ticker', 'root', 'expiry', 'yahooSymbol', 'pollSec', 'tailSteps', 'keepPoints'].forEach((id) => {
     $(id).addEventListener('change', () => {

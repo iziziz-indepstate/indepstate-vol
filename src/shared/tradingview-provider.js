@@ -122,6 +122,16 @@ function getRow(map, type, strike) {
   return map.get(`${type}:${strike}`) || null;
 }
 
+function buildPutBidIvByStrike(byTypeStrike) {
+  const out = {};
+  for (const [key, row] of byTypeStrike.entries()) {
+    if (!key.startsWith('put:')) continue;
+    if (row?.strike == null) continue;
+    out[row.strike] = row?.bid_iv ?? null;
+  }
+  return out;
+}
+
 function computeMetrics(metricDefinitions, basePoint) {
   const values = {};
   for (const metric of metricDefinitions) {
@@ -167,7 +177,8 @@ export class TradingViewProvider {
       atmPutIv: atmPut?.iv ?? null,
       atmCallIv: atmCall?.iv ?? null,
       putTailIv: putTail?.bid_iv ?? null,
-      callTailIv: callTail?.bid_iv ?? null
+      callTailIv: callTail?.bid_iv ?? null,
+      putBidIvByStrike: buildPutBidIvByStrike(byTypeStrike)
     };
 
     const metrics = computeMetrics(metricDefinitions, basePoint);
