@@ -145,3 +145,7 @@ canvas {
   flex-wrap: wrap;
   margin-bottom: 8px;
 }
+
+.widget-symbol-input {
+  width: 170px !important;
+}

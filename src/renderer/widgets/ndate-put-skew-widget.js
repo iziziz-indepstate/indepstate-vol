@@ -29,7 +29,8 @@ export const nDatePutSkewWidget = {
   color: '#7dffb3',
   defaultConfig: {
     baseStrike: 500,
-    expiry: ''
+    expiry: '',
+    tickerRoot: ''
   },
   buildSnapshotSeries: (snapshot, widget) => {
     const putByStrike = snapshot?.putBidIvByStrike || {};

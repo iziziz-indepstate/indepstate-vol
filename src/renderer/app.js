@@ -30,6 +30,16 @@ function defaultExpiry() {
   return `${y}${m}${day}`;
 }
 
+
+function parseTickerRoot(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return { ticker: null, root: null };
+
+  const [ticker, root] = raw.split(';').map((x) => x?.trim());
+  if (!ticker || !root) return { ticker: null, root: null };
+  return { ticker, root };
+}
+
 function setStatus(text) {
   $('globalStatus').textContent = text;
 }
@@ -169,6 +179,17 @@ function renderWidgets() {
     });
   });
 
+  root.querySelectorAll('[data-widget-symbol-id]').forEach((input) => {
+    input.addEventListener('change', (evt) => {
+      const wid = evt.target.getAttribute('data-widget-symbol-id');
+      const target = tab.widgets.find((w) => w.id === wid);
+      if (!target) return;
+      target.config ||= {};
+      target.config.tickerRoot = String(evt.target.value || '').trim();
+      persist();
+    });
+  });
+
   refreshCharts();
 }
 
@@ -262,13 +283,23 @@ async function tick() {
       if (!definition || definition.mode !== 'snapshot-series') continue;
 
       const widgetExpiry = String(widget?.config?.expiry || '').trim();
-      if (!widgetExpiry || widgetExpiry === String(tab.providerConfig.expiry || '').trim()) continue;
+      const { ticker: widgetTicker, root: widgetRoot } = parseTickerRoot(widget?.config?.tickerRoot);
+
+      const requestConfig = {
+        ...tab.providerConfig,
+        ...(widgetExpiry ? { expiry: widgetExpiry } : {}),
+        ...(widgetTicker && widgetRoot ? { ticker: widgetTicker, root: widgetRoot } : {})
+      };
+
+      const hasOverride =
+        String(requestConfig.expiry || '') !== String(tab.providerConfig.expiry || '') ||
+        String(requestConfig.ticker || '') !== String(tab.providerConfig.ticker || '') ||
+        String(requestConfig.root || '') !== String(tab.providerConfig.root || '');
+
+      if (!hasOverride) continue;
 
       try {
-        const widgetPoint = await provider.fetchSnapshot(
-          { ...tab.providerConfig, expiry: widgetExpiry },
-          skewMetrics
-        );
+        const widgetPoint = await provider.fetchSnapshot(requestConfig, skewMetrics);
         point.widgetSnapshots[widget.id] = widgetPoint;
       } catch (_err) {
         // keep fallback to tab-level snapshot
