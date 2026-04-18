@@ -12,7 +12,7 @@ npm start
 ## Current implementation
 
 - **Provider abstraction**: `providers[providerKey]` map in renderer. Right now includes `TradingViewProvider` only.
-- **Widget abstraction**: widget definitions map (`atm-skew-line`, `tail-skew-line`) with metric binding.
+- **Widget abstraction**: each widget lives in `src/renderer/widgets/` as a separate script file, composed via a central registry.
 - **Dashboard tabs**: each tab stores its own provider config and list of widgets.
 - **State persistence**: tab layout + config are saved to Electron `userData/dashboard-state.json` and restored on next launch.
 

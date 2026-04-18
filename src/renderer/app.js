@@ -1,18 +1,9 @@
 import { TradingViewProvider } from '../shared/tradingview-provider.js';
+import { getWidgetDefinition } from './widgets/index.js';
+import { createWidgetCard, createWidgetChart } from './widgets/widget-renderers.js';
 
 const providers = {
   tradingview: new TradingViewProvider()
-};
-
-const widgetDefinitions = {
-  'atm-skew-line': {
-    metric: 'dAtm',
-    defaultTitle: 'ATM Call-Put Skew'
-  },
-  'tail-skew-line': {
-    metric: 'dTail',
-    defaultTitle: '±3 Strike Put-Call Skew'
-  }
 };
 
 const state = {
@@ -95,7 +86,7 @@ function renderTabs() {
 }
 
 function destroyCharts() {
-  for (const chart of chartInstances.values()) chart.destroy();
+  for (const { chart } of chartInstances.values()) chart.destroy();
   chartInstances.clear();
 }
 
@@ -113,49 +104,21 @@ function renderWidgets() {
   grid.className = 'widget-grid';
 
   for (const widget of tab.widgets) {
-    const def = widgetDefinitions[widget.type];
-    if (!def) continue;
-
-    const card = document.createElement('article');
-    card.className = 'widget-card';
-    card.innerHTML = `
-      <h3 class="widget-title">
-        <span>${widget.title || def.defaultTitle}</span>
-        <button class="btn" data-widget-id="${widget.id}">Remove</button>
-      </h3>
-      <canvas id="canvas-${widget.id}"></canvas>
-    `;
-    grid.appendChild(card);
+    const definition = getWidgetDefinition(widget.type);
+    if (!definition) continue;
+    grid.appendChild(createWidgetCard(widget, definition));
   }
 
   root.replaceChildren(grid);
 
   for (const widget of tab.widgets) {
-    const def = widgetDefinitions[widget.type];
-    if (!def) continue;
+    const definition = getWidgetDefinition(widget.type);
+    if (!definition) continue;
     const ctx = document.getElementById(`canvas-${widget.id}`)?.getContext('2d');
     if (!ctx) continue;
 
-    const chart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [{
-          data: [],
-          borderWidth: 1,
-          tension: 0.2,
-          pointRadius: 0,
-          borderColor: '#7aa2ff'
-        }]
-      },
-      options: {
-        responsive: true,
-        animation: false,
-        plugins: { legend: { display: false } }
-      }
-    });
-
-    chartInstances.set(widget.id, { chart, metric: def.metric });
+    const chart = createWidgetChart(ctx, definition);
+    chartInstances.set(widget.id, { chart, metric: definition.metric });
   }
 
   root.querySelectorAll('[data-widget-id]').forEach((btn) => {
@@ -185,11 +148,14 @@ function refreshCharts() {
 function addWidget(type) {
   const tab = activeTab();
   if (!tab) return;
+  const definition = getWidgetDefinition(type);
+  if (!definition) return;
+
   const widgetId = `w-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
   tab.widgets.push({
     id: widgetId,
     type,
-    title: widgetDefinitions[type].defaultTitle
+    title: definition.defaultTitle
   });
   renderWidgets();
   persist();
