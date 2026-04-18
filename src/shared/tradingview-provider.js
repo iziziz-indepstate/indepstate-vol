@@ -132,6 +132,27 @@ function buildPutBidIvByStrike(byTypeStrike) {
   return out;
 }
 
+function buildCallBidIvByStrike(byTypeStrike) {
+  const out = {};
+  for (const [key, row] of byTypeStrike.entries()) {
+    if (!key.startsWith('call:')) continue;
+    if (row?.strike == null) continue;
+    out[row.strike] = row?.bid_iv ?? null;
+  }
+  return out;
+}
+
+function buildCallStrikesAsc(byTypeStrike) {
+  const strikes = [];
+  for (const [key, row] of byTypeStrike.entries()) {
+    if (!key.startsWith('call:')) continue;
+    if (row?.strike == null) continue;
+    strikes.push(row.strike);
+  }
+
+  return strikes.sort((a, b) => a - b);
+}
+
 function buildPutStrikesDesc(byTypeStrike) {
   const strikes = [];
   for (const [key, row] of byTypeStrike.entries()) {
@@ -190,7 +211,9 @@ export class TradingViewProvider {
       putTailIv: putTail?.bid_iv ?? null,
       callTailIv: callTail?.bid_iv ?? null,
       putBidIvByStrike: buildPutBidIvByStrike(byTypeStrike),
-      putStrikesDesc: buildPutStrikesDesc(byTypeStrike)
+      putStrikesDesc: buildPutStrikesDesc(byTypeStrike),
+      callBidIvByStrike: buildCallBidIvByStrike(byTypeStrike),
+      callStrikesAsc: buildCallStrikesAsc(byTypeStrike)
     };
 
     const metrics = computeMetrics(metricDefinitions, basePoint);

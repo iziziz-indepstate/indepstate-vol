@@ -44,6 +44,12 @@ const DEFAULT_STATE = {
           type: 'ndate-put-skew-line',
           title: 'nDate-Put-Skew',
           config: { baseStrike: 500, expiry: "", ticker: "" }
+        },
+        {
+          id: 'w-ndate-call-1',
+          type: 'ndate-call-skew-line',
+          title: 'nDate-Call-Skew',
+          config: { baseStrike: 500, expiry: "", ticker: "" }
         }
       ]
     }

@@ -22,3 +22,4 @@ npm start
 - ATM Call-Put Skew (`dAtm = callATM.iv - putATM.iv`)
 - ±3 Strike Put-Call Skew (`dTail = put(-steps).bid_iv - call(+steps).bid_iv`)
 - nDate-Put-Skew (изменение `put bid_iv` по пользовательской лесенке страйков от заданного уровня, с отдельными `expiry` и `ticker` в самом виджете)
+- nDate-Call-Skew (аналогично nDate-Put-Skew, но по `call bid_iv` и лесенка страйков вверх от указанного страйка)

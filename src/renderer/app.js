@@ -351,6 +351,7 @@ function bindEvents() {
   $('addAtmWidgetBtn').addEventListener('click', () => addWidget('atm-skew-line'));
   $('addTailWidgetBtn').addEventListener('click', () => addWidget('tail-skew-line'));
   $('addNDateWidgetBtn').addEventListener('click', () => addWidget('ndate-put-skew-line'));
+  $('addNDateCallWidgetBtn').addEventListener('click', () => addWidget('ndate-call-skew-line'));
 
   ['providerKey', 'apiBase', 'ticker', 'root', 'expiry', 'yahooSymbol', 'pollSec', 'tailSteps', 'keepPoints'].forEach((id) => {
     $(id).addEventListener('change', () => {
