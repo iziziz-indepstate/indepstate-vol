@@ -8,15 +8,35 @@ function findStartIndex(strikesAsc, baseStrike) {
   return strikesAsc.length - 1;
 }
 
+function inferBaseStep(strikesAsc, startIdx) {
+  const diffs = [];
+  const from = Math.max(1, startIdx - 4);
+  const to = Math.min(strikesAsc.length - 1, startIdx + 4);
+
+  for (let i = from; i <= to; i += 1) {
+    const diff = Math.abs(strikesAsc[i] - strikesAsc[i - 1]);
+    if (Number.isFinite(diff) && diff > 0) diffs.push(diff);
+  }
+
+  if (!diffs.length) return 5;
+  return Math.min(...diffs);
+}
+
 function pickStrikesFromChain(strikesAsc, baseStrike) {
   const selected = [];
-  const stepPattern = [5, 5, 5, 5, 5, 5, 5, 10, 10, 10];
+  const startIdx = findStartIndex(strikesAsc, baseStrike);
+  const anchor = strikesAsc[startIdx] ?? baseStrike;
+  const step = inferBaseStep(strikesAsc, startIdx);
 
-  let idx = findStartIndex(strikesAsc, baseStrike);
-  for (const step of stepPattern) {
-    idx += step;
-    if (idx >= strikesAsc.length) break;
-    selected.push(strikesAsc[idx]);
+  const offsets = [5, 10, 15, 20, 25, 30, 35, 45, 55, 65];
+  const used = new Set();
+
+  for (const k of offsets) {
+    const target = anchor + (step * k);
+    const strike = strikesAsc.find((s) => s >= target);
+    if (!Number.isFinite(strike) || used.has(strike)) continue;
+    used.add(strike);
+    selected.push(strike);
   }
 
   return selected;
