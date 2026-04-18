@@ -1,0 +1,618 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>IV Monitor</title>
+  <style>
+    :root{
+      --bg: #0f1116;
+      --panel: rgba(20, 20, 24, 0.92);
+      --panel2: rgba(255,255,255,0.05);
+      --border: rgba(255,255,255,0.10);
+      --text: #eaeaf0;
+      --muted: rgba(234,234,240,0.75);
+    }
+    html,body{height:100%;}
+    body{
+      margin:0;
+      background: var(--bg);
+      color: var(--text);
+      font: 12px/1.35 system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+    .wrap{
+      max-width: 1200px;
+      margin: 14px auto 30px;
+      padding: 0 14px;
+    }
+    .panel{
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      backdrop-filter: blur(8px);
+      overflow: hidden;
+    }
+    .header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .title{
+      font-weight: 700;
+      font-size: 14px;
+      letter-spacing: 0.2px;
+    }
+    .status{ color: var(--muted); font-variant-numeric: tabular-nums; }
+    .controls{
+      display:grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 10px;
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    .field{
+      display:flex;
+      gap: 8px;
+      align-items:center;
+    }
+    .field label{
+      min-width: 90px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .field input{
+      width: 100%;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 8px 10px;
+      outline: none;
+    }
+    .btnrow{
+      display:flex;
+      gap: 10px;
+      padding: 0 14px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+    button{
+      cursor:pointer;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: var(--text);
+      border-radius: 12px;
+      padding: 8px 12px;
+      user-select:none;
+    }
+    button:hover{ background: rgba(255,255,255,0.12); }
+    button:disabled{ opacity:0.55; cursor:not-allowed; }
+
+.grid{
+  display:grid;
+  grid-template-columns: 1fr;  /* было 1fr 1fr */
+  gap: 12px;
+  padding: 12px 14px 14px;
+}
+    .card{
+      background: var(--panel2);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 12px;
+    }
+    .card h3{
+      margin:0 0 8px;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--muted);
+    }
+    canvas{ width: 100% !important; height: 220px !important; }
+
+    .tablewrap{
+      padding: 0 14px 14px;
+    }
+    table{
+      width: 100%;
+      border-collapse: collapse;
+      font-variant-numeric: tabular-nums;
+    }
+    th, td{
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      padding: 7px 6px;
+      text-align: right;
+      white-space: nowrap;
+    }
+    th{
+      color: var(--muted);
+      font-weight: 700;
+    }
+    th:first-child, td:first-child{ text-align:left; }
+
+    .hint{
+      padding: 0 14px 14px;
+      color: var(--muted);
+    }
+    code{ color: #9bd3ff; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="panel">
+      <div class="header">
+        <div class="title">IV monitor (ATM + tails)</div>
+        <div class="status" id="status">idle</div>
+      </div>
+
+      <div class="controls">
+        <div class="field">
+          <label>API Base</label>
+          <input id="apiBase" value="https://scanner.tradingview.com" />
+        </div>
+        <div class="field">
+          <label>Ticker</label>
+          <input id="ticker" value="AMEX:SPY" />
+        </div>
+        <div class="field">
+          <label>Root</label>
+          <input id="root" value="SPY" />
+        </div>
+        <div class="field">
+          <label>Expiry</label>
+          <input id="expiry" value="20260227" />
+        </div>
+
+        <div class="field">
+          <label>Poll (sec)</label>
+          <input id="pollSec" value="5" />
+        </div>
+        <div class="field">
+          <label>Tail steps</label>
+          <input id="tailSteps" value="3" />
+        </div>
+        <div class="field">
+          <label>Keep points</label>
+          <input id="keepPoints" value="200" />
+        </div>
+        <div class="field">
+          <label>Divide by pricescale</label>
+          <input id="divideScale" value="auto" title="auto | yes | no" />
+        </div>
+      </div>
+
+      <div class="btnrow">
+        <button id="startBtn">Start</button>
+        <button id="stopBtn" disabled>Stop</button>
+        <button id="clearBtn">Clear</button>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h3>d atm (callAtm - putAtm)</h3>
+          <canvas id="chartAtm"></canvas>
+        </div>
+        <div class="card">
+          <h3>d cp (putTail - callTail)</h3>
+          <canvas id="chartCp"></canvas>
+        </div>
+      </div>
+
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th>time</th>
+              <th>px</th>
+              <th>lower</th>
+              <th>upper</th>
+              <th>atm put iv</th>
+              <th>atm call iv</th>
+              <th>d atm</th>
+              <th>put (-steps) bid_iv</th>
+              <th>call (+steps) bid_iv</th>
+              <th>d cp</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    // -----------------------------
+    // Helpers
+    // -----------------------------
+    const $ = (id) => document.getElementById(id);
+    const setStatus = (s) => { $("status").textContent = s; };
+
+    const toNum = (x) => {
+      const n = Number(x);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const fmt = (n, d=6) => (n == null ? "n/a" : Number(n).toFixed(d));
+    const fmtPx = (n) => (n == null ? "n/a" : Number(n).toFixed(3));
+
+    const nowStr = () => {
+      const d = new Date();
+      const pad = (x) => String(x).padStart(2,"0");
+      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+
+    // -----------------------------
+    // TradingView payloads
+    // -----------------------------
+    function buildOptionsBody(root, expiry, ticker) {
+      return JSON.stringify({
+        columns: ["ask","bid","currency","delta","expiration","gamma","iv","option-type","pricescale","rho","root","strike","theoPrice","theta","vega","bid_iv","ask_iv"],
+        filter: [
+          { left: "type", operation: "equal", right: "option" },
+          { left: "expiration", operation: "equal", right: Number(expiry) },
+          { left: "root", operation: "equal", right: String(root) }
+        ],
+        ignore_unknown_fields: false,
+        index_filters: [{ name: "underlying_symbol", values: [String(ticker)] }]
+      });
+    }
+
+    function buildPriceBody(ticker) {
+      return JSON.stringify({
+        columns: ["close|1","pricescale"],
+        ignore_unknown_fields: false,
+        symbols: { tickers: [String(ticker)] }
+      });
+    }
+
+function buildUrl(apiBase, path) {
+  return `${apiBase.replace(/\/+$/,'')}${path}?label-product=options-builder`;
+}
+
+async function tvPostOptions(apiBase, bodyText) {
+  const url = buildUrl(apiBase, "/options/scan2");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "accept": "application/json",
+      "content-type": "text/plain;charset=UTF-8"
+    },
+    body: bodyText
+  });
+  const text = await res.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch {}
+  return { ok: res.ok, status: res.status, json, text };
+}
+
+async function tvPostGlobal(apiBase, bodyText) {
+  const url = buildUrl(apiBase, "/global/scan2");
+  const res = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "accept": "application/json",
+      "content-type": "text/plain;charset=UTF-8"
+    },
+    body: bodyText
+  });
+  const text = await res.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch {}
+  return { ok: res.ok, status: res.status, json, text };
+}
+
+    // -----------------------------
+    // Parse options surface -> maps
+    // -----------------------------
+    function buildIndex(fields) {
+      const idx = {};
+      fields.forEach((f, i) => idx[f] = i);
+      return idx;
+    }
+
+    // Return:
+    // strikesSorted: number[]
+    // byTypeStrike: Map("call:685" => {bid_iv, ask_iv, iv, ...})
+    function parseOptions(json) {
+      if (!json || !Array.isArray(json.fields) || !Array.isArray(json.symbols)) {
+        return { strikesSorted: [], byTypeStrike: new Map() };
+      }
+      const idx = buildIndex(json.fields);
+      const m = new Map();
+      const strikesSet = new Set();
+
+      for (const s of json.symbols) {
+        const f = s && s.f;
+        if (!Array.isArray(f)) continue;
+        const strike = toNum(f[idx["strike"]]);
+        const type = String(f[idx["option-type"]] || "").toLowerCase(); // "call"/"put"
+        if (strike == null || (type !== "call" && type !== "put")) continue;
+
+        const row = {
+          strike,
+          type,
+          bid_iv: toNum(f[idx["bid_iv"]]),
+          ask_iv: toNum(f[idx["ask_iv"]]),
+          iv: toNum(f[idx["iv"]]),
+          bid: toNum(f[idx["bid"]]),
+          ask: toNum(f[idx["ask"]]),
+        };
+        m.set(`${type}:${strike}`, row);
+        strikesSet.add(strike);
+      }
+
+      const strikesSorted = Array.from(strikesSet).sort((a,b)=>a-b);
+      return { strikesSorted, byTypeStrike: m };
+    }
+
+    // Find nearest strikes around price:
+    // lower = max strike <= price
+    // upper = min strike >= price
+    function findBrackets(strikesSorted, price) {
+      if (!strikesSorted.length || price == null) return { lower: null, upper: null, lowerIdx: -1, upperIdx: -1 };
+
+      let lowerIdx = -1;
+      let upperIdx = -1;
+
+      // binary search for insertion point
+      let lo = 0, hi = strikesSorted.length;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (strikesSorted[mid] < price) lo = mid + 1;
+        else hi = mid;
+      }
+      // lo = first index where strike >= price
+      upperIdx = (lo < strikesSorted.length) ? lo : -1;
+      lowerIdx = (lo - 1 >= 0) ? (lo - 1) : -1;
+
+      // If price exactly equals a strike, upperIdx points to it too
+      // For your “685 -> lower 685, upper 686” logic,
+      // we want upper = next strike above, not equal, when exact.
+      if (upperIdx !== -1 && strikesSorted[upperIdx] === price) {
+        lowerIdx = upperIdx;
+        upperIdx = (upperIdx + 1 < strikesSorted.length) ? (upperIdx + 1) : -1;
+      }
+
+      return {
+        lower: lowerIdx !== -1 ? strikesSorted[lowerIdx] : null,
+        upper: upperIdx !== -1 ? strikesSorted[upperIdx] : null,
+        lowerIdx, upperIdx
+      };
+    }
+
+    function getRow(map, type, strike) {
+      if (strike == null) return null;
+      return map.get(`${type}:${strike}`) || null;
+    }
+
+    // -----------------------------
+    // Price parsing
+    // -----------------------------
+    function parsePrice(json) {
+      const f = json?.symbols?.[0]?.f;
+      if (!Array.isArray(f) || f.length < 2) return null;
+      const close = toNum(f[0]);
+      const pricescale = toNum(f[1]);
+
+      if (close == null) return null;
+
+      const mode = String($("divideScale").value || "auto").toLowerCase().trim();
+      if (mode === "yes") return (pricescale ? close / pricescale : close);
+      if (mode === "no") return close;
+
+      // auto:
+      // если вдруг close приходит масштабированным (например 68533.5 при pricescale 100)
+      if (pricescale && close > 5000 && close / pricescale < 2000) {
+        // эвристика: делим, если стало похоже на реальную цену
+        return close / pricescale;
+      }
+      return close;
+    }
+function yahooUrl(symbol) {
+  const s = encodeURIComponent(symbol);
+  return `https://query1.finance.yahoo.com/v8/finance/chart/${s}?range=1d&interval=1m`;
+}
+
+function lastNonNull(arr) {
+  if (!Array.isArray(arr)) return null;
+  for (let i = arr.length - 1; i >= 0; i--) {
+    const v = Number(arr[i]);
+    if (Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
+async function fetchYahooLastClose(symbol) {
+  const res = await fetch(yahooUrl(symbol), {
+    method: "GET",
+    // cookies не нужны
+    credentials: "omit",
+    headers: { "accept": "application/json" }
+  });
+  const json = await res.json();
+
+  const result = json?.chart?.result?.[0];
+  if (!result) return { ok: false, status: res.status, px: null, err: "no result" };
+
+  const closes = result?.indicators?.quote?.[0]?.close;
+  let px = lastNonNull(closes);
+
+  // иногда close может быть пустым/null — подстрахуемся:
+  if (px == null) {
+    px = Number(result?.meta?.regularMarketPrice);
+    if (!Number.isFinite(px)) px = null;
+  }
+
+  return { ok: res.ok, status: res.status, px, err: px == null ? "no close" : null };
+}
+
+    // -----------------------------
+    // Chart.js
+    // -----------------------------
+    function makeChart(canvasId, label) {
+      const ctx = $(canvasId).getContext("2d");
+      return new Chart(ctx, {
+        type: "line",
+        data: { labels: [], datasets: [{ label, data: [], borderWidth: 1, tension: 0.25 }] },
+        options: {
+          responsive: true,
+          animation: false,
+          plugins: { legend: { display: false } },
+          elements: { point: { radius: 0 } },
+          scales: {
+            x: { ticks: { maxRotation: 0, autoSkip: true } },
+            y: { ticks: {} }
+          }
+        }
+      });
+    }
+
+    const chartAtm = makeChart("chartAtm", "d atm");
+    const chartCp  = makeChart("chartCp",  "d cp");
+
+    // -----------------------------
+    // State + loop
+    // -----------------------------
+    let timer = null;
+    const history = []; // oldest -> newest
+
+    function clampHistory(max) {
+      while (history.length > max) history.shift();
+    }
+
+    function redrawCharts() {
+      const labels = history.map(x => x.time.split(" ")[1] || x.time);
+      chartAtm.data.labels = labels;
+      chartAtm.data.datasets[0].data = history.map(x => x.dAtm);
+      chartAtm.update();
+
+      chartCp.data.labels = labels;
+      chartCp.data.datasets[0].data = history.map(x => x.dCp);
+      chartCp.update();
+    }
+
+    async function tick() {
+      const apiBase = $("apiBase").value.trim();
+      const ticker  = $("ticker").value.trim();
+      const root    = $("root").value.trim();
+      const expiry  = $("expiry").value.trim();
+      const tailSteps = Math.max(1, Number($("tailSteps").value) || 3);
+      const keep = Math.max(10, Number($("keepPoints").value) || 200);
+
+      try {
+	const yahooSym = ($("yahooSym")?.value || "SPY").trim() || "SPY";
+
+	const y = await fetchYahooLastClose(yahooSym);
+	if (!y.ok || y.px == null) {
+  		setStatus(`yahoo price error ${y.status}${y.err ? " • " + y.err : ""}`);
+  		return;
+	}
+	const px = y.px;
+        if (px == null) {
+          setStatus("price parse error");
+          return;
+        }
+
+        setStatus("loading options...");
+        const optRes = await tvPostOptions(apiBase, buildOptionsBody(root, expiry, ticker));
+        if (!optRes.ok || !optRes.json) {
+          setStatus(`options error ${optRes.status}`);
+          return;
+        }
+
+        const { strikesSorted, byTypeStrike } = parseOptions(optRes.json);
+        const { lower, upper, lowerIdx, upperIdx } = findBrackets(strikesSorted, px);
+
+        // ATM:
+        const atmPut  = getRow(byTypeStrike, "put",  lower);
+        const atmCall = getRow(byTypeStrike, "call", upper);
+
+const atmPutIv  = atmPut?.iv ?? null;
+const atmCallIv = atmCall?.iv ?? null;
+const dAtm = (atmPutIv != null && atmCallIv != null) ? (atmCallIv - atmPutIv) : null;
+
+// tails by "steps in strikes list"
+// CALL tail: from upper ATM strike вверх
+// PUT tail : from lower ATM strike вниз
+const putTailStrike  =
+  (lowerIdx != null && lowerIdx - tailSteps >= 0)
+    ? strikesSorted[lowerIdx - tailSteps]
+    : null;
+
+const callTailStrike =
+  (upperIdx != null && upperIdx + tailSteps < strikesSorted.length)
+    ? strikesSorted[upperIdx + tailSteps]
+    : null;
+
+        const putTail  = getRow(byTypeStrike, "put",  putTailStrike);
+        const callTail = getRow(byTypeStrike, "call", callTailStrike);
+
+        const putTailIv  = putTail?.bid_iv ?? null;
+        const callTailIv = callTail?.bid_iv ?? null;
+        const dCp = (putTailIv != null && callTailIv != null) ? (putTailIv - callTailIv) : null;
+
+        history.push({
+          time: nowStr(),
+          px,
+          lower, upper,
+          atmPutIv, atmCallIv,
+          dAtm,
+          putTailIv, callTailIv,
+          dCp
+        });
+
+        clampHistory(keep);
+        redrawCharts();
+
+        setStatus(`ok • px=${fmtPx(px)} • lower=${lower ?? "n/a"} upper=${upper ?? "n/a"}`);
+      } catch (e) {
+        setStatus(`err: ${e?.message || e}`);
+      }
+    }
+
+    function start() {
+      stop();
+      const pollSec = Math.max(1, Number($("pollSec").value) || 5);
+      $("startBtn").disabled = true;
+      $("stopBtn").disabled = false;
+      setStatus("starting...");
+      tick();
+      timer = setInterval(tick, pollSec * 1000);
+    }
+
+    function stop() {
+      if (timer) clearInterval(timer);
+      timer = null;
+      $("startBtn").disabled = false;
+      $("stopBtn").disabled = true;
+      setStatus("stopped");
+    }
+
+    function clearAll() {
+      history.length = 0;
+      redrawTable();
+      redrawCharts();
+      setStatus("cleared");
+    }
+
+    $("startBtn").addEventListener("click", start);
+    $("stopBtn").addEventListener("click", stop);
+    $("clearBtn").addEventListener("click", clearAll);
+
+function yyyymmddToday() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}${m}${day}`;
+}
+
+// default expiry = today (YYYYMMDD), but only if user left it empty or it's the old default
+$("expiry").value = yyyymmddToday();
+
+    setStatus("ready");
+  </script>
+</body>
+</html>
