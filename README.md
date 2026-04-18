@@ -1,2 +1,22 @@
 # indepstate-vol
-VOL Analysis Dashboard
+
+Electron dashboard for volatility analytics with pluggable data providers and pluggable widgets.
+
+## Run
+
+```bash
+npm install
+npm start
+```
+
+## Current implementation
+
+- **Provider abstraction**: `providers[providerKey]` map in renderer. Right now includes `TradingViewProvider` only.
+- **Widget abstraction**: widget definitions map (`atm-skew-line`, `tail-skew-line`) with metric binding.
+- **Dashboard tabs**: each tab stores its own provider config and list of widgets.
+- **State persistence**: tab layout + config are saved to Electron `userData/dashboard-state.json` and restored on next launch.
+
+## Included widgets
+
+- ATM Call-Put Skew (`dAtm = callATM.iv - putATM.iv`)
+- ±3 Strike Put-Call Skew (`dTail = put(-steps).bid_iv - call(+steps).bid_iv`)
