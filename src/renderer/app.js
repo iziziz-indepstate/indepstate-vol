@@ -41,6 +41,41 @@ function parseWidgetTicker(value) {
   return { ticker, root };
 }
 
+function parseExpiryDate(value) {
+  const raw = String(value || '').trim();
+  if (!/^\d{8}$/.test(raw)) return null;
+
+  const y = Number(raw.slice(0, 4));
+  const m = Number(raw.slice(4, 6));
+  const d = Number(raw.slice(6, 8));
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
+  return dt;
+}
+
+function fmtExpiryDate(dt) {
+  return [
+    dt.getUTCFullYear(),
+    String(dt.getUTCMonth() + 1).padStart(2, '0'),
+    String(dt.getUTCDate()).padStart(2, '0')
+  ].join('');
+}
+
+function expandExpiryRange(startValue, endValue) {
+  const start = parseExpiryDate(startValue);
+  if (!start) return [];
+
+  const parsedEnd = parseExpiryDate(endValue);
+  const end = parsedEnd && parsedEnd >= start ? parsedEnd : start;
+  const out = [];
+  let cursor = new Date(start);
+  while (cursor <= end) {
+    out.push(fmtExpiryDate(cursor));
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return out;
+}
+
 function setStatus(text) {
   $('globalStatus').textContent = text;
 }
@@ -169,13 +204,24 @@ function renderWidgets() {
     });
   });
 
-  root.querySelectorAll('[data-widget-expiry-id]').forEach((input) => {
+  root.querySelectorAll('[data-widget-expiry-start-id]').forEach((input) => {
     input.addEventListener('change', (evt) => {
-      const wid = evt.target.getAttribute('data-widget-expiry-id');
+      const wid = evt.target.getAttribute('data-widget-expiry-start-id');
       const target = tab.widgets.find((w) => w.id === wid);
       if (!target) return;
       target.config ||= {};
-      target.config.expiry = String(evt.target.value || '').trim();
+      target.config.expiryStart = String(evt.target.value || '').trim();
+      persist();
+    });
+  });
+
+  root.querySelectorAll('[data-widget-expiry-end-id]').forEach((input) => {
+    input.addEventListener('change', (evt) => {
+      const wid = evt.target.getAttribute('data-widget-expiry-end-id');
+      const target = tab.widgets.find((w) => w.id === wid);
+      if (!target) return;
+      target.config ||= {};
+      target.config.expiryEnd = String(evt.target.value || '').trim();
       persist();
     });
   });
@@ -208,7 +254,27 @@ function refreshCharts() {
       const widgetSnapshot = latest?.widgetSnapshots?.[widget.id] || latest;
       const series = definition.buildSnapshotSeries(widgetSnapshot, widget);
       chart.data.labels = series?.labels || [];
-      chart.data.datasets[0].data = series?.values || [];
+
+      if (Array.isArray(series?.datasets) && series.datasets.length) {
+        chart.data.datasets = series.datasets.map((dataset, idx) => ({
+          label: dataset?.label || `Series ${idx + 1}`,
+          data: Array.isArray(dataset?.data) ? dataset.data : [],
+          borderWidth: 1,
+          tension: 0.2,
+          pointRadius: 0,
+          borderColor: dataset?.borderColor || definition.color || '#7aa2ff'
+        }));
+      } else {
+        chart.data.datasets = [{
+          label: definition.defaultTitle,
+          data: series?.values || [],
+          borderWidth: 1,
+          tension: 0.2,
+          pointRadius: 0,
+          borderColor: definition.color || '#7aa2ff'
+        }];
+      }
+
       chart.update();
       continue;
     }
@@ -283,12 +349,15 @@ async function tick() {
       const definition = getWidgetDefinition(widget.type);
       if (!definition || definition.mode !== 'snapshot-series') continue;
 
-      const widgetExpiry = String(widget?.config?.expiry || '').trim();
+      const widgetExpiryStart = String(widget?.config?.expiryStart || widget?.config?.expiry || '').trim();
+      const widgetExpiryEnd = String(widget?.config?.expiryEnd || '').trim();
       const { ticker: widgetTicker, root: widgetRoot } = parseWidgetTicker(widget?.config?.ticker);
+      const expiries = expandExpiryRange(widgetExpiryStart, widgetExpiryEnd);
+      const primaryExpiry = expiries[0] || widgetExpiryStart;
 
       const requestConfig = {
         ...tab.providerConfig,
-        ...(widgetExpiry ? { expiry: widgetExpiry } : {}),
+        ...(primaryExpiry ? { expiry: primaryExpiry } : {}),
         ...(widgetTicker && widgetRoot ? { ticker: widgetTicker, root: widgetRoot } : {})
       };
 
@@ -297,11 +366,21 @@ async function tick() {
         String(requestConfig.ticker || '') !== String(tab.providerConfig.ticker || '') ||
         String(requestConfig.root || '') !== String(tab.providerConfig.root || '');
 
-      if (!hasOverride) continue;
-
       try {
-        const widgetPoint = await provider.fetchSnapshot(requestConfig, skewMetrics);
-        point.widgetSnapshots[widget.id] = widgetPoint;
+        if (!hasOverride && expiries.length <= 1) continue;
+
+        if (expiries.length <= 1) {
+          const widgetPoint = await provider.fetchSnapshot(requestConfig, skewMetrics);
+          point.widgetSnapshots[widget.id] = widgetPoint;
+          continue;
+        }
+
+        const byExpiry = {};
+        for (const expiry of expiries) {
+          const widgetPoint = await provider.fetchSnapshot({ ...requestConfig, expiry }, skewMetrics);
+          byExpiry[expiry] = widgetPoint;
+        }
+        point.widgetSnapshots[widget.id] = { byExpiry };
       } catch (_err) {
         // keep fallback to tab-level snapshot
       }
@@ -374,6 +453,12 @@ async function init() {
   for (const tab of state.tabs) {
     state.historyByTab[tab.id] = [];
     if (!tab.providerConfig.expiry) tab.providerConfig.expiry = defaultExpiry();
+    for (const widget of tab.widgets || []) {
+      widget.config ||= {};
+      if (!widget.config.expiryStart && widget.config.expiry) {
+        widget.config.expiryStart = widget.config.expiry;
+      }
+    }
   }
 
   if (!state.activeTabId) state.activeTabId = state.tabs[0].id;

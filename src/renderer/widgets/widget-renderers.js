@@ -3,7 +3,8 @@ export function createWidgetCard(widget, definition) {
   card.className = 'widget-card';
 
   const strikeValue = Number(widget?.config?.baseStrike ?? definition?.defaultConfig?.baseStrike ?? 500);
-  const expiryValue = String(widget?.config?.expiry ?? definition?.defaultConfig?.expiry ?? '');
+  const expiryStartValue = String(widget?.config?.expiryStart ?? widget?.config?.expiry ?? definition?.defaultConfig?.expiryStart ?? '');
+  const expiryEndValue = String(widget?.config?.expiryEnd ?? definition?.defaultConfig?.expiryEnd ?? '');
   const tickerValue = String(widget?.config?.ticker ?? definition?.defaultConfig?.ticker ?? '');
 
   const controls = definition.mode === 'snapshot-series'
@@ -11,8 +12,11 @@ export function createWidgetCard(widget, definition) {
          <label class="widget-control">S
            <input type="number" class="widget-strike-input" data-widget-strike-id="${widget.id}" value="${strikeValue}" step="1" />
          </label>
-         <label class="widget-control">E
-           <input type="text" class="widget-expiry-input" data-widget-expiry-id="${widget.id}" value="${expiryValue}" placeholder="20260227" />
+         <label class="widget-control">E1
+           <input type="text" class="widget-expiry-input" data-widget-expiry-start-id="${widget.id}" value="${expiryStartValue}" placeholder="20260420" />
+         </label>
+         <label class="widget-control">E2
+           <input type="text" class="widget-expiry-input" data-widget-expiry-end-id="${widget.id}" value="${expiryEndValue}" placeholder="20260424" />
          </label>
          <label class="widget-control">T
            <input type="text" class="widget-ticker-input" data-widget-ticker-id="${widget.id}" value="${tickerValue}" placeholder="AMEX:SPY" />
@@ -48,7 +52,7 @@ export function createWidgetChart(ctx, definition) {
     options: {
       responsive: true,
       animation: false,
-      plugins: { legend: { display: false } }
+      plugins: { legend: { display: definition.mode === 'snapshot-series' } }
     }
   });
 }
