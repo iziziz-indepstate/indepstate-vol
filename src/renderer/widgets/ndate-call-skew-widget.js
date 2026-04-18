@@ -5,5 +5,6 @@ export const nDateCallSkewWidget = createNDateSkewWidget({
   title: 'nDate-Call-Skew',
   color: '#ff7de3',
   side: 'call',
-  direction: 'up'
+  direction: 'up',
+  xOrder: 'asc'
 });
