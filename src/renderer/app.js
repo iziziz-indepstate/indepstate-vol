@@ -181,6 +181,7 @@ function renameTabById(tabId) {
   const tab = state.tabs.find((x) => x.id === tabId);
   if (!tab) return;
 
+  if (typeof window.prompt !== 'function') return;
   const nextTitle = window.prompt('Rename tab', tab.title);
   if (nextTitle == null) return;
 
@@ -503,7 +504,11 @@ function bindEvents() {
     deleteTabById(tabContextTargetId);
     hideTabContextMenu();
   });
-  document.addEventListener('click', () => hideTabContextMenu());
+  document.addEventListener('pointerdown', (evt) => {
+    if (!evt.target.closest('#tabContextMenu') && !evt.target.closest('.tab')) {
+      hideTabContextMenu();
+    }
+  });
   document.addEventListener('contextmenu', (evt) => {
     if (!evt.target.closest('.tab')) hideTabContextMenu();
   });
