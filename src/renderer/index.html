@@ -8,14 +8,6 @@
 </head>
 <body>
   <div class="app-shell">
-    <header class="app-header">
-      <div>
-        <h1>Volatility Dashboard</h1>
-        <p class="subtitle">Провайдеры данных + настраиваемые виджеты по вкладкам</p>
-      </div>
-      <div id="globalStatus" class="status">ready</div>
-    </header>
-
     <section class="tabs-toolbar">
       <div id="tabs" class="tabs"></div>
       <button id="addTabBtn" class="btn">+ Add Tab</button>
@@ -32,14 +24,18 @@
 
     <section class="panel config-panel">
       <div class="config-header">
-        <h2>Data source config</h2>
+        <h2>Data</h2>
         <div class="config-header-actions">
+          <span class="poll-indicator" title="Polling status">
+            <span id="pollStateDot" class="poll-dot is-stopped" aria-hidden="true"></span>
+          </span>
           <button id="startBtn" class="btn">Start</button>
           <button id="stopBtn" class="btn" disabled>Stop</button>
           <button id="toggleConfigBtn" class="btn btn-compact" aria-expanded="false">Show config</button>
         </div>
       </div>
       <div id="configBody" class="config-body is-collapsed">
+        <div id="globalStatus" class="status">ready</div>
         <div class="config-grid">
           <label>Provider
             <select id="providerKey">

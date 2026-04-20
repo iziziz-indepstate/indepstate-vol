@@ -82,6 +82,12 @@ function setStatus(text) {
   $('globalStatus').textContent = text;
 }
 
+function setPollState(isRunning) {
+  const dot = $('pollStateDot');
+  dot.classList.toggle('is-running', isRunning);
+  dot.classList.toggle('is-stopped', !isRunning);
+}
+
 function persist() {
   window.appBridge.saveState({
     activeTabId: state.activeTabId,
@@ -484,6 +490,7 @@ function start() {
   const poll = Math.max(1, Number(tab.providerConfig.pollSec) || 5);
   $('startBtn').disabled = true;
   $('stopBtn').disabled = false;
+  setPollState(true);
   tick();
   timer = setInterval(tick, poll * 1000);
 }
@@ -493,6 +500,7 @@ function stop() {
   timer = null;
   $('startBtn').disabled = false;
   $('stopBtn').disabled = true;
+  setPollState(false);
   setStatus('stopped');
 }
 
@@ -573,6 +581,7 @@ async function init() {
   applyTabToForm(activeTab());
   renderTabs();
   renderWidgets();
+  setPollState(false);
   setStatus('ready');
 }
 
