@@ -13,7 +13,6 @@ const state = {
   historyByTab: {}
 };
 
-let isPolling = false;
 const tabTimers = new Map();
 const tabTickInFlight = new Set();
 const tabStatus = {};
@@ -97,6 +96,14 @@ function setPollState(isRunning) {
   dot.classList.toggle('is-stopped', !isRunning);
 }
 
+function updatePollingControlsForActiveTab() {
+  const tab = activeTab();
+  const running = tab ? tabTimers.has(tab.id) : false;
+  $('startBtn').disabled = running;
+  $('stopBtn').disabled = !running;
+  setPollState(running);
+}
+
 function persist() {
   window.appBridge.saveState({
     activeTabId: state.activeTabId,
@@ -147,6 +154,7 @@ function renderTabs() {
       renderTabs();
       renderWidgets();
       setStatus(tabStatus[tab.id] || 'ready');
+      updatePollingControlsForActiveTab();
       persist();
     };
     item.addEventListener('contextmenu', (evt) => {
@@ -194,6 +202,7 @@ function deleteTabById(tabId) {
   renderTabs();
   renderWidgets();
   setStatus(tabStatus[state.activeTabId] || 'ready');
+  updatePollingControlsForActiveTab();
   persist();
 }
 
@@ -471,7 +480,7 @@ function addTab() {
   applyTabToForm(tab);
   renderTabs();
   renderWidgets();
-  if (isPolling) startTabPolling(id);
+  updatePollingControlsForActiveTab();
   persist();
 }
 
@@ -573,20 +582,18 @@ function stopTabPolling(tabId) {
 }
 
 function start() {
-  isPolling = true;
-  for (const tab of state.tabs) startTabPolling(tab.id);
-  $('startBtn').disabled = true;
-  $('stopBtn').disabled = false;
-  setPollState(true);
+  const tab = activeTab();
+  if (!tab) return;
+  startTabPolling(tab.id);
+  updatePollingControlsForActiveTab();
 }
 
 function stop() {
-  isPolling = false;
-  for (const tabId of tabTimers.keys()) stopTabPolling(tabId);
-  $('startBtn').disabled = false;
-  $('stopBtn').disabled = true;
-  setPollState(false);
-  setTabStatus(state.activeTabId, 'stopped');
+  const tab = activeTab();
+  if (!tab) return;
+  stopTabPolling(tab.id);
+  setTabStatus(tab.id, 'stopped');
+  updatePollingControlsForActiveTab();
 }
 
 function bindEvents() {
@@ -641,7 +648,7 @@ function bindEvents() {
       if (!tab) return;
       readFormToTab(tab);
       persist();
-      if (isPolling) startTabPolling(tab.id);
+      if (tabTimers.has(tab.id)) startTabPolling(tab.id);
     });
   });
 }
@@ -670,9 +677,7 @@ async function init() {
   applyTabToForm(activeTab());
   renderTabs();
   renderWidgets();
-  $('startBtn').disabled = false;
-  $('stopBtn').disabled = true;
-  setPollState(false);
+  updatePollingControlsForActiveTab();
   setTabStatus(state.activeTabId, 'ready');
 }
 
