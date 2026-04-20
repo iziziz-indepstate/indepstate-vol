@@ -13,7 +13,10 @@ const state = {
   historyByTab: {}
 };
 
-let timer = null;
+const tabTimers = new Map();
+const tabTickInFlight = new Set();
+const tabRefreshInFlight = new Set();
+const tabStatus = {};
 const chartInstances = new Map();
 let tabContextTargetId = null;
 let renameTargetTabId = null;
@@ -82,10 +85,26 @@ function setStatus(text) {
   $('globalStatus').textContent = text;
 }
 
+function setTabStatus(tabId, text) {
+  if (!tabId) return;
+  tabStatus[tabId] = text;
+  if (state.activeTabId === tabId) setStatus(text);
+}
+
 function setPollState(isRunning) {
   const dot = $('pollStateDot');
   dot.classList.toggle('is-running', isRunning);
   dot.classList.toggle('is-stopped', !isRunning);
+}
+
+function updatePollingControlsForActiveTab() {
+  const tab = activeTab();
+  const running = tab ? tabTimers.has(tab.id) : false;
+  const refreshing = tab ? tabRefreshInFlight.has(tab.id) : false;
+  $('startBtn').disabled = running || refreshing;
+  $('stopBtn').disabled = !running || refreshing;
+  $('refreshBtn').disabled = refreshing;
+  setPollState(running || refreshing);
 }
 
 function persist() {
@@ -137,6 +156,8 @@ function renderTabs() {
       applyTabToForm(tab);
       renderTabs();
       renderWidgets();
+      setStatus(tabStatus[tab.id] || 'ready');
+      updatePollingControlsForActiveTab();
       persist();
     };
     item.addEventListener('contextmenu', (evt) => {
@@ -172,6 +193,8 @@ function deleteTabById(tabId) {
 
   state.tabs.splice(idx, 1);
   delete state.historyByTab[tabId];
+  delete tabStatus[tabId];
+  stopTabPolling(tabId);
 
   if (state.activeTabId === tabId) {
     const next = state.tabs[idx] || state.tabs[idx - 1] || state.tabs[0];
@@ -181,6 +204,8 @@ function deleteTabById(tabId) {
   if (state.activeTabId) applyTabToForm(activeTab());
   renderTabs();
   renderWidgets();
+  setStatus(tabStatus[state.activeTabId] || 'ready');
+  updatePollingControlsForActiveTab();
   persist();
 }
 
@@ -412,6 +437,10 @@ function refreshCharts() {
   }
 }
 
+function tickTabIfActive(tabId) {
+  if (state.activeTabId === tabId) refreshCharts();
+}
+
 function addWidget(type) {
   const tab = activeTab();
   if (!tab) return;
@@ -449,26 +478,30 @@ function addTab() {
   };
 
   state.tabs.push(tab);
+  tabStatus[id] = 'ready';
   state.activeTabId = id;
   applyTabToForm(tab);
   renderTabs();
   renderWidgets();
+  updatePollingControlsForActiveTab();
   persist();
 }
 
-async function tick() {
-  const tab = activeTab();
+async function tickTab(tabId) {
+  const tab = state.tabs.find((x) => x.id === tabId);
   if (!tab) return;
+  if (tabTickInFlight.has(tabId)) return;
+  tabTickInFlight.add(tabId);
 
-  readFormToTab(tab);
   const provider = providers[tab.providerKey];
   if (!provider) {
-    setStatus(`Unknown provider: ${tab.providerKey}`);
+    setTabStatus(tabId, `Unknown provider: ${tab.providerKey}`);
+    tabTickInFlight.delete(tabId);
     return;
   }
 
   try {
-    setStatus('Loading snapshot...');
+    setTabStatus(tabId, `Loading snapshot (${tab.title})...`);
     const point = await provider.fetchSnapshot(tab.providerConfig, skewMetrics);
     point.widgetSnapshots = {};
 
@@ -521,40 +554,79 @@ async function tick() {
       state.historyByTab[tab.id].shift();
     }
 
-    refreshCharts();
-    setStatus(`ok • px=${point.px?.toFixed(3) ?? 'n/a'} • lower=${point.lower ?? 'n/a'} upper=${point.upper ?? 'n/a'}`);
+    tickTabIfActive(tabId);
+    setTabStatus(
+      tabId,
+      `ok • ${tab.title} • px=${point.px?.toFixed(3) ?? 'n/a'} • lower=${point.lower ?? 'n/a'} upper=${point.upper ?? 'n/a'}`
+    );
     persist();
   } catch (err) {
-    setStatus(`error: ${err?.message || err}`);
+    setTabStatus(tabId, `error • ${tab.title}: ${err?.message || err}`);
+  } finally {
+    tabTickInFlight.delete(tabId);
   }
 }
 
+function startTabPolling(tabId) {
+  const tab = state.tabs.find((x) => x.id === tabId);
+  if (!tab) return;
+  stopTabPolling(tabId);
+  const poll = Math.max(1, Number(tab.providerConfig.pollSec) || 5);
+  tickTab(tabId);
+  const timer = setInterval(() => tickTab(tabId), poll * 1000);
+  tabTimers.set(tabId, timer);
+}
+
+function stopTabPolling(tabId) {
+  const timer = tabTimers.get(tabId);
+  if (timer) clearInterval(timer);
+  tabTimers.delete(tabId);
+  tabTickInFlight.delete(tabId);
+}
+
 function start() {
-  stop();
   const tab = activeTab();
   if (!tab) return;
-
-  readFormToTab(tab);
-  const poll = Math.max(1, Number(tab.providerConfig.pollSec) || 5);
-  $('startBtn').disabled = true;
-  $('stopBtn').disabled = false;
-  setPollState(true);
-  tick();
-  timer = setInterval(tick, poll * 1000);
+  startTabPolling(tab.id);
+  updatePollingControlsForActiveTab();
 }
 
 function stop() {
-  if (timer) clearInterval(timer);
-  timer = null;
-  $('startBtn').disabled = false;
-  $('stopBtn').disabled = true;
-  setPollState(false);
-  setStatus('stopped');
+  const tab = activeTab();
+  if (!tab) return;
+  stopTabPolling(tab.id);
+  setTabStatus(tab.id, 'stopped');
+  updatePollingControlsForActiveTab();
+}
+
+async function refreshActiveTabOnce() {
+  const tab = activeTab();
+  if (!tab || tabRefreshInFlight.has(tab.id)) return;
+
+  tabRefreshInFlight.add(tab.id);
+  updatePollingControlsForActiveTab();
+  try {
+    await tickTab(tab.id);
+  } finally {
+    tabRefreshInFlight.delete(tab.id);
+    updatePollingControlsForActiveTab();
+  }
+}
+
+function clearActiveTabSnapshots() {
+  const tab = activeTab();
+  if (!tab) return;
+  state.historyByTab[tab.id] = [];
+  refreshCharts();
+  setTabStatus(tab.id, `cleared • ${tab.title}`);
+  persist();
 }
 
 function bindEvents() {
   $('startBtn').addEventListener('click', start);
   $('stopBtn').addEventListener('click', stop);
+  $('refreshBtn').addEventListener('click', refreshActiveTabOnce);
+  $('clearSnapshotsBtn').addEventListener('click', clearActiveTabSnapshots);
   $('addTabBtn').addEventListener('click', addTab);
   $('addWidgetBtn').addEventListener('click', () => addWidget($('widgetTypeSelect').value));
   $('toggleConfigBtn').addEventListener('click', () => {
@@ -604,6 +676,7 @@ function bindEvents() {
       if (!tab) return;
       readFormToTab(tab);
       persist();
+      if (tabTimers.has(tab.id)) startTabPolling(tab.id);
     });
   });
 }
@@ -632,8 +705,8 @@ async function init() {
   applyTabToForm(activeTab());
   renderTabs();
   renderWidgets();
-  setPollState(false);
-  setStatus('ready');
+  updatePollingControlsForActiveTab();
+  setTabStatus(state.activeTabId, 'ready');
 }
 
 init();
