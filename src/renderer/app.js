@@ -15,6 +15,7 @@ const state = {
 
 const tabTimers = new Map();
 const tabTickInFlight = new Set();
+const tabRefreshInFlight = new Set();
 const tabStatus = {};
 const chartInstances = new Map();
 let tabContextTargetId = null;
@@ -99,9 +100,11 @@ function setPollState(isRunning) {
 function updatePollingControlsForActiveTab() {
   const tab = activeTab();
   const running = tab ? tabTimers.has(tab.id) : false;
-  $('startBtn').disabled = running;
-  $('stopBtn').disabled = !running;
-  setPollState(running);
+  const refreshing = tab ? tabRefreshInFlight.has(tab.id) : false;
+  $('startBtn').disabled = running || refreshing;
+  $('stopBtn').disabled = !running || refreshing;
+  $('refreshBtn').disabled = refreshing;
+  setPollState(running || refreshing);
 }
 
 function persist() {
@@ -596,9 +599,24 @@ function stop() {
   updatePollingControlsForActiveTab();
 }
 
+async function refreshActiveTabOnce() {
+  const tab = activeTab();
+  if (!tab || tabRefreshInFlight.has(tab.id)) return;
+
+  tabRefreshInFlight.add(tab.id);
+  updatePollingControlsForActiveTab();
+  try {
+    await tickTab(tab.id);
+  } finally {
+    tabRefreshInFlight.delete(tab.id);
+    updatePollingControlsForActiveTab();
+  }
+}
+
 function bindEvents() {
   $('startBtn').addEventListener('click', start);
   $('stopBtn').addEventListener('click', stop);
+  $('refreshBtn').addEventListener('click', refreshActiveTabOnce);
   $('addTabBtn').addEventListener('click', addTab);
   $('addWidgetBtn').addEventListener('click', () => addWidget($('widgetTypeSelect').value));
   $('toggleConfigBtn').addEventListener('click', () => {
