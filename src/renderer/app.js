@@ -104,6 +104,7 @@ function updatePollingControlsForActiveTab() {
   $('startBtn').disabled = running || refreshing;
   $('stopBtn').disabled = !running || refreshing;
   $('refreshBtn').disabled = refreshing;
+  $('clearSnapshotBtn').disabled = refreshing;
   setPollState(running || refreshing);
 }
 
@@ -613,10 +614,21 @@ async function refreshActiveTabOnce() {
   }
 }
 
+function clearActiveTabSnapshot() {
+  const tab = activeTab();
+  if (!tab) return;
+
+  state.historyByTab[tab.id] = [];
+  refreshCharts();
+  setTabStatus(tab.id, `snapshot cleared • ${tab.title}`);
+  persist();
+}
+
 function bindEvents() {
   $('startBtn').addEventListener('click', start);
   $('stopBtn').addEventListener('click', stop);
   $('refreshBtn').addEventListener('click', refreshActiveTabOnce);
+  $('clearSnapshotBtn').addEventListener('click', clearActiveTabSnapshot);
   $('addTabBtn').addEventListener('click', addTab);
   $('addWidgetBtn').addEventListener('click', () => addWidget($('widgetTypeSelect').value));
   $('toggleConfigBtn').addEventListener('click', () => {
