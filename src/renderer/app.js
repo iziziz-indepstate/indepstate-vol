@@ -560,8 +560,11 @@ function bindEvents() {
   $('toggleConfigBtn').addEventListener('click', () => {
     const body = $('configBody');
     const collapsed = body.classList.toggle('is-collapsed');
-    $('toggleConfigBtn').textContent = collapsed ? 'Show config' : 'Hide config';
-    $('toggleConfigBtn').setAttribute('aria-expanded', String(!collapsed));
+    const toggleBtn = $('toggleConfigBtn');
+    toggleBtn.textContent = collapsed ? '▾' : '▴';
+    toggleBtn.setAttribute('title', collapsed ? 'Show config' : 'Hide config');
+    toggleBtn.setAttribute('aria-label', collapsed ? 'Show config' : 'Hide config');
+    toggleBtn.setAttribute('aria-expanded', String(!collapsed));
   });
   $('tabRenameAction').addEventListener('click', () => {
     openRenameTabModal(tabContextTargetId);

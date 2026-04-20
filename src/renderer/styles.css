@@ -80,6 +80,17 @@ body {
   padding: 6px 8px;
 }
 
+.btn-icon-only {
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
 .widget-add-inline {
   display: inline-flex;
   align-items: center;
