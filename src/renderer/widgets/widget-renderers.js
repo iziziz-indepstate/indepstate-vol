@@ -25,10 +25,10 @@ export function createWidgetCard(widget, definition) {
     : '';
 
   card.innerHTML = `
+    <button class="btn btn-icon widget-remove-btn" data-widget-id="${widget.id}" aria-label="Remove widget" title="Remove widget">✕</button>
     <div class="widget-title">
       <h3>${widget.title || definition.defaultTitle}</h3>
       ${controls}
-      <button class="btn btn-icon" data-widget-id="${widget.id}" aria-label="Remove widget" title="Remove widget">✕</button>
     </div>
     <canvas id="canvas-${widget.id}"></canvas>
   `;

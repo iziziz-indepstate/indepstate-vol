@@ -258,6 +258,7 @@ input, select {
 }
 
 .widget-card {
+  position: relative;
   border: 1px solid var(--border);
   background: var(--panel2);
   border-radius: 12px;
@@ -271,6 +272,7 @@ input, select {
   gap: 8px;
   color: var(--muted);
   min-height: 28px;
+  padding-right: 30px;
 }
 
 .widget-title h3 {
@@ -326,4 +328,11 @@ canvas {
   border-radius: 999px;
   line-height: 1;
   font-size: 14px;
+}
+
+.widget-remove-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
 }
