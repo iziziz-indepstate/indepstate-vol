@@ -37,6 +37,7 @@ export function createWidgetCard(widget, definition) {
 }
 
 export function createWidgetChart(ctx, definition) {
+  const hideXAxisValues = Boolean(definition?.hideXAxisValues);
   return new Chart(ctx, {
     type: 'line',
     data: {
@@ -52,6 +53,13 @@ export function createWidgetChart(ctx, definition) {
     options: {
       responsive: true,
       animation: false,
+      scales: {
+        x: {
+          ticks: {
+            display: !hideXAxisValues
+          }
+        }
+      },
       plugins: {
         legend: {
           display: false,
