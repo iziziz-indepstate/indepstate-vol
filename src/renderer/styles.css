@@ -263,6 +263,15 @@ input, select {
   background: var(--panel2);
   border-radius: 12px;
   padding: 10px;
+  transition: border-color 120ms ease, opacity 120ms ease;
+}
+
+.widget-card.is-dragging {
+  opacity: 0.55;
+}
+
+.widget-card.drag-over {
+  border-color: #7aa2ff;
 }
 
 .widget-title {

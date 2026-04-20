@@ -269,6 +269,54 @@ function renderWidgets() {
     });
   });
 
+  let draggedWidgetId = null;
+  root.querySelectorAll('.widget-card[data-widget-card-id]').forEach((card) => {
+    const cardWidgetId = card.dataset.widgetCardId;
+
+    card.addEventListener('dragstart', (evt) => {
+      draggedWidgetId = cardWidgetId;
+      card.classList.add('is-dragging');
+      evt.dataTransfer.effectAllowed = 'move';
+      evt.dataTransfer.setData('text/plain', cardWidgetId);
+    });
+
+    card.addEventListener('dragend', () => {
+      draggedWidgetId = null;
+      card.classList.remove('is-dragging');
+      root.querySelectorAll('.widget-card.drag-over').forEach((x) => x.classList.remove('drag-over'));
+    });
+
+    card.addEventListener('dragover', (evt) => {
+      evt.preventDefault();
+      evt.dataTransfer.dropEffect = 'move';
+      if (draggedWidgetId && draggedWidgetId !== cardWidgetId) card.classList.add('drag-over');
+    });
+
+    card.addEventListener('dragleave', () => {
+      card.classList.remove('drag-over');
+    });
+
+    card.addEventListener('drop', (evt) => {
+      evt.preventDefault();
+      card.classList.remove('drag-over');
+
+      const fromId = draggedWidgetId || evt.dataTransfer.getData('text/plain');
+      const toId = cardWidgetId;
+      if (!fromId || !toId || fromId === toId) return;
+
+      const fromIdx = tab.widgets.findIndex((w) => w.id === fromId);
+      const toIdx = tab.widgets.findIndex((w) => w.id === toId);
+      if (fromIdx === -1 || toIdx === -1) return;
+
+      const [moved] = tab.widgets.splice(fromIdx, 1);
+      const insertAt = fromIdx < toIdx ? toIdx - 1 : toIdx;
+      tab.widgets.splice(insertAt, 0, moved);
+
+      renderWidgets();
+      persist();
+    });
+  });
+
   root.querySelectorAll('[data-widget-strike-id]').forEach((input) => {
     input.addEventListener('change', (evt) => {
       const wid = evt.target.getAttribute('data-widget-strike-id');
