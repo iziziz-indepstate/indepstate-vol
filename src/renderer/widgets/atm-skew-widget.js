@@ -3,5 +3,6 @@ export const atmSkewWidget = {
   metric: 'dAtm',
   mode: 'timeseries',
   defaultTitle: 'ATM Call-Put Skew',
-  color: '#7aa2ff'
+  color: '#7aa2ff',
+  hideXAxisValues: true
 };

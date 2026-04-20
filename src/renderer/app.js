@@ -82,6 +82,12 @@ function setStatus(text) {
   $('globalStatus').textContent = text;
 }
 
+function setPollState(isRunning) {
+  const dot = $('pollStateDot');
+  dot.classList.toggle('is-running', isRunning);
+  dot.classList.toggle('is-stopped', !isRunning);
+}
+
 function persist() {
   window.appBridge.saveState({
     activeTabId: state.activeTabId,
@@ -258,6 +264,54 @@ function renderWidgets() {
     btn.addEventListener('click', (evt) => {
       const wid = evt.target.getAttribute('data-widget-id');
       tab.widgets = tab.widgets.filter((w) => w.id !== wid);
+      renderWidgets();
+      persist();
+    });
+  });
+
+  let draggedWidgetId = null;
+  root.querySelectorAll('.widget-card[data-widget-card-id]').forEach((card) => {
+    const cardWidgetId = card.dataset.widgetCardId;
+
+    card.addEventListener('dragstart', (evt) => {
+      draggedWidgetId = cardWidgetId;
+      card.classList.add('is-dragging');
+      evt.dataTransfer.effectAllowed = 'move';
+      evt.dataTransfer.setData('text/plain', cardWidgetId);
+    });
+
+    card.addEventListener('dragend', () => {
+      draggedWidgetId = null;
+      card.classList.remove('is-dragging');
+      root.querySelectorAll('.widget-card.drag-over').forEach((x) => x.classList.remove('drag-over'));
+    });
+
+    card.addEventListener('dragover', (evt) => {
+      evt.preventDefault();
+      evt.dataTransfer.dropEffect = 'move';
+      if (draggedWidgetId && draggedWidgetId !== cardWidgetId) card.classList.add('drag-over');
+    });
+
+    card.addEventListener('dragleave', () => {
+      card.classList.remove('drag-over');
+    });
+
+    card.addEventListener('drop', (evt) => {
+      evt.preventDefault();
+      card.classList.remove('drag-over');
+
+      const fromId = draggedWidgetId || evt.dataTransfer.getData('text/plain');
+      const toId = cardWidgetId;
+      if (!fromId || !toId || fromId === toId) return;
+
+      const fromIdx = tab.widgets.findIndex((w) => w.id === fromId);
+      const toIdx = tab.widgets.findIndex((w) => w.id === toId);
+      if (fromIdx === -1 || toIdx === -1) return;
+
+      const [moved] = tab.widgets.splice(fromIdx, 1);
+      const insertAt = fromIdx < toIdx ? toIdx - 1 : toIdx;
+      tab.widgets.splice(insertAt, 0, moved);
+
       renderWidgets();
       persist();
     });
@@ -484,6 +538,7 @@ function start() {
   const poll = Math.max(1, Number(tab.providerConfig.pollSec) || 5);
   $('startBtn').disabled = true;
   $('stopBtn').disabled = false;
+  setPollState(true);
   tick();
   timer = setInterval(tick, poll * 1000);
 }
@@ -493,6 +548,7 @@ function stop() {
   timer = null;
   $('startBtn').disabled = false;
   $('stopBtn').disabled = true;
+  setPollState(false);
   setStatus('stopped');
 }
 
@@ -504,8 +560,11 @@ function bindEvents() {
   $('toggleConfigBtn').addEventListener('click', () => {
     const body = $('configBody');
     const collapsed = body.classList.toggle('is-collapsed');
-    $('toggleConfigBtn').textContent = collapsed ? 'Show config' : 'Hide config';
-    $('toggleConfigBtn').setAttribute('aria-expanded', String(!collapsed));
+    const toggleBtn = $('toggleConfigBtn');
+    toggleBtn.textContent = collapsed ? '▾' : '▴';
+    toggleBtn.setAttribute('title', collapsed ? 'Show config' : 'Hide config');
+    toggleBtn.setAttribute('aria-label', collapsed ? 'Show config' : 'Hide config');
+    toggleBtn.setAttribute('aria-expanded', String(!collapsed));
   });
   $('tabRenameAction').addEventListener('click', () => {
     openRenameTabModal(tabContextTargetId);
@@ -573,6 +632,7 @@ async function init() {
   applyTabToForm(activeTab());
   renderTabs();
   renderWidgets();
+  setPollState(false);
   setStatus('ready');
 }
 

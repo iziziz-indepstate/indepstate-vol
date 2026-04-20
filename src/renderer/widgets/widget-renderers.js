@@ -1,6 +1,8 @@
 export function createWidgetCard(widget, definition) {
   const card = document.createElement('article');
   card.className = 'widget-card';
+  card.draggable = true;
+  card.dataset.widgetCardId = widget.id;
 
   const strikeValue = Number(widget?.config?.baseStrike ?? definition?.defaultConfig?.baseStrike ?? 500);
   const expiryStartValue = String(widget?.config?.expiryStart ?? widget?.config?.expiry ?? definition?.defaultConfig?.expiryStart ?? '');
@@ -25,10 +27,10 @@ export function createWidgetCard(widget, definition) {
     : '';
 
   card.innerHTML = `
+    <button class="btn btn-icon widget-remove-btn" data-widget-id="${widget.id}" aria-label="Remove widget" title="Remove widget">✕</button>
     <div class="widget-title">
       <h3>${widget.title || definition.defaultTitle}</h3>
       ${controls}
-      <button class="btn btn-icon" data-widget-id="${widget.id}" aria-label="Remove widget" title="Remove widget">✕</button>
     </div>
     <canvas id="canvas-${widget.id}"></canvas>
   `;
@@ -37,6 +39,7 @@ export function createWidgetCard(widget, definition) {
 }
 
 export function createWidgetChart(ctx, definition) {
+  const hideXAxisValues = Boolean(definition?.hideXAxisValues);
   return new Chart(ctx, {
     type: 'line',
     data: {
@@ -52,6 +55,13 @@ export function createWidgetChart(ctx, definition) {
     options: {
       responsive: true,
       animation: false,
+      scales: {
+        x: {
+          ticks: {
+            display: !hideXAxisValues
+          }
+        }
+      },
       plugins: {
         legend: {
           display: false,
