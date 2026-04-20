@@ -13,7 +13,10 @@ const state = {
   historyByTab: {}
 };
 
-let timer = null;
+let isPolling = false;
+const tabTimers = new Map();
+const tabTickInFlight = new Set();
+const tabStatus = {};
 const chartInstances = new Map();
 let tabContextTargetId = null;
 let renameTargetTabId = null;
@@ -82,6 +85,12 @@ function setStatus(text) {
   $('globalStatus').textContent = text;
 }
 
+function setTabStatus(tabId, text) {
+  if (!tabId) return;
+  tabStatus[tabId] = text;
+  if (state.activeTabId === tabId) setStatus(text);
+}
+
 function setPollState(isRunning) {
   const dot = $('pollStateDot');
   dot.classList.toggle('is-running', isRunning);
@@ -137,6 +146,7 @@ function renderTabs() {
       applyTabToForm(tab);
       renderTabs();
       renderWidgets();
+      setStatus(tabStatus[tab.id] || 'ready');
       persist();
     };
     item.addEventListener('contextmenu', (evt) => {
@@ -172,6 +182,8 @@ function deleteTabById(tabId) {
 
   state.tabs.splice(idx, 1);
   delete state.historyByTab[tabId];
+  delete tabStatus[tabId];
+  stopTabPolling(tabId);
 
   if (state.activeTabId === tabId) {
     const next = state.tabs[idx] || state.tabs[idx - 1] || state.tabs[0];
@@ -181,6 +193,7 @@ function deleteTabById(tabId) {
   if (state.activeTabId) applyTabToForm(activeTab());
   renderTabs();
   renderWidgets();
+  setStatus(tabStatus[state.activeTabId] || 'ready');
   persist();
 }
 
@@ -412,6 +425,10 @@ function refreshCharts() {
   }
 }
 
+function tickTabIfActive(tabId) {
+  if (state.activeTabId === tabId) refreshCharts();
+}
+
 function addWidget(type) {
   const tab = activeTab();
   if (!tab) return;
@@ -449,26 +466,30 @@ function addTab() {
   };
 
   state.tabs.push(tab);
+  tabStatus[id] = 'ready';
   state.activeTabId = id;
   applyTabToForm(tab);
   renderTabs();
   renderWidgets();
+  if (isPolling) startTabPolling(id);
   persist();
 }
 
-async function tick() {
-  const tab = activeTab();
+async function tickTab(tabId) {
+  const tab = state.tabs.find((x) => x.id === tabId);
   if (!tab) return;
+  if (tabTickInFlight.has(tabId)) return;
+  tabTickInFlight.add(tabId);
 
-  readFormToTab(tab);
   const provider = providers[tab.providerKey];
   if (!provider) {
-    setStatus(`Unknown provider: ${tab.providerKey}`);
+    setTabStatus(tabId, `Unknown provider: ${tab.providerKey}`);
+    tabTickInFlight.delete(tabId);
     return;
   }
 
   try {
-    setStatus('Loading snapshot...');
+    setTabStatus(tabId, `Loading snapshot (${tab.title})...`);
     const point = await provider.fetchSnapshot(tab.providerConfig, skewMetrics);
     point.widgetSnapshots = {};
 
@@ -521,35 +542,51 @@ async function tick() {
       state.historyByTab[tab.id].shift();
     }
 
-    refreshCharts();
-    setStatus(`ok • px=${point.px?.toFixed(3) ?? 'n/a'} • lower=${point.lower ?? 'n/a'} upper=${point.upper ?? 'n/a'}`);
+    tickTabIfActive(tabId);
+    setTabStatus(
+      tabId,
+      `ok • ${tab.title} • px=${point.px?.toFixed(3) ?? 'n/a'} • lower=${point.lower ?? 'n/a'} upper=${point.upper ?? 'n/a'}`
+    );
     persist();
   } catch (err) {
-    setStatus(`error: ${err?.message || err}`);
+    setTabStatus(tabId, `error • ${tab.title}: ${err?.message || err}`);
+  } finally {
+    tabTickInFlight.delete(tabId);
   }
 }
 
-function start() {
-  stop();
-  const tab = activeTab();
+function startTabPolling(tabId) {
+  const tab = state.tabs.find((x) => x.id === tabId);
   if (!tab) return;
-
-  readFormToTab(tab);
+  stopTabPolling(tabId);
   const poll = Math.max(1, Number(tab.providerConfig.pollSec) || 5);
+  tickTab(tabId);
+  const timer = setInterval(() => tickTab(tabId), poll * 1000);
+  tabTimers.set(tabId, timer);
+}
+
+function stopTabPolling(tabId) {
+  const timer = tabTimers.get(tabId);
+  if (timer) clearInterval(timer);
+  tabTimers.delete(tabId);
+  tabTickInFlight.delete(tabId);
+}
+
+function start() {
+  isPolling = true;
+  for (const tab of state.tabs) startTabPolling(tab.id);
   $('startBtn').disabled = true;
   $('stopBtn').disabled = false;
   setPollState(true);
-  tick();
-  timer = setInterval(tick, poll * 1000);
 }
 
 function stop() {
-  if (timer) clearInterval(timer);
-  timer = null;
+  isPolling = false;
+  for (const tabId of tabTimers.keys()) stopTabPolling(tabId);
   $('startBtn').disabled = false;
   $('stopBtn').disabled = true;
   setPollState(false);
-  setStatus('stopped');
+  setTabStatus(state.activeTabId, 'stopped');
 }
 
 function bindEvents() {
@@ -604,6 +641,7 @@ function bindEvents() {
       if (!tab) return;
       readFormToTab(tab);
       persist();
+      if (isPolling) startTabPolling(tab.id);
     });
   });
 }
@@ -632,8 +670,10 @@ async function init() {
   applyTabToForm(activeTab());
   renderTabs();
   renderWidgets();
+  $('startBtn').disabled = false;
+  $('stopBtn').disabled = true;
   setPollState(false);
-  setStatus('ready');
+  setTabStatus(state.activeTabId, 'ready');
 }
 
 init();
