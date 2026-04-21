@@ -41,14 +41,14 @@ const DEFAULT_STATE = {
       widgets: [
         {
           id: 'w-ndate-1',
-          type: 'ndate-put-skew-line',
-          title: 'nDate-Put-Skew',
+          type: 'ndate-skew-velocity-put-line',
+          title: 'nDate-Skew-Velocity-Put',
           config: { baseStrike: 500, expiry: "", ticker: "" }
         },
         {
           id: 'w-ndate-call-1',
-          type: 'ndate-call-skew-line',
-          title: 'nDate-Call-Skew',
+          type: 'ndate-skew-velocity-call-line',
+          title: 'nDate-Skew-Velocity-Call',
           config: { baseStrike: 500, expiry: "", ticker: "" }
         }
       ]

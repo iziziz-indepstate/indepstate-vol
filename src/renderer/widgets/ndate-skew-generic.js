@@ -91,7 +91,7 @@ function normalizeSeries(labels, values, xOrder) {
   };
 }
 
-function computeSingleSeries(snapshot, widget, mapKey, side, direction, xOrder) {
+function computeSingleSeries(snapshot, widget, mapKey, side, direction, xOrder, computePointValue) {
   const ivByStrike = snapshot?.[mapKey] || {};
   const strikesAsc = safeStrikes(snapshot, side);
   const configured = Number(widget?.config?.baseStrike);
@@ -105,22 +105,27 @@ function computeSingleSeries(snapshot, widget, mapKey, side, direction, xOrder) 
 
   const labels = [];
   const values = [];
-  for (let i = 1; i < points.length; i += 1) {
-    const prev = points[i - 1];
+  for (let i = 0; i < points.length; i += 1) {
     const curr = points[i];
-    labels.push(String(curr.strike));
+    const value = computePointValue(points, i);
+    if (!Number.isFinite(curr?.strike) || value === undefined) continue;
 
-    if (!Number.isFinite(prev.bidIv) || !Number.isFinite(curr.bidIv)) {
-      values.push(null);
-    } else {
-      values.push(curr.bidIv - prev.bidIv);
-    }
+    labels.push(String(curr.strike));
+    values.push(Number.isFinite(value) ? value : null);
   }
 
   return normalizeSeries(labels, values, xOrder);
 }
 
-export function createNDateSkewWidget({ type, title, color, side, direction, xOrder = 'natural' }) {
+export function createNDateSkewWidget({
+  type,
+  title,
+  color,
+  side,
+  direction,
+  xOrder = 'natural',
+  computePointValue
+}) {
   const mapKey = side === 'call' ? 'callBidIvByStrike' : 'putBidIvByStrike';
 
   return {
@@ -139,7 +144,7 @@ export function createNDateSkewWidget({ type, title, color, side, direction, xOr
         const entries = Object.entries(snapshot.byExpiry).sort((a, b) => a[0].localeCompare(b[0]));
         const computed = entries.map(([expiry, snap]) => ({
           expiry,
-          ...computeSingleSeries(snap, widget, mapKey, side, direction, xOrder)
+          ...computeSingleSeries(snap, widget, mapKey, side, direction, xOrder, computePointValue)
         })).filter((x) => x.labels.length > 0);
 
         if (!computed.length) return { labels: [], values: [] };
@@ -161,7 +166,7 @@ export function createNDateSkewWidget({ type, title, color, side, direction, xOr
         return { labels: masterLabels, datasets };
       }
 
-      return computeSingleSeries(snapshot, widget, mapKey, side, direction, xOrder);
+      return computeSingleSeries(snapshot, widget, mapKey, side, direction, xOrder, computePointValue);
     }
   };
 }
