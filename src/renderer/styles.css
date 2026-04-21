@@ -55,9 +55,19 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  cursor: grab;
 }
 
 .tab.active { border-color: #7aa2ff; }
+.tab.is-dragging {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+
+.tab.is-drag-over {
+  border-color: #7aa2ff;
+  box-shadow: 0 0 0 1px rgba(122, 162, 255, 0.45);
+}
 
 .tab-title {
   border: 0;
