@@ -1,5 +1,6 @@
 import { atmSkewWidget } from './atm-skew-widget.js';
 import { tailSkewWidget } from './tail-skew-widget.js';
+import { ivCurrentWidget } from './iv-current-widget.js';
 import {
   nDateSkewVelocityPutWidget,
   nDateSkewPutWidget
@@ -12,6 +13,7 @@ import {
 export const widgetDefinitions = [
   atmSkewWidget,
   tailSkewWidget,
+  ivCurrentWidget,
   nDateSkewVelocityPutWidget,
   nDateSkewVelocityCallWidget,
   nDateSkewPutWidget,

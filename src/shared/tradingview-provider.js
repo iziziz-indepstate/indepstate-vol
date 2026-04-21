@@ -1,3 +1,5 @@
+import { findStrikesAroundPrice } from './option-chain-utils.js';
+
 const toNum = (x) => {
   const n = Number(x);
   return Number.isFinite(n) ? n : null;
@@ -68,35 +70,6 @@ function parseOptions(json) {
   return {
     strikesSorted: Array.from(strikesSet).sort((a, b) => a - b),
     byTypeStrike
-  };
-}
-
-function findBrackets(strikesSorted, price) {
-  if (!strikesSorted.length || price == null) {
-    return { lower: null, upper: null, lowerIdx: -1, upperIdx: -1 };
-  }
-
-  let lo = 0;
-  let hi = strikesSorted.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if (strikesSorted[mid] < price) lo = mid + 1;
-    else hi = mid;
-  }
-
-  let upperIdx = lo < strikesSorted.length ? lo : -1;
-  let lowerIdx = lo - 1 >= 0 ? lo - 1 : -1;
-
-  if (upperIdx !== -1 && strikesSorted[upperIdx] === price) {
-    lowerIdx = upperIdx;
-    upperIdx = upperIdx + 1 < strikesSorted.length ? upperIdx + 1 : -1;
-  }
-
-  return {
-    lower: lowerIdx !== -1 ? strikesSorted[lowerIdx] : null,
-    upper: upperIdx !== -1 ? strikesSorted[upperIdx] : null,
-    lowerIdx,
-    upperIdx
   };
 }
 
@@ -200,7 +173,7 @@ export class TradingViewProvider {
 
     const options = await tvPostOptions(config.apiBase, buildOptionsBody(config));
     const { strikesSorted, byTypeStrike } = parseOptions(options);
-    const { lower, upper, lowerIdx, upperIdx } = findBrackets(strikesSorted, px);
+    const { lower, upper, lowerIdx, upperIdx } = findStrikesAroundPrice(strikesSorted, px);
 
     const atmPut = getRow(byTypeStrike, 'put', lower);
     const atmCall = getRow(byTypeStrike, 'call', upper);
