@@ -38,6 +38,31 @@ export function createWidgetCard(widget, definition) {
   return card;
 }
 
+function handleLegendClick(evt, legendItem, legend) {
+  const chart = legend?.chart;
+  const datasetIndex = legendItem?.datasetIndex;
+  if (!chart || !Number.isInteger(datasetIndex)) return;
+
+  const isCtrlClick = Boolean(evt?.native?.ctrlKey || evt?.ctrlKey);
+  if (isCtrlClick) {
+    const visibleIndices = chart.data.datasets
+      .map((_, idx) => (chart.isDatasetVisible(idx) ? idx : null))
+      .filter((idx) => idx != null);
+    const clickedIsVisible = chart.isDatasetVisible(datasetIndex);
+    const isAlreadyIsolated = clickedIsVisible && visibleIndices.length === 1 && visibleIndices[0] === datasetIndex;
+
+    chart.data.datasets.forEach((_, idx) => {
+      chart.setDatasetVisibility(idx, isAlreadyIsolated ? true : idx === datasetIndex);
+    });
+    chart.update();
+    return;
+  }
+
+  const currentlyVisible = chart.isDatasetVisible(datasetIndex);
+  chart.setDatasetVisibility(datasetIndex, !currentlyVisible);
+  chart.update();
+}
+
 export function createWidgetChart(ctx, definition) {
   const hideXAxisValues = Boolean(definition?.hideXAxisValues);
   return new Chart(ctx, {
@@ -65,6 +90,7 @@ export function createWidgetChart(ctx, definition) {
       plugins: {
         legend: {
           display: false,
+          onClick: handleLegendClick,
           labels: {
             boxWidth: 8,
             boxHeight: 8,
