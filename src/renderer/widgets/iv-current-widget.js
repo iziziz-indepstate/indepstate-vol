@@ -37,8 +37,8 @@ export const ivCurrentWidget = {
     );
     if (!Number.isFinite(strike)) return null;
 
-    const putIv = toNumberOrNull(snapshot?.putBidIvByStrike?.[strike]);
-    const callIv = toNumberOrNull(snapshot?.callBidIvByStrike?.[strike]);
+    const putIv = toNumberOrNull(snapshot?.putIvByStrike?.[strike]);
+    const callIv = toNumberOrNull(snapshot?.callIvByStrike?.[strike]);
     return avg([putIv, callIv]);
   }
 };

@@ -105,6 +105,27 @@ function buildPutBidIvByStrike(byTypeStrike) {
   return out;
 }
 
+
+function buildPutIvByStrike(byTypeStrike) {
+  const out = {};
+  for (const [key, row] of byTypeStrike.entries()) {
+    if (!key.startsWith('put:')) continue;
+    if (row?.strike == null) continue;
+    out[row.strike] = row?.iv ?? null;
+  }
+  return out;
+}
+
+function buildCallIvByStrike(byTypeStrike) {
+  const out = {};
+  for (const [key, row] of byTypeStrike.entries()) {
+    if (!key.startsWith('call:')) continue;
+    if (row?.strike == null) continue;
+    out[row.strike] = row?.iv ?? null;
+  }
+  return out;
+}
+
 function buildCallBidIvByStrike(byTypeStrike) {
   const out = {};
   for (const [key, row] of byTypeStrike.entries()) {
@@ -195,9 +216,11 @@ export class TradingViewProvider {
       putTailIv: putTail?.bid_iv ?? null,
       callTailIv: callTail?.bid_iv ?? null,
       putBidIvByStrike: buildPutBidIvByStrike(byTypeStrike),
+      putIvByStrike: buildPutIvByStrike(byTypeStrike),
       putStrikesAsc: buildPutStrikesAsc(byTypeStrike),
       putStrikesDesc: buildPutStrikesDesc(byTypeStrike),
       callBidIvByStrike: buildCallBidIvByStrike(byTypeStrike),
+      callIvByStrike: buildCallIvByStrike(byTypeStrike),
       callStrikesAsc: buildCallStrikesAsc(byTypeStrike)
     };
 
