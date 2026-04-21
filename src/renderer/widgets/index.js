@@ -9,7 +9,7 @@ import {
   nDateSkewCallWidget
 } from './ndate-call-skew-widget.js';
 
-const definitions = [
+export const widgetDefinitions = [
   atmSkewWidget,
   tailSkewWidget,
   nDateSkewVelocityPutWidget,
@@ -18,7 +18,7 @@ const definitions = [
   nDateSkewCallWidget
 ];
 
-export const widgetRegistry = Object.fromEntries(definitions.map((d) => [d.type, d]));
+export const widgetRegistry = Object.fromEntries(widgetDefinitions.map((d) => [d.type, d]));
 
 export function getWidgetDefinition(type) {
   return widgetRegistry[type] || null;

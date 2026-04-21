@@ -1,5 +1,5 @@
 import { TradingViewProvider } from '../shared/tradingview-provider.js';
-import { getWidgetDefinition } from './widgets/index.js';
+import { getWidgetDefinition, widgetDefinitions } from './widgets/index.js';
 import { createWidgetCard, createWidgetChart } from './widgets/widget-renderers.js';
 import { skewMetrics } from './widgets/metrics.js';
 
@@ -79,6 +79,26 @@ function expandExpiryRange(startValue, endValue) {
     cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
   }
   return out;
+}
+
+
+function populateWidgetTypeSelect() {
+  const select = $('widgetTypeSelect');
+  if (!select) return;
+
+  const prev = select.value;
+  select.innerHTML = '';
+
+  for (const definition of widgetDefinitions) {
+    const option = document.createElement('option');
+    option.value = definition.type;
+    option.textContent = definition.defaultTitle || definition.type;
+    select.appendChild(option);
+  }
+
+  if (prev && widgetDefinitions.some((definition) => definition.type === prev)) {
+    select.value = prev;
+  }
 }
 
 function setStatus(text) {
@@ -684,6 +704,7 @@ function bindEvents() {
 }
 
 async function init() {
+  populateWidgetTypeSelect();
   bindEvents();
   const loaded = await window.appBridge.loadState();
   state.tabs = loaded.tabs || [];
