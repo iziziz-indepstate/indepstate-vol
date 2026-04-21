@@ -4,25 +4,34 @@ export function createWidgetCard(widget, definition) {
   card.draggable = true;
   card.dataset.widgetCardId = widget.id;
 
-  const strikeValue = Number(widget?.config?.baseStrike ?? definition?.defaultConfig?.baseStrike ?? 500);
+  const controlsConfig = definition?.controls || (definition.mode === 'snapshot-series'
+    ? { strike: true, expiryStart: true, expiryEnd: true, ticker: true, strikeInputType: 'number' }
+    : {});
+
+  const strikeValueRaw = widget?.config?.baseStrike ?? definition?.defaultConfig?.baseStrike ?? 500;
+  const strikeValue = controlsConfig.strikeInputType === 'number'
+    ? Number(strikeValueRaw)
+    : String(strikeValueRaw ?? '');
+  const strikeInputType = controlsConfig.strikeInputType === 'text' ? 'text' : 'number';
+
   const expiryStartValue = String(widget?.config?.expiryStart ?? widget?.config?.expiry ?? definition?.defaultConfig?.expiryStart ?? '');
   const expiryEndValue = String(widget?.config?.expiryEnd ?? definition?.defaultConfig?.expiryEnd ?? '');
   const tickerValue = String(widget?.config?.ticker ?? definition?.defaultConfig?.ticker ?? '');
 
-  const controls = definition.mode === 'snapshot-series'
+  const controls = Object.keys(controlsConfig).length
     ? `<div class="widget-controls widget-controls-inline">
-         <label class="widget-control">S
-           <input type="number" class="widget-strike-input" data-widget-strike-id="${widget.id}" value="${strikeValue}" step="1" />
-         </label>
-         <label class="widget-control">E1
-           <input type="text" class="widget-expiry-input" data-widget-expiry-start-id="${widget.id}" value="${expiryStartValue}" placeholder="20260420" />
-         </label>
-         <label class="widget-control">E2
-           <input type="text" class="widget-expiry-input" data-widget-expiry-end-id="${widget.id}" value="${expiryEndValue}" placeholder="20260424" />
-         </label>
-         <label class="widget-control">T
-           <input type="text" class="widget-ticker-input" data-widget-ticker-id="${widget.id}" value="${tickerValue}" placeholder="AMEX:SPY" />
-         </label>
+        ${controlsConfig.strike ? `<label class="widget-control">S
+          <input type="${strikeInputType}" class="widget-strike-input" data-widget-strike-id="${widget.id}" value="${strikeValue}" step="1" placeholder="ATM или 500" />
+        </label>` : ''}
+        ${controlsConfig.expiryStart ? `<label class="widget-control">E1
+          <input type="text" class="widget-expiry-input" data-widget-expiry-start-id="${widget.id}" value="${expiryStartValue}" placeholder="20260420" />
+        </label>` : ''}
+        ${controlsConfig.expiryEnd ? `<label class="widget-control">E2
+          <input type="text" class="widget-expiry-input" data-widget-expiry-end-id="${widget.id}" value="${expiryEndValue}" placeholder="20260424" />
+        </label>` : ''}
+        ${controlsConfig.ticker ? `<label class="widget-control">T
+          <input type="text" class="widget-ticker-input" data-widget-ticker-id="${widget.id}" value="${tickerValue}" placeholder="AMEX:SPY" />
+        </label>` : ''}
        </div>`
     : '';
 

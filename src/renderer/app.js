@@ -368,8 +368,19 @@ function renderWidgets() {
       const wid = evt.target.getAttribute('data-widget-strike-id');
       const target = tab.widgets.find((w) => w.id === wid);
       if (!target) return;
+
+      const definition = getWidgetDefinition(target.type);
+      const isTextStrike = definition?.controls?.strikeInputType === 'text';
+      const raw = String(evt.target.value || '').trim();
+
       target.config ||= {};
-      target.config.baseStrike = Number(evt.target.value) || target.config.baseStrike;
+      if (isTextStrike) {
+        target.config.baseStrike = raw || target.config.baseStrike;
+      } else {
+        const numeric = Number(raw);
+        target.config.baseStrike = Number.isFinite(numeric) ? numeric : target.config.baseStrike;
+      }
+
       refreshCharts();
       persist();
     });
@@ -451,6 +462,17 @@ function refreshCharts() {
       continue;
     }
 
+    if (mode === 'timeseries-custom' && typeof definition.extractTimeSeriesValue === 'function') {
+      chart.data.labels = history.map((x) => new Date(x.time).toLocaleTimeString());
+      chart.data.datasets[0].data = history.map((x) => {
+        const widgetSnapshot = x?.widgetSnapshots?.[widget.id] || x;
+        return definition.extractTimeSeriesValue(widgetSnapshot, widget);
+      });
+      chart.options.plugins.legend.display = false;
+      chart.update();
+      continue;
+    }
+
     chart.data.labels = history.map((x) => new Date(x.time).toLocaleTimeString());
     chart.data.datasets[0].data = history.map((x) => x[metric]);
     chart.options.plugins.legend.display = false;
@@ -528,7 +550,7 @@ async function tickTab(tabId) {
 
     for (const widget of tab.widgets || []) {
       const definition = getWidgetDefinition(widget.type);
-      if (!definition || definition.mode !== 'snapshot-series') continue;
+      if (!definition || (definition.mode !== 'snapshot-series' && !definition.requiresWidgetSnapshot)) continue;
 
       const widgetExpiryStart = String(widget?.config?.expiryStart || widget?.config?.expiry || '').trim();
       const widgetExpiryEnd = String(widget?.config?.expiryEnd || '').trim();
