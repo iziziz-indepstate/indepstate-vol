@@ -95,9 +95,8 @@ function applyTabToForm(tab) {
   $('apiBase').value = tab.providerConfig.apiBase || '';
   $('ticker').value = tab.providerConfig.ticker || '';
   $('root').value = tab.providerConfig.root || '';
-  $('expiry').value = tab.providerConfig.expiry || defaultExpiry();
   $('expiryStart').value = tab.providerConfig.expiryStart || tab.providerConfig.expiry || defaultExpiry();
-  $('expiryEnd').value = tab.providerConfig.expiryEnd || tab.providerConfig.expiryStart || tab.providerConfig.expiry || defaultExpiry();
+  $('expiryEnd').value = tab.providerConfig.expiryEnd || '';
   $('yahooSymbol').value = tab.providerConfig.yahooSymbol || '';
   $('pollSec').value = String(tab.providerConfig.pollSec ?? 5);
   $('tailSteps').value = String(tab.providerConfig.tailSteps ?? 3);
@@ -110,7 +109,6 @@ function readFormToTab(tab) {
     apiBase: $('apiBase').value.trim(),
     ticker: $('ticker').value.trim(),
     root: $('root').value.trim(),
-    expiry: $('expiry').value.trim(),
     expiryStart: $('expiryStart').value.trim(),
     expiryEnd: $('expiryEnd').value.trim(),
     yahooSymbol: $('yahooSymbol').value.trim(),
@@ -499,9 +497,8 @@ function addTab() {
       apiBase: 'https://scanner.tradingview.com',
       ticker: 'AMEX:SPY',
       root: 'SPY',
-      expiry: defaultExpiry(),
       expiryStart: defaultExpiry(),
-      expiryEnd: defaultExpiry(),
+      expiryEnd: '',
       yahooSymbol: 'SPY',
       tailSteps: 3,
       pollSec: 5,
@@ -662,7 +659,7 @@ function bindEvents() {
     if (evt.target === $('renameTabModal')) closeRenameTabModal();
   });
 
-  ['providerKey', 'apiBase', 'ticker', 'root', 'expiry', 'expiryStart', 'expiryEnd', 'yahooSymbol', 'pollSec', 'tailSteps', 'keepPoints'].forEach((id) => {
+  ['providerKey', 'apiBase', 'ticker', 'root', 'expiryStart', 'expiryEnd', 'yahooSymbol', 'pollSec', 'tailSteps', 'keepPoints'].forEach((id) => {
     $(id).addEventListener('change', () => {
       const tab = activeTab();
       if (!tab) return;
@@ -684,9 +681,8 @@ async function init() {
 
   for (const tab of state.tabs) {
     state.historyByTab[tab.id] = [];
-    if (!tab.providerConfig.expiry) tab.providerConfig.expiry = defaultExpiry();
-    if (!tab.providerConfig.expiryStart) tab.providerConfig.expiryStart = tab.providerConfig.expiry;
-    if (!tab.providerConfig.expiryEnd) tab.providerConfig.expiryEnd = tab.providerConfig.expiryStart;
+    if (!tab.providerConfig.expiryStart) tab.providerConfig.expiryStart = tab.providerConfig.expiry || defaultExpiry();
+    if (tab.providerConfig.expiryEnd == null) tab.providerConfig.expiryEnd = '';
     for (const widget of tab.widgets || []) {
       widget.config ||= {};
       if (!widget.config.expiryStart && widget.config.expiry) {

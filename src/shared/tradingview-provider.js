@@ -264,9 +264,11 @@ export class TradingViewProvider {
 
     const tailSteps = Math.max(1, Number(config.tailSteps) || 3);
     const nowIso = new Date().toISOString();
-    const expiries = expandExpiryRange(config.expiryStart || config.expiry, config.expiryEnd || config.expiry);
-    const expiryList = expiries.length ? expiries : [String(config.expiry || '').trim()].filter(Boolean);
-    if (!expiryList.length) throw new Error('Expiry is required');
+    const expiryStart = String(config.expiryStart || config.expiry || '').trim();
+    const expiryEnd = String(config.expiryEnd || '').trim();
+    const expiries = expandExpiryRange(expiryStart, expiryEnd || expiryStart);
+    const expiryList = expiries.length ? expiries : [expiryStart].filter(Boolean);
+    if (!expiryList.length) throw new Error('Expiry start is required');
 
     const byExpiry = {};
     for (const expiry of expiryList) {
@@ -275,7 +277,7 @@ export class TradingViewProvider {
       byExpiry[expiry] = buildBasePoint(px, byTypeStrike, nowIso, tailSteps);
     }
 
-    const primaryExpiry = String(config.expiry || expiryList[0]).trim();
+    const primaryExpiry = expiryList[0];
     const primarySnapshot = byExpiry[primaryExpiry] || byExpiry[expiryList[0]];
     const basePoint = {
       ...primarySnapshot,
