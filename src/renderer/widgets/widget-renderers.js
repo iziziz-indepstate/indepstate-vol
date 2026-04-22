@@ -50,7 +50,7 @@ export function createWidgetCard(widget, definition) {
   return card;
 }
 
-function handleLegendClick(evt, legendItem, legend) {
+function handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange) {
   const chart = legend?.chart;
   const datasetIndex = legendItem?.datasetIndex;
   if (!chart || !Number.isInteger(datasetIndex)) return;
@@ -67,15 +67,18 @@ function handleLegendClick(evt, legendItem, legend) {
       chart.setDatasetVisibility(idx, isAlreadyIsolated ? true : idx === datasetIndex);
     });
     chart.update();
+    if (typeof onLegendVisibilityChange === 'function') onLegendVisibilityChange(chart);
     return;
   }
 
   const currentlyVisible = chart.isDatasetVisible(datasetIndex);
   chart.setDatasetVisibility(datasetIndex, !currentlyVisible);
   chart.update();
+  if (typeof onLegendVisibilityChange === 'function') onLegendVisibilityChange(chart);
 }
 
-export function createWidgetChart(ctx, definition) {
+export function createWidgetChart(ctx, definition, options = {}) {
+  const onLegendVisibilityChange = options?.onLegendVisibilityChange;
   const hideXAxisValues = Boolean(definition?.hideXAxisValues);
   return new Chart(ctx, {
     type: 'line',
@@ -102,7 +105,7 @@ export function createWidgetChart(ctx, definition) {
       plugins: {
         legend: {
           display: false,
-          onClick: handleLegendClick,
+          onClick: (evt, legendItem, legend) => handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange),
           labels: {
             boxWidth: 8,
             boxHeight: 8,

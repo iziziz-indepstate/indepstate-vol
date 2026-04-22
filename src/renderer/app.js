@@ -255,6 +255,29 @@ function destroyCharts() {
   chartInstances.clear();
 }
 
+function getHiddenSnapshotSeriesLabels(widget) {
+  const hidden = widget?.config?.hiddenSnapshotSeriesLabels;
+  return Array.isArray(hidden) ? hidden.filter((label) => typeof label === 'string' && label.trim()) : [];
+}
+
+function syncHiddenSnapshotSeriesLabels(widget, chart) {
+  if (!widget || !chart) return;
+  widget.config ||= {};
+  const hiddenLabels = chart.data.datasets
+    .filter((dataset, idx) => !chart.isDatasetVisible(idx))
+    .map((dataset, idx) => dataset?.label || `Series ${idx + 1}`);
+  widget.config.hiddenSnapshotSeriesLabels = hiddenLabels;
+}
+
+function applyHiddenSnapshotSeriesLabels(widget, chart) {
+  if (!widget || !chart) return;
+  const hiddenLabels = new Set(getHiddenSnapshotSeriesLabels(widget));
+  chart.data.datasets.forEach((dataset, idx) => {
+    const label = dataset?.label || `Series ${idx + 1}`;
+    chart.setDatasetVisibility(idx, !hiddenLabels.has(label));
+  });
+}
+
 function renderWidgets() {
   destroyCharts();
   const tab = activeTab();
@@ -291,7 +314,13 @@ function renderWidgets() {
     const ctx = document.getElementById(`canvas-${widget.id}`)?.getContext('2d');
     if (!ctx) continue;
 
-    const chart = createWidgetChart(ctx, definition);
+    const chart = createWidgetChart(ctx, definition, {
+      onLegendVisibilityChange: () => {
+        if ((definition.mode || 'timeseries') !== 'snapshot-series') return;
+        syncHiddenSnapshotSeriesLabels(widget, chart);
+        persist();
+      }
+    });
     chartInstances.set(widget.id, {
       chart,
       mode: definition.mode || 'timeseries',
@@ -467,6 +496,7 @@ function refreshCharts() {
       }
 
       chart.options.plugins.legend.display = chart.data.datasets.length > 1;
+      applyHiddenSnapshotSeriesLabels(widget, chart);
       chart.update();
       continue;
     }
