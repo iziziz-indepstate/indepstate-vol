@@ -20,6 +20,7 @@ const tabStatus = {};
 const chartInstances = new Map();
 let tabContextTargetId = null;
 let renameTargetTabId = null;
+let draggedTabId = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -168,6 +169,8 @@ function renderTabs() {
   for (const tab of state.tabs) {
     const item = document.createElement('div');
     item.className = `tab ${tab.id === state.activeTabId ? 'active' : ''}`;
+    item.draggable = true;
+    item.dataset.tabId = tab.id;
 
     const btn = document.createElement('button');
     btn.className = 'tab-title';
@@ -184,6 +187,44 @@ function renderTabs() {
     item.addEventListener('contextmenu', (evt) => {
       evt.preventDefault();
       showTabContextMenu(tab.id, evt.clientX, evt.clientY);
+    });
+    item.addEventListener('dragstart', (evt) => {
+      draggedTabId = tab.id;
+      item.classList.add('is-dragging');
+      if (evt.dataTransfer) {
+        evt.dataTransfer.effectAllowed = 'move';
+        evt.dataTransfer.setData('text/plain', tab.id);
+      }
+    });
+    item.addEventListener('dragend', () => {
+      draggedTabId = null;
+      item.classList.remove('is-dragging');
+      tabsRoot.querySelectorAll('.tab.is-drag-over').forEach((node) => node.classList.remove('is-drag-over'));
+    });
+    item.addEventListener('dragover', (evt) => {
+      if (!draggedTabId || draggedTabId === tab.id) return;
+      evt.preventDefault();
+      item.classList.add('is-drag-over');
+      if (evt.dataTransfer) evt.dataTransfer.dropEffect = 'move';
+    });
+    item.addEventListener('dragleave', () => {
+      item.classList.remove('is-drag-over');
+    });
+    item.addEventListener('drop', (evt) => {
+      evt.preventDefault();
+      item.classList.remove('is-drag-over');
+      const fromTabId = draggedTabId || evt.dataTransfer?.getData('text/plain');
+      if (!fromTabId || fromTabId === tab.id) return;
+
+      const fromIdx = state.tabs.findIndex((x) => x.id === fromTabId);
+      const toIdx = state.tabs.findIndex((x) => x.id === tab.id);
+      if (fromIdx === -1 || toIdx === -1 || fromIdx === toIdx) return;
+
+      const [moved] = state.tabs.splice(fromIdx, 1);
+      const insertAt = fromIdx < toIdx ? toIdx - 1 : toIdx;
+      state.tabs.splice(insertAt, 0, moved);
+      renderTabs();
+      persist();
     });
 
     item.appendChild(btn);
