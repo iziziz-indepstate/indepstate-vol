@@ -30,3 +30,20 @@ export const nDateSkewPutWidget = createNDateSkewWidget({
     return curr.bidIv;
   }
 });
+
+export const nDateSkewBidPutWidget = createNDateSkewWidget({
+  type: 'ndate-skew-bid-put-line',
+  title: 'nDate-Skew-Bid-Put',
+  color: '#14b8a6',
+  side: 'put',
+  direction: 'down',
+  xOrder: 'asc',
+  valueMapKey: 'putBidByStrike',
+  valueKey: 'bid',
+  computePointValue: (points, idx) => {
+    const curr = points[idx];
+    if (!curr) return undefined;
+    if (!Number.isFinite(curr.bid)) return null;
+    return curr.bid;
+  }
+});

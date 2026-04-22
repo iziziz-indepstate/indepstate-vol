@@ -117,9 +117,8 @@ function pickStrikesFromChain(strikesAsc, baseStrike, direction, srConfig) {
   return selected;
 }
 
-function safeStrikes(snapshot, side) {
+function safeStrikes(snapshot, side, mapKey) {
   const key = side === 'call' ? 'callStrikesAsc' : 'putStrikesAsc';
-  const mapKey = side === 'call' ? 'callBidIvByStrike' : 'putBidIvByStrike';
   const fromSnapshot = snapshot?.[key];
   if (Array.isArray(fromSnapshot)) return fromSnapshot;
 
@@ -163,16 +162,16 @@ function filterByWidgetExpiry(entries, widget) {
   return entries.filter(([expiry]) => expiry >= start && expiry <= end);
 }
 
-function computeSingleSeries(snapshot, widget, mapKey, side, direction, xOrder, computePointValue) {
+function computeSingleSeries(snapshot, widget, mapKey, valueKey, side, direction, xOrder, computePointValue) {
   const ivByStrike = snapshot?.[mapKey] || {};
-  const strikesAsc = safeStrikes(snapshot, side);
+  const strikesAsc = safeStrikes(snapshot, side, mapKey);
   const configured = Number(widget?.config?.baseStrike);
   const baseStrike = Number.isFinite(configured) ? configured : 500;
 
   const selected = pickStrikesFromChain(strikesAsc, baseStrike, direction, widget?.config?.strikeRange);
   const points = selected.map((strike) => ({
     strike,
-    bidIv: Number(ivByStrike[strike])
+    [valueKey]: Number(ivByStrike[strike])
   }));
 
   const labels = [];
@@ -196,9 +195,11 @@ export function createNDateSkewWidget({
   side,
   direction,
   xOrder = 'natural',
+  valueMapKey,
+  valueKey = 'bidIv',
   computePointValue
 }) {
-  const mapKey = side === 'call' ? 'callBidIvByStrike' : 'putBidIvByStrike';
+  const mapKey = valueMapKey || (side === 'call' ? 'callBidIvByStrike' : 'putBidIvByStrike');
 
   return {
     type,
@@ -226,7 +227,7 @@ export function createNDateSkewWidget({
         );
         const computed = entries.map(([expiry, snap]) => ({
           expiry,
-          ...computeSingleSeries(snap, widget, mapKey, side, direction, xOrder, computePointValue)
+          ...computeSingleSeries(snap, widget, mapKey, valueKey, side, direction, xOrder, computePointValue)
         })).filter((x) => x.labels.length > 0);
 
         if (!computed.length) return { labels: [], values: [] };
@@ -248,7 +249,7 @@ export function createNDateSkewWidget({
         return { labels: masterLabels, datasets };
       }
 
-      return computeSingleSeries(snapshot, widget, mapKey, side, direction, xOrder, computePointValue);
+      return computeSingleSeries(snapshot, widget, mapKey, valueKey, side, direction, xOrder, computePointValue);
     }
   };
 }

@@ -3,11 +3,13 @@ import { tailSkewWidget } from './tail-skew-widget.js';
 import { ivCurrentWidget } from './iv-current-widget.js';
 import {
   nDateSkewVelocityPutWidget,
-  nDateSkewPutWidget
+  nDateSkewPutWidget,
+  nDateSkewBidPutWidget
 } from './ndate-put-skew-widget.js';
 import {
   nDateSkewVelocityCallWidget,
-  nDateSkewCallWidget
+  nDateSkewCallWidget,
+  nDateSkewBidCallWidget
 } from './ndate-call-skew-widget.js';
 
 export const widgetDefinitions = [
@@ -17,7 +19,9 @@ export const widgetDefinitions = [
   nDateSkewVelocityPutWidget,
   nDateSkewVelocityCallWidget,
   nDateSkewPutWidget,
-  nDateSkewCallWidget
+  nDateSkewCallWidget,
+  nDateSkewBidPutWidget,
+  nDateSkewBidCallWidget
 ];
 
 export const widgetRegistry = Object.fromEntries(widgetDefinitions.map((d) => [d.type, d]));
