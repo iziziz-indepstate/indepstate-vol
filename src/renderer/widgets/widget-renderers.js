@@ -5,7 +5,7 @@ export function createWidgetCard(widget, definition) {
   card.dataset.widgetCardId = widget.id;
 
   const controlsConfig = definition?.controls || (definition.mode === 'snapshot-series'
-    ? { strike: true, expiryStart: true, expiryEnd: true, ticker: true, strikeInputType: 'number' }
+    ? { strike: true, expiryStart: true, expiryEnd: true, strikeInputType: 'number' }
     : {});
 
   const strikeValueRaw = widget?.config?.baseStrike ?? definition?.defaultConfig?.baseStrike ?? 500;
@@ -16,8 +16,7 @@ export function createWidgetCard(widget, definition) {
 
   const expiryStartValue = String(widget?.config?.expiryStart ?? widget?.config?.expiry ?? definition?.defaultConfig?.expiryStart ?? '');
   const expiryEndValue = String(widget?.config?.expiryEnd ?? definition?.defaultConfig?.expiryEnd ?? '');
-  const tickerValue = String(widget?.config?.ticker ?? definition?.defaultConfig?.ticker ?? '');
-
+  const tailStepsValue = Number(widget?.config?.tailSteps ?? definition?.defaultConfig?.tailSteps ?? 3);
   const controls = Object.keys(controlsConfig).length
     ? `<div class="widget-controls widget-controls-inline">
         ${controlsConfig.strike ? `<label class="widget-control">S
@@ -29,8 +28,8 @@ export function createWidgetCard(widget, definition) {
         ${controlsConfig.expiryEnd ? `<label class="widget-control">E2
           <input type="text" class="widget-expiry-input" data-widget-expiry-end-id="${widget.id}" value="${expiryEndValue}" placeholder="20260424" />
         </label>` : ''}
-        ${controlsConfig.ticker ? `<label class="widget-control">T
-          <input type="text" class="widget-ticker-input" data-widget-ticker-id="${widget.id}" value="${tickerValue}" placeholder="AMEX:SPY" />
+        ${controlsConfig.tailSteps ? `<label class="widget-control">N
+          <input type="number" min="1" class="widget-tail-steps-input" data-widget-tail-steps-id="${widget.id}" value="${tailStepsValue}" />
         </label>` : ''}
        </div>`
     : '';

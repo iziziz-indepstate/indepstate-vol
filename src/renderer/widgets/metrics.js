@@ -6,14 +6,6 @@ export const skewMetrics = [
       if (atmPutIv == null || atmCallIv == null) return null;
       return atmCallIv - atmPutIv;
     }
-  },
-  {
-    key: 'dTail',
-    name: '±3 Strike Put-Call Skew',
-    compute: ({ putTailIv, callTailIv }) => {
-      if (putTailIv == null || callTailIv == null) return null;
-      return putTailIv - callTailIv;
-    }
   }
 ];
 

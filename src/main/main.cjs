@@ -13,15 +13,15 @@ const DEFAULT_STATE = {
         apiBase: 'https://scanner.tradingview.com',
         ticker: 'AMEX:SPY',
         root: 'SPY',
-        expiry: '',
+        expiryStart: '',
+        expiryEnd: '',
         yahooSymbol: 'SPY',
-        tailSteps: 3,
         pollSec: 5,
         keepPoints: 200
       },
       widgets: [
         { id: 'w-atm-1', type: 'atm-skew-line', title: 'ATM Call-Put Skew' },
-        { id: 'w-tail-1', type: 'tail-skew-line', title: '±3 Strike Put-Call Skew' }
+        { id: 'w-tail-1', type: 'tail-skew-line', title: 'Tail Put-Call Skew', config: { tailSteps: 3 } }
       ]
     },
     {
@@ -32,9 +32,9 @@ const DEFAULT_STATE = {
         apiBase: 'https://scanner.tradingview.com',
         ticker: 'AMEX:SPY',
         root: 'SPY',
-        expiry: '',
+        expiryStart: '',
+        expiryEnd: '',
         yahooSymbol: 'SPY',
-        tailSteps: 3,
         pollSec: 5,
         keepPoints: 200
       },
@@ -43,13 +43,13 @@ const DEFAULT_STATE = {
           id: 'w-ndate-1',
           type: 'ndate-skew-velocity-put-line',
           title: 'nDate-Skew-Velocity-Put',
-          config: { baseStrike: 500, expiry: "", ticker: "" }
+          config: { baseStrike: 500, expiryStart: '', expiryEnd: '' }
         },
         {
           id: 'w-ndate-call-1',
           type: 'ndate-skew-velocity-call-line',
           title: 'nDate-Skew-Velocity-Call',
-          config: { baseStrike: 500, expiry: "", ticker: "" }
+          config: { baseStrike: 500, expiryStart: '', expiryEnd: '' }
         }
       ]
     }
