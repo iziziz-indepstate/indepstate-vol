@@ -61,6 +61,7 @@ function parseOptions(json) {
     byTypeStrike.set(`${type}:${strike}`, {
       strike,
       type,
+      bid: toNum(f[idx.bid]),
       iv: toNum(f[idx.iv]),
       bid_iv: toNum(f[idx.bid_iv])
     });
@@ -105,6 +106,16 @@ function buildPutBidIvByStrike(byTypeStrike) {
   return out;
 }
 
+function buildPutBidByStrike(byTypeStrike) {
+  const out = {};
+  for (const [key, row] of byTypeStrike.entries()) {
+    if (!key.startsWith('put:')) continue;
+    if (row?.strike == null) continue;
+    out[row.strike] = row?.bid ?? null;
+  }
+  return out;
+}
+
 
 function buildPutIvByStrike(byTypeStrike) {
   const out = {};
@@ -132,6 +143,16 @@ function buildCallBidIvByStrike(byTypeStrike) {
     if (!key.startsWith('call:')) continue;
     if (row?.strike == null) continue;
     out[row.strike] = row?.bid_iv ?? null;
+  }
+  return out;
+}
+
+function buildCallBidByStrike(byTypeStrike) {
+  const out = {};
+  for (const [key, row] of byTypeStrike.entries()) {
+    if (!key.startsWith('call:')) continue;
+    if (row?.strike == null) continue;
+    out[row.strike] = row?.bid ?? null;
   }
   return out;
 }
@@ -236,10 +257,12 @@ function buildBasePoint(px, byTypeStrike, nowIso) {
     atmPutIv: atmPut?.iv ?? null,
     atmCallIv: atmCall?.iv ?? null,
     putBidIvByStrike: buildPutBidIvByStrike(byTypeStrike),
+    putBidByStrike: buildPutBidByStrike(byTypeStrike),
     putIvByStrike: buildPutIvByStrike(byTypeStrike),
     putStrikesAsc: buildPutStrikesAsc(byTypeStrike),
     putStrikesDesc: buildPutStrikesDesc(byTypeStrike),
     callBidIvByStrike: buildCallBidIvByStrike(byTypeStrike),
+    callBidByStrike: buildCallBidByStrike(byTypeStrike),
     callIvByStrike: buildCallIvByStrike(byTypeStrike),
     callStrikesAsc: buildCallStrikesAsc(byTypeStrike)
   };

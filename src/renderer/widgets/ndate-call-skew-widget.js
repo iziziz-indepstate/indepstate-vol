@@ -30,3 +30,20 @@ export const nDateSkewCallWidget = createNDateSkewWidget({
     return curr.bidIv;
   }
 });
+
+export const nDateSkewBidCallWidget = createNDateSkewWidget({
+  type: 'ndate-skew-bid-call-line',
+  title: 'nDate-Skew-Bid-Call',
+  color: '#f43f5e',
+  side: 'call',
+  direction: 'up',
+  xOrder: 'asc',
+  valueMapKey: 'callBidByStrike',
+  valueKey: 'bid',
+  computePointValue: (points, idx) => {
+    const curr = points[idx];
+    if (!curr) return undefined;
+    if (!Number.isFinite(curr.bid)) return null;
+    return curr.bid;
+  }
+});
