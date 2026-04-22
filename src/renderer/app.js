@@ -37,52 +37,6 @@ function defaultExpiry() {
 }
 
 
-function parseWidgetTicker(value) {
-  const ticker = String(value || '').trim();
-  if (!ticker) return { ticker: null, root: null };
-
-  const root = ticker.includes(':') ? ticker.split(':').pop()?.trim() : ticker;
-  if (!root) return { ticker: null, root: null };
-
-  return { ticker, root };
-}
-
-function parseExpiryDate(value) {
-  const raw = String(value || '').trim();
-  if (!/^\d{8}$/.test(raw)) return null;
-
-  const y = Number(raw.slice(0, 4));
-  const m = Number(raw.slice(4, 6));
-  const d = Number(raw.slice(6, 8));
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
-  return dt;
-}
-
-function fmtExpiryDate(dt) {
-  return [
-    dt.getUTCFullYear(),
-    String(dt.getUTCMonth() + 1).padStart(2, '0'),
-    String(dt.getUTCDate()).padStart(2, '0')
-  ].join('');
-}
-
-function expandExpiryRange(startValue, endValue) {
-  const start = parseExpiryDate(startValue);
-  if (!start) return [];
-
-  const parsedEnd = parseExpiryDate(endValue);
-  const end = parsedEnd && parsedEnd >= start ? parsedEnd : start;
-  const out = [];
-  let cursor = new Date(start);
-  while (cursor <= end) {
-    out.push(fmtExpiryDate(cursor));
-    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
-  }
-  return out;
-}
-
-
 function populateWidgetTypeSelect() {
   const select = $('widgetTypeSelect');
   if (!select) return;
@@ -142,6 +96,8 @@ function applyTabToForm(tab) {
   $('ticker').value = tab.providerConfig.ticker || '';
   $('root').value = tab.providerConfig.root || '';
   $('expiry').value = tab.providerConfig.expiry || defaultExpiry();
+  $('expiryStart').value = tab.providerConfig.expiryStart || tab.providerConfig.expiry || defaultExpiry();
+  $('expiryEnd').value = tab.providerConfig.expiryEnd || tab.providerConfig.expiryStart || tab.providerConfig.expiry || defaultExpiry();
   $('yahooSymbol').value = tab.providerConfig.yahooSymbol || '';
   $('pollSec').value = String(tab.providerConfig.pollSec ?? 5);
   $('tailSteps').value = String(tab.providerConfig.tailSteps ?? 3);
@@ -155,6 +111,8 @@ function readFormToTab(tab) {
     ticker: $('ticker').value.trim(),
     root: $('root').value.trim(),
     expiry: $('expiry').value.trim(),
+    expiryStart: $('expiryStart').value.trim(),
+    expiryEnd: $('expiryEnd').value.trim(),
     yahooSymbol: $('yahooSymbol').value.trim(),
     pollSec: Number($('pollSec').value) || 5,
     tailSteps: Number($('tailSteps').value) || 3,
@@ -449,17 +407,6 @@ function renderWidgets() {
     });
   });
 
-  root.querySelectorAll('[data-widget-ticker-id]').forEach((input) => {
-    input.addEventListener('change', (evt) => {
-      const wid = evt.target.getAttribute('data-widget-ticker-id');
-      const target = tab.widgets.find((w) => w.id === wid);
-      if (!target) return;
-      target.config ||= {};
-      target.config.ticker = String(evt.target.value || '').trim();
-      persist();
-    });
-  });
-
   refreshCharts();
 }
 
@@ -474,7 +421,7 @@ function refreshCharts() {
     const { chart, mode, metric, definition, widget } = entry;
 
     if (mode === 'snapshot-series' && typeof definition.buildSnapshotSeries === 'function') {
-      const widgetSnapshot = latest?.widgetSnapshots?.[widget.id] || latest;
+      const widgetSnapshot = latest;
       const series = definition.buildSnapshotSeries(widgetSnapshot, widget);
       chart.data.labels = series?.labels || [];
 
@@ -506,7 +453,7 @@ function refreshCharts() {
     if (mode === 'timeseries-custom' && typeof definition.extractTimeSeriesValue === 'function') {
       chart.data.labels = history.map((x) => new Date(x.time).toLocaleTimeString());
       chart.data.datasets[0].data = history.map((x) => {
-        const widgetSnapshot = x?.widgetSnapshots?.[widget.id] || x;
+        const widgetSnapshot = x;
         return definition.extractTimeSeriesValue(widgetSnapshot, widget);
       });
       chart.options.plugins.legend.display = false;
@@ -553,6 +500,8 @@ function addTab() {
       ticker: 'AMEX:SPY',
       root: 'SPY',
       expiry: defaultExpiry(),
+      expiryStart: defaultExpiry(),
+      expiryEnd: defaultExpiry(),
       yahooSymbol: 'SPY',
       tailSteps: 3,
       pollSec: 5,
@@ -587,48 +536,6 @@ async function tickTab(tabId) {
   try {
     setTabStatus(tabId, `Loading snapshot (${tab.title})...`);
     const point = await provider.fetchSnapshot(tab.providerConfig, skewMetrics);
-    point.widgetSnapshots = {};
-
-    for (const widget of tab.widgets || []) {
-      const definition = getWidgetDefinition(widget.type);
-      if (!definition || (definition.mode !== 'snapshot-series' && !definition.requiresWidgetSnapshot)) continue;
-
-      const widgetExpiryStart = String(widget?.config?.expiryStart || widget?.config?.expiry || '').trim();
-      const widgetExpiryEnd = String(widget?.config?.expiryEnd || '').trim();
-      const { ticker: widgetTicker, root: widgetRoot } = parseWidgetTicker(widget?.config?.ticker);
-      const expiries = expandExpiryRange(widgetExpiryStart, widgetExpiryEnd);
-      const primaryExpiry = expiries[0] || widgetExpiryStart;
-
-      const requestConfig = {
-        ...tab.providerConfig,
-        ...(primaryExpiry ? { expiry: primaryExpiry } : {}),
-        ...(widgetTicker && widgetRoot ? { ticker: widgetTicker, root: widgetRoot } : {})
-      };
-
-      const hasOverride =
-        String(requestConfig.expiry || '') !== String(tab.providerConfig.expiry || '') ||
-        String(requestConfig.ticker || '') !== String(tab.providerConfig.ticker || '') ||
-        String(requestConfig.root || '') !== String(tab.providerConfig.root || '');
-
-      try {
-        if (!hasOverride && expiries.length <= 1) continue;
-
-        if (expiries.length <= 1) {
-          const widgetPoint = await provider.fetchSnapshot(requestConfig, skewMetrics);
-          point.widgetSnapshots[widget.id] = widgetPoint;
-          continue;
-        }
-
-        const byExpiry = {};
-        for (const expiry of expiries) {
-          const widgetPoint = await provider.fetchSnapshot({ ...requestConfig, expiry }, skewMetrics);
-          byExpiry[expiry] = widgetPoint;
-        }
-        point.widgetSnapshots[widget.id] = { byExpiry };
-      } catch (_err) {
-        // keep fallback to tab-level snapshot
-      }
-    }
 
     state.historyByTab[tab.id] ||= [];
     state.historyByTab[tab.id].push(point);
@@ -755,7 +662,7 @@ function bindEvents() {
     if (evt.target === $('renameTabModal')) closeRenameTabModal();
   });
 
-  ['providerKey', 'apiBase', 'ticker', 'root', 'expiry', 'yahooSymbol', 'pollSec', 'tailSteps', 'keepPoints'].forEach((id) => {
+  ['providerKey', 'apiBase', 'ticker', 'root', 'expiry', 'expiryStart', 'expiryEnd', 'yahooSymbol', 'pollSec', 'tailSteps', 'keepPoints'].forEach((id) => {
     $(id).addEventListener('change', () => {
       const tab = activeTab();
       if (!tab) return;
@@ -778,6 +685,8 @@ async function init() {
   for (const tab of state.tabs) {
     state.historyByTab[tab.id] = [];
     if (!tab.providerConfig.expiry) tab.providerConfig.expiry = defaultExpiry();
+    if (!tab.providerConfig.expiryStart) tab.providerConfig.expiryStart = tab.providerConfig.expiry;
+    if (!tab.providerConfig.expiryEnd) tab.providerConfig.expiryEnd = tab.providerConfig.expiryStart;
     for (const widget of tab.widgets || []) {
       widget.config ||= {};
       if (!widget.config.expiryStart && widget.config.expiry) {

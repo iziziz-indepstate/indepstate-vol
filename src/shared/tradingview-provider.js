@@ -183,6 +183,76 @@ function computeMetrics(metricDefinitions, basePoint) {
   return values;
 }
 
+function parseExpiryDate(value) {
+  const raw = String(value || '').trim();
+  if (!/^\d{8}$/.test(raw)) return null;
+
+  const y = Number(raw.slice(0, 4));
+  const m = Number(raw.slice(4, 6));
+  const d = Number(raw.slice(6, 8));
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
+  return dt;
+}
+
+function fmtExpiryDate(dt) {
+  return [
+    dt.getUTCFullYear(),
+    String(dt.getUTCMonth() + 1).padStart(2, '0'),
+    String(dt.getUTCDate()).padStart(2, '0')
+  ].join('');
+}
+
+function expandExpiryRange(startValue, endValue) {
+  const start = parseExpiryDate(startValue);
+  if (!start) return [];
+
+  const parsedEnd = parseExpiryDate(endValue);
+  const end = parsedEnd && parsedEnd >= start ? parsedEnd : start;
+  const out = [];
+  let cursor = new Date(start);
+  while (cursor <= end) {
+    out.push(fmtExpiryDate(cursor));
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return out;
+}
+
+function buildBasePoint(px, byTypeStrike, nowIso, tailSteps) {
+  const strikesSorted = Array.from(new Set([
+    ...buildCallStrikesAsc(byTypeStrike),
+    ...buildPutStrikesAsc(byTypeStrike)
+  ])).sort((a, b) => a - b);
+  const { lower, upper, lowerIdx, upperIdx } = findStrikesAroundPrice(strikesSorted, px);
+
+  const atmPut = getRow(byTypeStrike, 'put', lower);
+  const atmCall = getRow(byTypeStrike, 'call', upper);
+
+  const putTailStrike = lowerIdx - tailSteps >= 0 ? strikesSorted[lowerIdx - tailSteps] : null;
+  const callTailStrike = upperIdx + tailSteps < strikesSorted.length ? strikesSorted[upperIdx + tailSteps] : null;
+
+  const putTail = getRow(byTypeStrike, 'put', putTailStrike);
+  const callTail = getRow(byTypeStrike, 'call', callTailStrike);
+
+  return {
+    time: nowIso,
+    px,
+    lower,
+    upper,
+    atmPutIv: atmPut?.iv ?? null,
+    atmCallIv: atmCall?.iv ?? null,
+    putTailIv: putTail?.bid_iv ?? null,
+    callTailIv: callTail?.bid_iv ?? null,
+    putBidIvByStrike: buildPutBidIvByStrike(byTypeStrike),
+    putIvByStrike: buildPutIvByStrike(byTypeStrike),
+    putStrikesAsc: buildPutStrikesAsc(byTypeStrike),
+    putStrikesDesc: buildPutStrikesDesc(byTypeStrike),
+    callBidIvByStrike: buildCallBidIvByStrike(byTypeStrike),
+    callIvByStrike: buildCallIvByStrike(byTypeStrike),
+    callStrikesAsc: buildCallStrikesAsc(byTypeStrike)
+  };
+}
+
 export class TradingViewProvider {
   key = 'tradingview';
 
@@ -192,36 +262,25 @@ export class TradingViewProvider {
       throw new Error('Could not fetch underlying price from Yahoo');
     }
 
-    const options = await tvPostOptions(config.apiBase, buildOptionsBody(config));
-    const { strikesSorted, byTypeStrike } = parseOptions(options);
-    const { lower, upper, lowerIdx, upperIdx } = findStrikesAroundPrice(strikesSorted, px);
-
-    const atmPut = getRow(byTypeStrike, 'put', lower);
-    const atmCall = getRow(byTypeStrike, 'call', upper);
-
     const tailSteps = Math.max(1, Number(config.tailSteps) || 3);
-    const putTailStrike = lowerIdx - tailSteps >= 0 ? strikesSorted[lowerIdx - tailSteps] : null;
-    const callTailStrike = upperIdx + tailSteps < strikesSorted.length ? strikesSorted[upperIdx + tailSteps] : null;
+    const nowIso = new Date().toISOString();
+    const expiries = expandExpiryRange(config.expiryStart || config.expiry, config.expiryEnd || config.expiry);
+    const expiryList = expiries.length ? expiries : [String(config.expiry || '').trim()].filter(Boolean);
+    if (!expiryList.length) throw new Error('Expiry is required');
 
-    const putTail = getRow(byTypeStrike, 'put', putTailStrike);
-    const callTail = getRow(byTypeStrike, 'call', callTailStrike);
+    const byExpiry = {};
+    for (const expiry of expiryList) {
+      const options = await tvPostOptions(config.apiBase, buildOptionsBody({ ...config, expiry }));
+      const { byTypeStrike } = parseOptions(options);
+      byExpiry[expiry] = buildBasePoint(px, byTypeStrike, nowIso, tailSteps);
+    }
 
+    const primaryExpiry = String(config.expiry || expiryList[0]).trim();
+    const primarySnapshot = byExpiry[primaryExpiry] || byExpiry[expiryList[0]];
     const basePoint = {
-      time: new Date().toISOString(),
-      px,
-      lower,
-      upper,
-      atmPutIv: atmPut?.iv ?? null,
-      atmCallIv: atmCall?.iv ?? null,
-      putTailIv: putTail?.bid_iv ?? null,
-      callTailIv: callTail?.bid_iv ?? null,
-      putBidIvByStrike: buildPutBidIvByStrike(byTypeStrike),
-      putIvByStrike: buildPutIvByStrike(byTypeStrike),
-      putStrikesAsc: buildPutStrikesAsc(byTypeStrike),
-      putStrikesDesc: buildPutStrikesDesc(byTypeStrike),
-      callBidIvByStrike: buildCallBidIvByStrike(byTypeStrike),
-      callIvByStrike: buildCallIvByStrike(byTypeStrike),
-      callStrikesAsc: buildCallStrikesAsc(byTypeStrike)
+      ...primarySnapshot,
+      expiry: primaryExpiry,
+      byExpiry
     };
 
     const metrics = computeMetrics(metricDefinitions, basePoint);

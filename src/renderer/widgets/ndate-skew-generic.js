@@ -91,6 +91,15 @@ function normalizeSeries(labels, values, xOrder) {
   };
 }
 
+function filterByWidgetExpiry(entries, widget) {
+  const start = String(widget?.config?.expiryStart || '').trim();
+  const endRaw = String(widget?.config?.expiryEnd || '').trim();
+  const end = endRaw || start;
+  if (!start) return entries;
+
+  return entries.filter(([expiry]) => expiry >= start && expiry <= end);
+}
+
 function computeSingleSeries(snapshot, widget, mapKey, side, direction, xOrder, computePointValue) {
   const ivByStrike = snapshot?.[mapKey] || {};
   const strikesAsc = safeStrikes(snapshot, side);
@@ -136,12 +145,14 @@ export function createNDateSkewWidget({
     defaultConfig: {
       baseStrike: 500,
       expiryStart: '',
-      expiryEnd: '',
-      ticker: ''
+      expiryEnd: ''
     },
     buildSnapshotSeries: (snapshot, widget) => {
       if (snapshot?.byExpiry && typeof snapshot.byExpiry === 'object') {
-        const entries = Object.entries(snapshot.byExpiry).sort((a, b) => a[0].localeCompare(b[0]));
+        const entries = filterByWidgetExpiry(
+          Object.entries(snapshot.byExpiry).sort((a, b) => a[0].localeCompare(b[0])),
+          widget
+        );
         const computed = entries.map(([expiry, snap]) => ({
           expiry,
           ...computeSingleSeries(snap, widget, mapKey, side, direction, xOrder, computePointValue)
