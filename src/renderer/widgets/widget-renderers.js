@@ -17,6 +17,7 @@ export function createWidgetCard(widget, definition) {
   const expiryStartValue = String(widget?.config?.expiryStart ?? widget?.config?.expiry ?? definition?.defaultConfig?.expiryStart ?? '');
   const expiryEndValue = String(widget?.config?.expiryEnd ?? definition?.defaultConfig?.expiryEnd ?? '');
   const tailStepsValue = Number(widget?.config?.tailSteps ?? definition?.defaultConfig?.tailSteps ?? 3);
+  const strikeRangeValue = String(widget?.config?.strikeRange ?? definition?.defaultConfig?.strikeRange ?? '');
   const controls = Object.keys(controlsConfig).length
     ? `<div class="widget-controls widget-controls-inline">
         ${controlsConfig.strike ? `<label class="widget-control">S
@@ -27,6 +28,9 @@ export function createWidgetCard(widget, definition) {
         </label>` : ''}
         ${controlsConfig.expiryEnd ? `<label class="widget-control">E2
           <input type="text" class="widget-expiry-input" data-widget-expiry-end-id="${widget.id}" value="${expiryEndValue}" placeholder="20260424" />
+        </label>` : ''}
+        ${controlsConfig.strikeRange ? `<label class="widget-control">SR
+          <input type="text" class="widget-sr-input" data-widget-sr-id="${widget.id}" value="${strikeRangeValue}" placeholder="[5,5,5,10] или 10" />
         </label>` : ''}
         ${controlsConfig.tailSteps ? `<label class="widget-control">N
           <input type="number" min="1" class="widget-tail-steps-input" data-widget-tail-steps-id="${widget.id}" value="${tailStepsValue}" />
