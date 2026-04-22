@@ -218,7 +218,7 @@ function expandExpiryRange(startValue, endValue) {
   return out;
 }
 
-function buildBasePoint(px, byTypeStrike, nowIso, tailSteps) {
+function buildBasePoint(px, byTypeStrike, nowIso) {
   const strikesSorted = Array.from(new Set([
     ...buildCallStrikesAsc(byTypeStrike),
     ...buildPutStrikesAsc(byTypeStrike)
@@ -228,12 +228,6 @@ function buildBasePoint(px, byTypeStrike, nowIso, tailSteps) {
   const atmPut = getRow(byTypeStrike, 'put', lower);
   const atmCall = getRow(byTypeStrike, 'call', upper);
 
-  const putTailStrike = lowerIdx - tailSteps >= 0 ? strikesSorted[lowerIdx - tailSteps] : null;
-  const callTailStrike = upperIdx + tailSteps < strikesSorted.length ? strikesSorted[upperIdx + tailSteps] : null;
-
-  const putTail = getRow(byTypeStrike, 'put', putTailStrike);
-  const callTail = getRow(byTypeStrike, 'call', callTailStrike);
-
   return {
     time: nowIso,
     px,
@@ -241,8 +235,6 @@ function buildBasePoint(px, byTypeStrike, nowIso, tailSteps) {
     upper,
     atmPutIv: atmPut?.iv ?? null,
     atmCallIv: atmCall?.iv ?? null,
-    putTailIv: putTail?.bid_iv ?? null,
-    callTailIv: callTail?.bid_iv ?? null,
     putBidIvByStrike: buildPutBidIvByStrike(byTypeStrike),
     putIvByStrike: buildPutIvByStrike(byTypeStrike),
     putStrikesAsc: buildPutStrikesAsc(byTypeStrike),
@@ -262,7 +254,6 @@ export class TradingViewProvider {
       throw new Error('Could not fetch underlying price from Yahoo');
     }
 
-    const tailSteps = Math.max(1, Number(config.tailSteps) || 3);
     const nowIso = new Date().toISOString();
     const expiryStart = String(config.expiryStart || config.expiry || '').trim();
     const expiryEnd = String(config.expiryEnd || '').trim();
@@ -274,7 +265,7 @@ export class TradingViewProvider {
     for (const expiry of expiryList) {
       const options = await tvPostOptions(config.apiBase, buildOptionsBody({ ...config, expiry }));
       const { byTypeStrike } = parseOptions(options);
-      byExpiry[expiry] = buildBasePoint(px, byTypeStrike, nowIso, tailSteps);
+      byExpiry[expiry] = buildBasePoint(px, byTypeStrike, nowIso);
     }
 
     const primaryExpiry = expiryList[0];

@@ -99,7 +99,6 @@ function applyTabToForm(tab) {
   $('expiryEnd').value = tab.providerConfig.expiryEnd || '';
   $('yahooSymbol').value = tab.providerConfig.yahooSymbol || '';
   $('pollSec').value = String(tab.providerConfig.pollSec ?? 5);
-  $('tailSteps').value = String(tab.providerConfig.tailSteps ?? 3);
   $('keepPoints').value = String(tab.providerConfig.keepPoints ?? 200);
 }
 
@@ -113,7 +112,6 @@ function readFormToTab(tab) {
     expiryEnd: $('expiryEnd').value.trim(),
     yahooSymbol: $('yahooSymbol').value.trim(),
     pollSec: Number($('pollSec').value) || 5,
-    tailSteps: Number($('tailSteps').value) || 3,
     keepPoints: Number($('keepPoints').value) || 200
   };
 }
@@ -405,6 +403,19 @@ function renderWidgets() {
     });
   });
 
+  root.querySelectorAll('[data-widget-tail-steps-id]').forEach((input) => {
+    input.addEventListener('change', (evt) => {
+      const wid = evt.target.getAttribute('data-widget-tail-steps-id');
+      const target = tab.widgets.find((w) => w.id === wid);
+      if (!target) return;
+      const numeric = Number(String(evt.target.value || '').trim());
+      target.config ||= {};
+      target.config.tailSteps = Number.isFinite(numeric) ? Math.max(1, Math.floor(numeric)) : (target.config.tailSteps || 3);
+      refreshCharts();
+      persist();
+    });
+  });
+
   refreshCharts();
 }
 
@@ -500,7 +511,6 @@ function addTab() {
       expiryStart: defaultExpiry(),
       expiryEnd: '',
       yahooSymbol: 'SPY',
-      tailSteps: 3,
       pollSec: 5,
       keepPoints: 200
     },
@@ -659,7 +669,7 @@ function bindEvents() {
     if (evt.target === $('renameTabModal')) closeRenameTabModal();
   });
 
-  ['providerKey', 'apiBase', 'ticker', 'root', 'expiryStart', 'expiryEnd', 'yahooSymbol', 'pollSec', 'tailSteps', 'keepPoints'].forEach((id) => {
+  ['providerKey', 'apiBase', 'ticker', 'root', 'expiryStart', 'expiryEnd', 'yahooSymbol', 'pollSec', 'keepPoints'].forEach((id) => {
     $(id).addEventListener('change', () => {
       const tab = activeTab();
       if (!tab) return;
@@ -685,6 +695,9 @@ async function init() {
     if (tab.providerConfig.expiryEnd == null) tab.providerConfig.expiryEnd = '';
     for (const widget of tab.widgets || []) {
       widget.config ||= {};
+      if (widget.type === 'tail-skew-line' && widget.config.tailSteps == null) {
+        widget.config.tailSteps = Math.max(1, Number(tab.providerConfig.tailSteps) || 3);
+      }
       if (!widget.config.expiryStart && widget.config.expiry) {
         widget.config.expiryStart = widget.config.expiry;
       }
