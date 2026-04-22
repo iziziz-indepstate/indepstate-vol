@@ -403,6 +403,18 @@ function renderWidgets() {
     });
   });
 
+  root.querySelectorAll('[data-widget-sr-id]').forEach((input) => {
+    input.addEventListener('change', (evt) => {
+      const wid = evt.target.getAttribute('data-widget-sr-id');
+      const target = tab.widgets.find((w) => w.id === wid);
+      if (!target) return;
+      target.config ||= {};
+      target.config.strikeRange = String(evt.target.value || '').trim();
+      refreshCharts();
+      persist();
+    });
+  });
+
   root.querySelectorAll('[data-widget-tail-steps-id]').forEach((input) => {
     input.addEventListener('change', (evt) => {
       const wid = evt.target.getAttribute('data-widget-tail-steps-id');

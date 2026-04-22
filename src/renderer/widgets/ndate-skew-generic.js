@@ -26,15 +26,78 @@ function inferBaseStep(strikesAsc, anchorIdx) {
   return diffs.length ? Math.min(...diffs) : 5;
 }
 
-function pickStrikesFromChain(strikesAsc, baseStrike, direction) {
-  const offsets = [5, 10, 15, 20, 25, 30, 35, 45, 55, 65];
+const DEFAULT_SR_PATTERN = [5, 5, 5, 10];
+const DEFAULT_SR_POINTS = 10;
+
+function normalizeStrikeRangeConfig(raw) {
+  if (raw == null || raw === '') return { mode: 'pattern', pattern: DEFAULT_SR_PATTERN };
+
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return { mode: 'count', count: Math.max(1, Math.floor(raw)) };
+  }
+
+  if (Array.isArray(raw)) {
+    const pattern = raw
+      .map((x) => Number(x))
+      .filter((x) => Number.isFinite(x) && x > 0);
+    return pattern.length
+      ? { mode: 'pattern', pattern }
+      : { mode: 'pattern', pattern: DEFAULT_SR_PATTERN };
+  }
+
+  const asText = String(raw).trim();
+  if (!asText) return { mode: 'pattern', pattern: DEFAULT_SR_PATTERN };
+
+  const numeric = Number(asText);
+  if (Number.isFinite(numeric)) return { mode: 'count', count: Math.max(1, Math.floor(numeric)) };
+
+  if (asText.startsWith('[') && asText.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(asText);
+      if (Array.isArray(parsed)) return normalizeStrikeRangeConfig(parsed);
+    } catch {
+      return { mode: 'pattern', pattern: DEFAULT_SR_PATTERN };
+    }
+  }
+
+  return { mode: 'pattern', pattern: DEFAULT_SR_PATTERN };
+}
+
+function offsetsFromPattern(pattern, pointCount) {
+  const out = [];
+  let acc = 0;
+  for (let i = 0; i < pointCount; i += 1) {
+    const step = Number(pattern[i % pattern.length]);
+    if (!Number.isFinite(step) || step <= 0) continue;
+    acc += step;
+    out.push(acc);
+  }
+  return out;
+}
+
+function pickStrikesFromChain(strikesAsc, baseStrike, direction, srConfig) {
   const used = new Set();
 
   if (!strikesAsc.length) return [];
 
   const anchorIdx = findAnchorIndex(strikesAsc, baseStrike, direction);
   const anchor = strikesAsc[anchorIdx] ?? baseStrike;
+  const normalized = normalizeStrikeRangeConfig(srConfig);
+
+  if (normalized.mode === 'count') {
+    const selected = [];
+    for (let i = 1; i <= normalized.count; i += 1) {
+      const idx = direction === 'up' ? anchorIdx + i : anchorIdx - i;
+      const strike = strikesAsc[idx];
+      if (!Number.isFinite(strike) || used.has(strike)) continue;
+      used.add(strike);
+      selected.push(strike);
+    }
+    return selected;
+  }
+
   const step = inferBaseStep(strikesAsc, anchorIdx);
+  const offsets = offsetsFromPattern(normalized.pattern, DEFAULT_SR_POINTS);
 
   const selected = [];
   for (const k of offsets) {
@@ -106,7 +169,7 @@ function computeSingleSeries(snapshot, widget, mapKey, side, direction, xOrder, 
   const configured = Number(widget?.config?.baseStrike);
   const baseStrike = Number.isFinite(configured) ? configured : 500;
 
-  const selected = pickStrikesFromChain(strikesAsc, baseStrike, direction);
+  const selected = pickStrikesFromChain(strikesAsc, baseStrike, direction, widget?.config?.strikeRange);
   const points = selected.map((strike) => ({
     strike,
     bidIv: Number(ivByStrike[strike])
@@ -145,7 +208,15 @@ export function createNDateSkewWidget({
     defaultConfig: {
       baseStrike: 500,
       expiryStart: '',
-      expiryEnd: ''
+      expiryEnd: '',
+      strikeRange: ''
+    },
+    controls: {
+      strike: true,
+      expiryStart: true,
+      expiryEnd: true,
+      strikeRange: true,
+      strikeInputType: 'number'
     },
     buildSnapshotSeries: (snapshot, widget) => {
       if (snapshot?.byExpiry && typeof snapshot.byExpiry === 'object') {
