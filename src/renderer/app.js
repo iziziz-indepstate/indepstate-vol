@@ -345,10 +345,18 @@ function renderWidgets() {
   });
 
   let draggedWidgetId = null;
+  const isInteractiveWidgetControl = (node) => Boolean(
+    node?.closest?.('input, textarea, select, option, button, [contenteditable="true"], label')
+  );
+
   root.querySelectorAll('.widget-card[data-widget-card-id]').forEach((card) => {
     const cardWidgetId = card.dataset.widgetCardId;
 
     card.addEventListener('dragstart', (evt) => {
+      if (isInteractiveWidgetControl(evt.target)) {
+        evt.preventDefault();
+        return;
+      }
       draggedWidgetId = cardWidgetId;
       card.classList.add('is-dragging');
       evt.dataTransfer.effectAllowed = 'move';
