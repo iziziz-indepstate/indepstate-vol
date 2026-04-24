@@ -2,6 +2,11 @@ import { TradingViewProvider } from '../shared/tradingview-provider.js';
 import { getWidgetDefinition, widgetDefinitions } from './widgets/index.js';
 import { createWidgetCard, createWidgetChart } from './widgets/widget-renderers.js';
 import { skewMetrics } from './widgets/metrics.js';
+import {
+  normalizeWidgetParamValue,
+  shouldRefreshOnWidgetParamChange,
+  WIDGET_PARAM_DATASET
+} from './widgets/widget-params.js';
 
 const providers = {
   tradingview: new TradingViewProvider()
@@ -340,10 +345,47 @@ function renderWidgets() {
   });
 
   let draggedWidgetId = null;
+  const isInteractiveWidgetControl = (node) => Boolean(
+    node?.closest?.('input, textarea, select, option, button, [contenteditable="true"], label')
+  );
+
   root.querySelectorAll('.widget-card[data-widget-card-id]').forEach((card) => {
     const cardWidgetId = card.dataset.widgetCardId;
 
+    const setDragEnabled = (enabled) => {
+      card.draggable = Boolean(enabled);
+      if (enabled) {
+        card.removeAttribute('data-drag-disabled');
+      } else {
+        card.setAttribute('data-drag-disabled', 'true');
+      }
+    };
+
+    card.addEventListener('focusin', (evt) => {
+      if (!isInteractiveWidgetControl(evt.target)) return;
+      setDragEnabled(false);
+    });
+
+    card.addEventListener('focusout', () => {
+      const activeInsideCard = card.contains(document.activeElement);
+      if (!activeInsideCard) setDragEnabled(true);
+    });
+
+    card.addEventListener('pointerdown', (evt) => {
+      if (!isInteractiveWidgetControl(evt.target)) return;
+      setDragEnabled(false);
+    });
+
+    card.addEventListener('pointerup', () => {
+      const activeInsideCard = card.contains(document.activeElement);
+      if (!activeInsideCard) setDragEnabled(true);
+    });
+
     card.addEventListener('dragstart', (evt) => {
+      if (isInteractiveWidgetControl(evt.target)) {
+        evt.preventDefault();
+        return;
+      }
       draggedWidgetId = cardWidgetId;
       card.classList.add('is-dragging');
       evt.dataTransfer.effectAllowed = 'move';
@@ -354,6 +396,7 @@ function renderWidgets() {
       draggedWidgetId = null;
       card.classList.remove('is-dragging');
       root.querySelectorAll('.widget-card.drag-over').forEach((x) => x.classList.remove('drag-over'));
+      if (!card.contains(document.activeElement)) setDragEnabled(true);
     });
 
     card.addEventListener('dragover', (evt) => {
@@ -387,72 +430,51 @@ function renderWidgets() {
     });
   });
 
-  root.querySelectorAll('[data-widget-strike-id]').forEach((input) => {
+  const widgetParamSelector = '[data-widget-param-widget-id][data-widget-param-name]';
+
+  function setWidgetParamValue(wid, paramName, rawValue) {
+    const target = tab.widgets.find((w) => w.id === wid);
+    if (!target || !paramName) return false;
+
+    target.config ||= {};
+    const definition = getWidgetDefinition(target.type);
+    const currentValue = target.config[paramName];
+    const nextValue = normalizeWidgetParamValue(paramName, rawValue, currentValue, {
+      strikeInputType: definition?.controls?.strikeInputType === 'text' ? 'text' : 'number'
+    });
+    target.config[paramName] = nextValue;
+    return true;
+  }
+
+  root.querySelectorAll(widgetParamSelector).forEach((input) => {
     input.addEventListener('change', (evt) => {
-      const wid = evt.target.getAttribute('data-widget-strike-id');
-      const target = tab.widgets.find((w) => w.id === wid);
-      if (!target) return;
+      const wid = evt.target.dataset[WIDGET_PARAM_DATASET.WIDGET_ID];
+      const paramName = evt.target.dataset[WIDGET_PARAM_DATASET.PARAM_NAME];
+      if (!setWidgetParamValue(wid, paramName, evt.target.value)) return;
+      if (shouldRefreshOnWidgetParamChange(paramName)) refreshCharts();
+      persist();
+    });
 
-      const definition = getWidgetDefinition(target.type);
-      const isTextStrike = definition?.controls?.strikeInputType === 'text';
-      const raw = String(evt.target.value || '').trim();
+    input.addEventListener('click', (evt) => {
+      if (!evt.ctrlKey) return;
 
-      target.config ||= {};
-      if (isTextStrike) {
-        target.config.baseStrike = raw || target.config.baseStrike;
-      } else {
-        const numeric = Number(raw);
-        target.config.baseStrike = Number.isFinite(numeric) ? numeric : target.config.baseStrike;
+      const sourceWidgetId = evt.target.dataset[WIDGET_PARAM_DATASET.WIDGET_ID];
+      const paramName = evt.target.dataset[WIDGET_PARAM_DATASET.PARAM_NAME];
+      const rawValue = evt.target.value;
+      if (!sourceWidgetId || !paramName) return;
+
+      let hasAnyUpdates = false;
+      for (const widget of tab.widgets) {
+        if (widget.id === sourceWidgetId) continue;
+        hasAnyUpdates = setWidgetParamValue(widget.id, paramName, rawValue) || hasAnyUpdates;
       }
+      if (!hasAnyUpdates) return;
 
-      refreshCharts();
-      persist();
-    });
-  });
+      root.querySelectorAll(`${widgetParamSelector}[data-widget-param-name="${paramName}"]`).forEach((otherInput) => {
+        otherInput.value = rawValue;
+      });
 
-  root.querySelectorAll('[data-widget-expiry-start-id]').forEach((input) => {
-    input.addEventListener('change', (evt) => {
-      const wid = evt.target.getAttribute('data-widget-expiry-start-id');
-      const target = tab.widgets.find((w) => w.id === wid);
-      if (!target) return;
-      target.config ||= {};
-      target.config.expiryStart = String(evt.target.value || '').trim();
-      persist();
-    });
-  });
-
-  root.querySelectorAll('[data-widget-expiry-end-id]').forEach((input) => {
-    input.addEventListener('change', (evt) => {
-      const wid = evt.target.getAttribute('data-widget-expiry-end-id');
-      const target = tab.widgets.find((w) => w.id === wid);
-      if (!target) return;
-      target.config ||= {};
-      target.config.expiryEnd = String(evt.target.value || '').trim();
-      persist();
-    });
-  });
-
-  root.querySelectorAll('[data-widget-sr-id]').forEach((input) => {
-    input.addEventListener('change', (evt) => {
-      const wid = evt.target.getAttribute('data-widget-sr-id');
-      const target = tab.widgets.find((w) => w.id === wid);
-      if (!target) return;
-      target.config ||= {};
-      target.config.strikeRange = String(evt.target.value || '').trim();
-      refreshCharts();
-      persist();
-    });
-  });
-
-  root.querySelectorAll('[data-widget-tail-steps-id]').forEach((input) => {
-    input.addEventListener('change', (evt) => {
-      const wid = evt.target.getAttribute('data-widget-tail-steps-id');
-      const target = tab.widgets.find((w) => w.id === wid);
-      if (!target) return;
-      const numeric = Number(String(evt.target.value || '').trim());
-      target.config ||= {};
-      target.config.tailSteps = Number.isFinite(numeric) ? Math.max(1, Math.floor(numeric)) : (target.config.tailSteps || 3);
-      refreshCharts();
+      if (shouldRefreshOnWidgetParamChange(paramName)) refreshCharts();
       persist();
     });
   });

@@ -1,3 +1,5 @@
+import { WIDGET_PARAM_NAMES } from './widget-params.js';
+
 export function createWidgetCard(widget, definition) {
   const card = document.createElement('article');
   card.className = 'widget-card';
@@ -21,19 +23,19 @@ export function createWidgetCard(widget, definition) {
   const controls = Object.keys(controlsConfig).length
     ? `<div class="widget-controls widget-controls-inline">
         ${controlsConfig.strike ? `<label class="widget-control">S
-          <input type="${strikeInputType}" class="widget-strike-input" data-widget-strike-id="${widget.id}" value="${strikeValue}" step="1" placeholder="ATM или 500" />
+          <input type="${strikeInputType}" class="widget-strike-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.BASE_STRIKE}" value="${strikeValue}" step="1" placeholder="ATM или 500" />
         </label>` : ''}
         ${controlsConfig.expiryStart ? `<label class="widget-control">E1
-          <input type="text" class="widget-expiry-input" data-widget-expiry-start-id="${widget.id}" value="${expiryStartValue}" placeholder="20260420" />
+          <input type="text" class="widget-expiry-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.EXPIRY_START}" value="${expiryStartValue}" placeholder="20260420" />
         </label>` : ''}
         ${controlsConfig.expiryEnd ? `<label class="widget-control">E2
-          <input type="text" class="widget-expiry-input" data-widget-expiry-end-id="${widget.id}" value="${expiryEndValue}" placeholder="20260424" />
+          <input type="text" class="widget-expiry-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.EXPIRY_END}" value="${expiryEndValue}" placeholder="20260424" />
         </label>` : ''}
         ${controlsConfig.strikeRange ? `<label class="widget-control">SR
-          <input type="text" class="widget-sr-input" data-widget-sr-id="${widget.id}" value="${strikeRangeValue}" placeholder="[5,5,5,10] или 10" />
+          <input type="text" class="widget-sr-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.STRIKE_RANGE}" value="${strikeRangeValue}" placeholder="[5,5,5,10] или 10" />
         </label>` : ''}
         ${controlsConfig.tailSteps ? `<label class="widget-control">N
-          <input type="number" min="1" class="widget-tail-steps-input" data-widget-tail-steps-id="${widget.id}" value="${tailStepsValue}" />
+          <input type="number" min="1" class="widget-tail-steps-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.TAIL_STEPS}" value="${tailStepsValue}" />
         </label>` : ''}
        </div>`
     : '';
