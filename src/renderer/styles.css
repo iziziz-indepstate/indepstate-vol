@@ -351,15 +351,59 @@ canvas {
 }
 
 .widget-history-control {
-  align-items: flex-start;
+  position: relative;
+  align-items: center;
 }
 
-.widget-history-select {
-  min-width: 146px;
-  width: 146px !important;
-  max-height: 74px;
-  padding: 2px 4px;
+.widget-history-toggle {
+  width: auto !important;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.06);
+  color: var(--muted);
+  cursor: pointer;
   font-size: 11px;
+  line-height: 1.6;
+}
+
+.widget-history-toggle.is-empty {
+  opacity: 0.55;
+}
+
+.widget-history-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 170px;
+  max-height: 150px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(15, 17, 22, 0.98);
+  padding: 5px;
+  z-index: 5;
+}
+
+.widget-history-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 2px 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.widget-history-option input {
+  width: 12px;
+  height: 12px;
+}
+
+.widget-history-empty {
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.75;
 }
 
 .btn-icon {

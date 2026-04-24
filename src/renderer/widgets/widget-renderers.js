@@ -38,10 +38,10 @@ export function createWidgetCard(widget, definition) {
         ${controlsConfig.tailSteps ? `<label class="widget-control">N
           <input type="number" min="1" class="widget-tail-steps-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.TAIL_STEPS}" value="${tailStepsValue}" />
         </label>` : ''}
-        ${isNDateSkewWidget ? `<label class="widget-control widget-history-control">H
-          <select class="widget-history-select" multiple data-widget-history-widget-id="${widget.id}" title="Выберите один или несколько исторических снепшотов">
-          </select>
-        </label>` : ''}
+        ${isNDateSkewWidget ? `<div class="widget-control widget-history-control">
+          <button type="button" class="widget-history-toggle" data-widget-history-toggle-widget-id="${widget.id}" title="History">history</button>
+          <div class="widget-history-menu" data-widget-history-widget-id="${widget.id}" hidden></div>
+        </div>` : ''}
        </div>`
     : '';
 

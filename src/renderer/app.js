@@ -281,6 +281,10 @@ function formatSnapshotOptionLabel(snapshot, idxFromEnd) {
   return idxFromEnd > 0 ? `${timeText} (-${idxFromEnd})` : timeText;
 }
 
+function historyOptionId(widgetId, time, idx) {
+  return `history-${widgetId}-${String(time).replace(/[^a-zA-Z0-9_-]/g, '-')}-${idx}`;
+}
+
 function collectHistoricalComparisons(history, widget) {
   const selectedSet = new Set(getSelectedHistorySnapshotTimes(widget));
   if (!selectedSet.size || !Array.isArray(history) || history.length < 2) return [];
@@ -308,8 +312,8 @@ function updateWidgetHistoryControls(root, tab) {
   const latest = history[history.length - 1] || null;
   const latestTime = String(latest?.time || '');
 
-  root.querySelectorAll('select[data-widget-history-widget-id]').forEach((select) => {
-    const widgetId = select.dataset.widgetHistoryWidgetId;
+  root.querySelectorAll('[data-widget-history-widget-id]').forEach((menu) => {
+    const widgetId = menu.dataset.widgetHistoryWidgetId;
     const widget = tab.widgets.find((w) => w.id === widgetId);
     if (!widget) return;
 
@@ -321,11 +325,24 @@ function updateWidgetHistoryControls(root, tab) {
       const time = String(snapshot?.time || '');
       if (!time) continue;
       const idxFromEnd = history.length - 1 - idx;
-      const selected = selectedTimes.has(time) ? ' selected' : '';
-      optionsHtml.push(`<option value="${time}"${selected}>${formatSnapshotOptionLabel(snapshot, idxFromEnd)}</option>`);
+      const selected = selectedTimes.has(time) ? ' checked' : '';
+      const optionId = historyOptionId(widgetId, time, idxFromEnd);
+      optionsHtml.push(`
+        <label class="widget-history-option" for="${optionId}">
+          <input id="${optionId}" type="checkbox" value="${time}"${selected} data-widget-history-option-widget-id="${widgetId}" />
+          <span>${formatSnapshotOptionLabel(snapshot, idxFromEnd)}</span>
+        </label>
+      `);
     }
-    select.innerHTML = optionsHtml.join('');
-    select.disabled = optionsHtml.length === 0;
+    menu.innerHTML = optionsHtml.length
+      ? optionsHtml.join('')
+      : '<div class="widget-history-empty">no history</div>';
+
+    const toggle = root.querySelector(`[data-widget-history-toggle-widget-id="${widgetId}"]`);
+    if (toggle) {
+      toggle.disabled = optionsHtml.length === 0;
+      toggle.classList.toggle('is-empty', optionsHtml.length === 0);
+    }
   });
 }
 
@@ -556,17 +573,67 @@ function renderWidgets() {
     });
   });
 
-  root.querySelectorAll('select[data-widget-history-widget-id]').forEach((select) => {
-    select.addEventListener('change', (evt) => {
-      const widgetId = evt.target.dataset.widgetHistoryWidgetId;
-      const target = tab.widgets.find((w) => w.id === widgetId);
-      if (!target) return;
-      target.config ||= {};
-      target.config.historySnapshotTimes = Array.from(evt.target.selectedOptions).map((option) => option.value);
+  const applyHistorySelection = (widgetId) => {
+    const target = tab.widgets.find((w) => w.id === widgetId);
+    if (!target) return false;
+    target.config ||= {};
+    const checked = Array.from(root.querySelectorAll(`input[data-widget-history-option-widget-id="${widgetId}"]:checked`))
+      .map((node) => node.value);
+    target.config.historySnapshotTimes = checked;
+    return true;
+  };
+
+  root.querySelectorAll('[data-widget-history-toggle-widget-id]').forEach((toggleBtn) => {
+    toggleBtn.addEventListener('click', (evt) => {
+      const widgetId = evt.currentTarget.dataset.widgetHistoryToggleWidgetId;
+      if (!widgetId) return;
+
+      if (evt.ctrlKey) {
+        const sourceChecked = Array.from(root.querySelectorAll(`input[data-widget-history-option-widget-id="${widgetId}"]:checked`))
+          .map((node) => node.value);
+        let hasChanges = false;
+        for (const widget of tab.widgets) {
+          if (!String(widget?.type || '').startsWith('ndate-skew-')) continue;
+          widget.config ||= {};
+          const prev = Array.isArray(widget.config.historySnapshotTimes) ? widget.config.historySnapshotTimes : [];
+          const next = [...sourceChecked];
+          if (JSON.stringify(prev) !== JSON.stringify(next)) {
+            widget.config.historySnapshotTimes = next;
+            hasChanges = true;
+          }
+        }
+        if (hasChanges) {
+          updateWidgetHistoryControls(root, tab);
+          refreshCharts();
+          persist();
+        }
+        return;
+      }
+
+      const menu = root.querySelector(`[data-widget-history-widget-id="${widgetId}"]`);
+      if (!menu || toggleBtn.disabled) return;
+      const willOpen = menu.hidden;
+      root.querySelectorAll('.widget-history-menu').forEach((node) => { node.hidden = true; });
+      if (willOpen) menu.hidden = false;
+    });
+  });
+
+  root.querySelectorAll('input[data-widget-history-option-widget-id]').forEach((checkbox) => {
+    checkbox.addEventListener('change', (evt) => {
+      const widgetId = evt.target.dataset.widgetHistoryOptionWidgetId;
+      if (!applyHistorySelection(widgetId)) return;
       refreshCharts();
       persist();
     });
   });
+
+  if (!root.dataset.historyDropdownBound) {
+    root.addEventListener('click', (evt) => {
+      if (evt.target.closest('.widget-history-control')) return;
+      root.querySelectorAll('.widget-history-menu').forEach((node) => { node.hidden = true; });
+    });
+    root.dataset.historyDropdownBound = 'true';
+  }
 
   updateWidgetHistoryControls(root, tab);
   refreshCharts();
