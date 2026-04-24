@@ -347,6 +347,19 @@ function applyHiddenSnapshotSeriesLabels(widget, chart) {
   });
 }
 
+function syncLinkedHistoryVisibility(chart) {
+  if (!chart) return;
+  chart.data.datasets.forEach((dataset, idx) => {
+    if (!Array.isArray(dataset?.linkedHistoryIndices) || !dataset.linkedHistoryIndices.length) return;
+    const baseVisible = chart.isDatasetVisible(idx);
+    dataset.linkedHistoryIndices.forEach((linkedIdx) => {
+      if (!Number.isInteger(linkedIdx)) return;
+      if (linkedIdx < 0 || linkedIdx >= chart.data.datasets.length) return;
+      chart.setDatasetVisibility(linkedIdx, baseVisible);
+    });
+  });
+}
+
 function renderWidgets() {
   destroyCharts();
   const tab = activeTab();
@@ -658,6 +671,7 @@ function refreshCharts() {
       };
       chart.options.plugins.legend.display = hasMultipleBaseDatasets || (!hasSingleSelectedSnapshot && historyDatasets.length > 0);
       applyHiddenSnapshotSeriesLabels(widget, chart);
+      syncLinkedHistoryVisibility(chart);
       chart.update();
       continue;
     }
