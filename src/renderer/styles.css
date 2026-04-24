@@ -278,6 +278,48 @@ input, select {
   gap: 10px;
 }
 
+#widgetsRoot {
+  position: relative;
+  overflow: visible;
+}
+
+.widgets-history-sidecar {
+  position: absolute;
+  left: -220px;
+  top: 0;
+  width: 200px;
+  max-height: 300px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(15, 17, 22, 0.98);
+  padding: 8px;
+  z-index: 20;
+}
+
+.widgets-history-sidecar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.widgets-history-sidecar-close {
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  font-size: 12px;
+}
+
+.widgets-history-sidecar-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .widget-card {
   position: relative;
   border: 1px solid var(--border);
@@ -368,30 +410,6 @@ canvas {
 
 .widget-history-toggle.is-empty {
   opacity: 0.55;
-}
-
-.widget-history-drawer {
-  min-width: 170px;
-  max-height: 150px;
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: rgba(15, 17, 22, 0.98);
-  padding: 5px;
-  z-index: 6;
-}
-
-.widget-history-drawer {
-  position: absolute;
-  left: 8px;
-  top: 34px;
-  bottom: 10px;
-  width: 180px;
-}
-
-.widget-card.is-history-open .widget-title,
-.widget-card.is-history-open canvas {
-  margin-left: 188px;
 }
 
 .widget-history-option {

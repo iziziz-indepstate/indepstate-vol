@@ -26,6 +26,7 @@ const chartInstances = new Map();
 let tabContextTargetId = null;
 let renameTargetTabId = null;
 let draggedTabId = null;
+let historySidecarWidgetId = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -311,44 +312,52 @@ function updateWidgetHistoryControls(root, tab) {
   const history = Array.isArray(state.historyByTab?.[tab?.id]) ? state.historyByTab[tab.id] : [];
   const latest = history[history.length - 1] || null;
   const latestTime = String(latest?.time || '');
+  const hasComparableHistory = history.length > 1;
 
-  root.querySelectorAll('[data-widget-history-widget-id]').forEach((drawer) => {
-    const widgetId = drawer.dataset.widgetHistoryWidgetId;
-    const widget = tab.widgets.find((w) => w.id === widgetId);
-    if (!widget) return;
-
-    widget.config ||= {};
-    const selectedTimes = new Set(getSelectedHistorySnapshotTimes(widget).filter((time) => time !== latestTime));
-    const optionsHtml = [];
-    for (let idx = history.length - 2; idx >= 0; idx -= 1) {
-      const snapshot = history[idx];
-      const time = String(snapshot?.time || '');
-      if (!time) continue;
-      const idxFromEnd = history.length - 1 - idx;
-      const selected = selectedTimes.has(time) ? ' checked' : '';
-      const optionId = historyOptionId(widgetId, time, idxFromEnd);
-      optionsHtml.push(`
-        <label class="widget-history-option" for="${optionId}">
-          <input id="${optionId}" type="checkbox" value="${time}"${selected} data-widget-history-option-widget-id="${widgetId}" />
-          <span>${formatSnapshotOptionLabel(snapshot, idxFromEnd)}</span>
-        </label>
-      `);
-    }
-    drawer.innerHTML = optionsHtml.length
-      ? optionsHtml.join('')
-      : '<div class="widget-history-empty">no history</div>';
-
-    const toggle = root.querySelector(`[data-widget-history-toggle-widget-id="${widgetId}"]`);
-    if (toggle) {
-      const isEmpty = optionsHtml.length === 0;
-      toggle.disabled = isEmpty;
-      toggle.classList.toggle('is-empty', isEmpty);
-      if (isEmpty) {
-        drawer.hidden = true;
-        drawer.closest('.widget-card')?.classList.remove('is-history-open');
-      }
-    }
+  root.querySelectorAll('[data-widget-history-toggle-widget-id]').forEach((toggle) => {
+    toggle.disabled = !hasComparableHistory;
+    toggle.classList.toggle('is-empty', !hasComparableHistory);
   });
+
+  const widget = tab.widgets.find((w) => w.id === historySidecarWidgetId);
+  const sidecar = root.querySelector('[data-history-sidecar]');
+  const sidecarBody = root.querySelector('[data-history-sidecar-body]');
+  const sidecarTitle = root.querySelector('[data-history-sidecar-title]');
+  const sidecarClose = root.querySelector('[data-history-sidecar-close]');
+
+  if (!sidecar || !sidecarBody || !sidecarTitle || !sidecarClose) return;
+
+  if (!hasComparableHistory || !widget || !String(widget?.type || '').startsWith('ndate-skew-')) {
+    sidecar.hidden = true;
+    sidecarBody.innerHTML = '';
+    sidecarTitle.textContent = 'history';
+    return;
+  }
+
+  widget.config ||= {};
+  const selectedTimes = new Set(getSelectedHistorySnapshotTimes(widget).filter((time) => time !== latestTime));
+  const optionsHtml = [];
+  for (let idx = history.length - 2; idx >= 0; idx -= 1) {
+    const snapshot = history[idx];
+    const time = String(snapshot?.time || '');
+    if (!time) continue;
+    const idxFromEnd = history.length - 1 - idx;
+    const selected = selectedTimes.has(time) ? ' checked' : '';
+    const optionId = historyOptionId(widget.id, time, idxFromEnd);
+    optionsHtml.push(`
+      <label class="widget-history-option" for="${optionId}">
+        <input id="${optionId}" type="checkbox" value="${time}"${selected} data-widget-history-option-widget-id="${widget.id}" />
+        <span>${formatSnapshotOptionLabel(snapshot, idxFromEnd)}</span>
+      </label>
+    `);
+  }
+
+  sidecarTitle.textContent = `history • ${widget.title || widget.type}`;
+  sidecarBody.innerHTML = optionsHtml.length
+    ? optionsHtml.join('')
+    : '<div class="widget-history-empty">no history</div>';
+  sidecar.hidden = false;
+  sidecarClose.disabled = false;
 }
 
 function syncHiddenSnapshotSeriesLabels(widget, chart) {
@@ -409,7 +418,19 @@ function renderWidgets() {
     grid.appendChild(createWidgetCard(widget, definition));
   }
 
-  root.replaceChildren(grid);
+  const sidecar = document.createElement('aside');
+  sidecar.className = 'widgets-history-sidecar';
+  sidecar.setAttribute('data-history-sidecar', 'true');
+  sidecar.hidden = true;
+  sidecar.innerHTML = `
+    <div class="widgets-history-sidecar-header">
+      <span data-history-sidecar-title>history</span>
+      <button type="button" class="btn btn-icon widgets-history-sidecar-close" data-history-sidecar-close aria-label="Close history panel">✕</button>
+    </div>
+    <div class="widgets-history-sidecar-body" data-history-sidecar-body></div>
+  `;
+
+  root.replaceChildren(sidecar, grid);
 
   for (const widget of tab.widgets) {
     const definition = getWidgetDefinition(widget.type);
@@ -588,9 +609,9 @@ function renderWidgets() {
     return true;
   };
 
-  const closeAllHistoryDrawers = () => {
-    root.querySelectorAll('.widget-history-drawer').forEach((node) => { node.hidden = true; });
-    root.querySelectorAll('.widget-card.is-history-open').forEach((card) => card.classList.remove('is-history-open'));
+  const closeHistorySidecar = () => {
+    historySidecarWidgetId = null;
+    updateWidgetHistoryControls(root, tab);
   };
 
   root.querySelectorAll('[data-widget-history-toggle-widget-id]').forEach((toggleBtn) => {
@@ -620,16 +641,9 @@ function renderWidgets() {
         return;
       }
 
-      const drawer = root.querySelector(`[data-widget-history-widget-id="${widgetId}"]`);
-      const card = toggleBtn.closest('.widget-card');
-      if (!drawer || !card || toggleBtn.disabled) return;
-
-      const willOpen = drawer.hidden;
-      closeAllHistoryDrawers();
-      if (willOpen) {
-        drawer.hidden = false;
-        card.classList.add('is-history-open');
-      }
+      if (toggleBtn.disabled) return;
+      historySidecarWidgetId = historySidecarWidgetId === widgetId ? null : widgetId;
+      updateWidgetHistoryControls(root, tab);
     });
   });
 
@@ -642,14 +656,7 @@ function renderWidgets() {
     });
   });
 
-  if (!root.dataset.historyDropdownBound) {
-    root.addEventListener('click', (evt) => {
-      if (evt.target.closest('.widget-history-control')) return;
-      if (evt.target.closest('.widget-history-drawer')) return;
-      closeAllHistoryDrawers();
-    });
-    root.dataset.historyDropdownBound = 'true';
-  }
+  root.querySelector('[data-history-sidecar-close]')?.addEventListener('click', closeHistorySidecar);
 
   updateWidgetHistoryControls(root, tab);
   refreshCharts();
