@@ -39,7 +39,7 @@ export function createWidgetCard(widget, definition) {
           <input type="number" min="1" class="widget-tail-steps-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.TAIL_STEPS}" value="${tailStepsValue}" />
         </label>` : ''}
         ${isNDateSkewWidget ? `<div class="widget-control widget-history-control">
-          <button type="button" class="widget-history-toggle" data-widget-history-toggle-widget-id="${widget.id}" title="History">history</button>
+          <button type="button" class="widget-history-toggle" data-widget-history-toggle-widget-id="${widget.id}" title="History">H</button>
         </div>` : ''}
        </div>`
     : '';
