@@ -13,7 +13,10 @@ function mergeDefaults(loaded, defaults) {
     ...defaults,
     ...loaded,
     tabs: Array.isArray(loaded.tabs) && loaded.tabs.length ? loaded.tabs : defaults.tabs,
-    activeTabId: loaded.activeTabId || defaults.activeTabId
+    activeTabId: loaded.activeTabId || defaults.activeTabId,
+    historyByTab: loaded.historyByTab && typeof loaded.historyByTab === 'object'
+      ? loaded.historyByTab
+      : (defaults.historyByTab || {})
   };
 }
 

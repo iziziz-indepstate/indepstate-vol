@@ -53,7 +53,8 @@ const DEFAULT_STATE = {
         }
       ]
     }
-  ]
+  ],
+  historyByTab: {}
 };
 
 function createWindow() {

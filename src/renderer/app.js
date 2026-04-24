@@ -26,6 +26,7 @@ const chartInstances = new Map();
 let tabContextTargetId = null;
 let renameTargetTabId = null;
 let draggedTabId = null;
+let historySidecarWidgetId = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -91,7 +92,8 @@ function updatePollingControlsForActiveTab() {
 function persist() {
   window.appBridge.saveState({
     activeTabId: state.activeTabId,
-    tabs: state.tabs
+    tabs: state.tabs,
+    historyByTab: state.historyByTab
   });
 }
 
@@ -265,6 +267,102 @@ function getHiddenSnapshotSeriesLabels(widget) {
   return Array.isArray(hidden) ? hidden.filter((label) => typeof label === 'string' && label.trim()) : [];
 }
 
+function getSelectedHistorySnapshotTimes(widget) {
+  const selected = widget?.config?.historySnapshotTimes;
+  if (!Array.isArray(selected)) return [];
+  return selected
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+}
+
+function formatSnapshotOptionLabel(snapshot, idxFromEnd) {
+  const dt = new Date(snapshot?.time || 0);
+  const isValid = !Number.isNaN(dt.getTime());
+  const timeText = isValid ? dt.toLocaleString() : String(snapshot?.time || `Snapshot ${idxFromEnd}`);
+  return idxFromEnd > 0 ? `${timeText} (-${idxFromEnd})` : timeText;
+}
+
+function historyOptionId(widgetId, time, idx) {
+  return `history-${widgetId}-${String(time).replace(/[^a-zA-Z0-9_-]/g, '-')}-${idx}`;
+}
+
+function collectHistoricalComparisons(history, widget) {
+  const selectedSet = new Set(getSelectedHistorySnapshotTimes(widget));
+  if (!selectedSet.size || !Array.isArray(history) || history.length < 2) return [];
+
+  const latest = history[history.length - 1];
+  const out = [];
+  for (let idx = history.length - 2; idx >= 0; idx -= 1) {
+    const snapshot = history[idx];
+    const time = String(snapshot?.time || '');
+    if (!selectedSet.has(time)) continue;
+    const idxFromEnd = Math.max(1, history.length - 1 - idx);
+    out.push({
+      snapshot,
+      time,
+      idxFromEnd,
+      label: formatSnapshotOptionLabel(snapshot, idxFromEnd),
+      isLatestDuplicate: snapshot === latest
+    });
+  }
+  return out.filter((item) => !item.isLatestDuplicate);
+}
+
+function updateWidgetHistoryControls(root, tab) {
+  const history = Array.isArray(state.historyByTab?.[tab?.id]) ? state.historyByTab[tab.id] : [];
+  const latest = history[history.length - 1] || null;
+  const latestTime = String(latest?.time || '');
+  const hasComparableHistory = history.length > 1;
+
+  root.querySelectorAll('[data-widget-history-toggle-widget-id]').forEach((toggle) => {
+    toggle.disabled = !hasComparableHistory;
+    toggle.classList.toggle('is-empty', !hasComparableHistory);
+  });
+
+  const widget = tab.widgets.find((w) => w.id === historySidecarWidgetId);
+  const sidecar = root.querySelector('[data-history-sidecar]');
+  const sidecarBody = root.querySelector('[data-history-sidecar-body]');
+  const sidecarTitle = root.querySelector('[data-history-sidecar-title]');
+  const sidecarClose = root.querySelector('[data-history-sidecar-close]');
+  const sidecarDelete = root.querySelector('[data-history-sidecar-delete]');
+
+  if (!sidecar || !sidecarBody || !sidecarTitle || !sidecarClose || !sidecarDelete) return;
+
+  if (!hasComparableHistory || !widget || !String(widget?.type || '').startsWith('ndate-skew-')) {
+    sidecar.hidden = true;
+    sidecarBody.innerHTML = '';
+    sidecarTitle.textContent = 'history';
+    sidecarDelete.disabled = true;
+    return;
+  }
+
+  widget.config ||= {};
+  const selectedTimes = new Set(getSelectedHistorySnapshotTimes(widget).filter((time) => time !== latestTime));
+  const optionsHtml = [];
+  for (let idx = history.length - 2; idx >= 0; idx -= 1) {
+    const snapshot = history[idx];
+    const time = String(snapshot?.time || '');
+    if (!time) continue;
+    const idxFromEnd = history.length - 1 - idx;
+    const selected = selectedTimes.has(time) ? ' checked' : '';
+    const optionId = historyOptionId(widget.id, time, idxFromEnd);
+    optionsHtml.push(`
+      <label class="widget-history-option" for="${optionId}">
+        <input id="${optionId}" type="checkbox" value="${time}"${selected} data-widget-history-option-widget-id="${widget.id}" />
+        <span>${formatSnapshotOptionLabel(snapshot, idxFromEnd)}</span>
+      </label>
+    `);
+  }
+
+  sidecarTitle.textContent = `history • ${widget.title || widget.type}`;
+  sidecarBody.innerHTML = optionsHtml.length
+    ? optionsHtml.join('')
+    : '<div class="widget-history-empty">no history</div>';
+  sidecar.hidden = false;
+  sidecarClose.disabled = false;
+  sidecarDelete.disabled = optionsHtml.length === 0;
+}
+
 function syncHiddenSnapshotSeriesLabels(widget, chart) {
   if (!widget || !chart) return;
   widget.config ||= {};
@@ -280,6 +378,19 @@ function applyHiddenSnapshotSeriesLabels(widget, chart) {
   chart.data.datasets.forEach((dataset, idx) => {
     const label = dataset?.label || `Series ${idx + 1}`;
     chart.setDatasetVisibility(idx, !hiddenLabels.has(label));
+  });
+}
+
+function syncLinkedHistoryVisibility(chart) {
+  if (!chart) return;
+  chart.data.datasets.forEach((dataset, idx) => {
+    if (!Array.isArray(dataset?.linkedHistoryIndices) || !dataset.linkedHistoryIndices.length) return;
+    const baseVisible = chart.isDatasetVisible(idx);
+    dataset.linkedHistoryIndices.forEach((linkedIdx) => {
+      if (!Number.isInteger(linkedIdx)) return;
+      if (linkedIdx < 0 || linkedIdx >= chart.data.datasets.length) return;
+      chart.setDatasetVisibility(linkedIdx, baseVisible);
+    });
   });
 }
 
@@ -310,7 +421,22 @@ function renderWidgets() {
     grid.appendChild(createWidgetCard(widget, definition));
   }
 
-  root.replaceChildren(grid);
+  const sidecar = document.createElement('aside');
+  sidecar.className = 'widgets-history-sidecar';
+  sidecar.setAttribute('data-history-sidecar', 'true');
+  sidecar.hidden = true;
+  sidecar.innerHTML = `
+    <div class="widgets-history-sidecar-header">
+      <span data-history-sidecar-title>history</span>
+      <div class="widgets-history-sidecar-actions">
+        <button type="button" class="btn widgets-history-sidecar-delete" data-history-sidecar-delete>delete unselected</button>
+        <button type="button" class="btn btn-icon widgets-history-sidecar-close" data-history-sidecar-close aria-label="Close history panel">✕</button>
+      </div>
+    </div>
+    <div class="widgets-history-sidecar-body" data-history-sidecar-body></div>
+  `;
+
+  root.replaceChildren(sidecar, grid);
 
   for (const widget of tab.widgets) {
     const definition = getWidgetDefinition(widget.type);
@@ -479,6 +605,85 @@ function renderWidgets() {
     });
   });
 
+  const applyHistorySelection = (widgetId) => {
+    const target = tab.widgets.find((w) => w.id === widgetId);
+    if (!target) return false;
+    target.config ||= {};
+    const checked = Array.from(root.querySelectorAll(`input[data-widget-history-option-widget-id="${widgetId}"]:checked`))
+      .map((node) => node.value);
+    target.config.historySnapshotTimes = checked;
+    return true;
+  };
+
+  const closeHistorySidecar = () => {
+    historySidecarWidgetId = null;
+    updateWidgetHistoryControls(root, tab);
+  };
+
+  root.querySelectorAll('[data-widget-history-toggle-widget-id]').forEach((toggleBtn) => {
+    toggleBtn.addEventListener('click', (evt) => {
+      const widgetId = evt.currentTarget.dataset.widgetHistoryToggleWidgetId;
+      if (!widgetId) return;
+
+      if (evt.ctrlKey) {
+        const sourceChecked = Array.from(root.querySelectorAll(`input[data-widget-history-option-widget-id="${widgetId}"]:checked`))
+          .map((node) => node.value);
+        let hasChanges = false;
+        for (const widget of tab.widgets) {
+          if (!String(widget?.type || '').startsWith('ndate-skew-')) continue;
+          widget.config ||= {};
+          const prev = Array.isArray(widget.config.historySnapshotTimes) ? widget.config.historySnapshotTimes : [];
+          const next = [...sourceChecked];
+          if (JSON.stringify(prev) !== JSON.stringify(next)) {
+            widget.config.historySnapshotTimes = next;
+            hasChanges = true;
+          }
+        }
+        if (hasChanges) {
+          updateWidgetHistoryControls(root, tab);
+          refreshCharts();
+          persist();
+        }
+        return;
+      }
+
+      if (toggleBtn.disabled) return;
+      historySidecarWidgetId = historySidecarWidgetId === widgetId ? null : widgetId;
+      updateWidgetHistoryControls(root, tab);
+    });
+  });
+
+  root.querySelector('[data-history-sidecar-body]')?.addEventListener('change', (evt) => {
+    const widgetId = evt.target?.dataset?.widgetHistoryOptionWidgetId;
+    if (!widgetId) return;
+    if (!applyHistorySelection(widgetId)) return;
+    refreshCharts();
+    persist();
+  });
+
+  root.querySelector('[data-history-sidecar-close]')?.addEventListener('click', closeHistorySidecar);
+  root.querySelector('[data-history-sidecar-delete]')?.addEventListener('click', () => {
+    const widget = tab.widgets.find((w) => w.id === historySidecarWidgetId);
+    if (!widget) return;
+
+    const selected = new Set(getSelectedHistorySnapshotTimes(widget));
+    const history = Array.isArray(state.historyByTab[tab.id]) ? state.historyByTab[tab.id] : [];
+    const latest = history[history.length - 1] || null;
+    const latestTime = String(latest?.time || '');
+
+    state.historyByTab[tab.id] = history.filter((snapshot) => {
+      const time = String(snapshot?.time || '');
+      if (!time) return false;
+      if (time === latestTime) return true;
+      return selected.has(time);
+    });
+
+    updateWidgetHistoryControls(root, tab);
+    refreshCharts();
+    persist();
+  });
+
+  updateWidgetHistoryControls(root, tab);
   refreshCharts();
 }
 
@@ -517,8 +722,71 @@ function refreshCharts() {
         }];
       }
 
-      chart.options.plugins.legend.display = chart.data.datasets.length > 1;
+      const hasMultipleBaseDatasets = chart.data.datasets.length > 1;
+      const historicalComparisons = collectHistoricalComparisons(history, widget);
+      const hasSingleSelectedSnapshot = historicalComparisons.length === 1;
+      const historyDatasets = [];
+      const baseDatasetsCount = chart.data.datasets.length;
+
+      for (const comparison of historicalComparisons) {
+        const historicalSeries = definition.buildSnapshotSeries(comparison.snapshot, widget);
+        if (!Array.isArray(historicalSeries?.labels) || !Array.isArray(historicalSeries?.datasets)) {
+          const baseDataset = chart.data.datasets[0];
+          if (!baseDataset) continue;
+          const byLabel = Object.fromEntries((historicalSeries?.labels || []).map((label, i) => [String(label), historicalSeries.values?.[i] ?? null]));
+          historyDatasets.push({
+            label: `${baseDataset.label} • ${comparison.label}`,
+            data: (chart.data.labels || []).map((label) => (String(label) in byLabel ? byLabel[String(label)] : null)),
+            borderWidth: 1,
+            tension: 0.2,
+            pointRadius: 0,
+            borderColor: baseDataset.borderColor || definition.color || '#7aa2ff',
+            borderDash: [6, 4],
+            hiddenInLegend: hasSingleSelectedSnapshot
+          });
+          continue;
+        }
+
+        for (let idx = 0; idx < chart.data.datasets.length; idx += 1) {
+          const baseDataset = chart.data.datasets[idx];
+          const seriesToUse = historicalSeries.datasets[idx] || historicalSeries.datasets.find((x) => x?.label === baseDataset.label);
+          if (!seriesToUse) continue;
+          const byLabel = Object.fromEntries((historicalSeries.labels || []).map((label, i) => [String(label), seriesToUse.data?.[i] ?? null]));
+          historyDatasets.push({
+            label: `${baseDataset.label} • ${comparison.label}`,
+            data: (chart.data.labels || []).map((label) => (String(label) in byLabel ? byLabel[String(label)] : null)),
+            borderWidth: 1,
+            tension: 0.2,
+            pointRadius: 0,
+            borderColor: baseDataset.borderColor || definition.color || '#7aa2ff',
+            borderDash: [6, 4],
+            hiddenInLegend: hasSingleSelectedSnapshot,
+            baseDatasetIndex: idx
+          });
+        }
+      }
+
+      chart.data.datasets.push(...historyDatasets);
+
+      if (historyDatasets.length) {
+        for (let idx = 0; idx < baseDatasetsCount; idx += 1) {
+          const linked = [];
+          for (let histIdx = baseDatasetsCount; histIdx < chart.data.datasets.length; histIdx += 1) {
+            const dataset = chart.data.datasets[histIdx];
+            if (dataset?.baseDatasetIndex === idx) linked.push(histIdx);
+          }
+          chart.data.datasets[idx].linkedHistoryIndices = linked;
+        }
+      }
+
+      chart.options.plugins.legend.labels.generateLabels = (legendChart) => {
+        const defaultGenerator = Chart.defaults.plugins.legend.labels.generateLabels;
+        return defaultGenerator(legendChart)
+          .filter((item) => !legendChart.data.datasets[item.datasetIndex]?.hiddenInLegend);
+      };
+      chart.options.plugins.legend.display = hasMultipleBaseDatasets || (!hasSingleSelectedSnapshot && historyDatasets.length > 0);
       applyHiddenSnapshotSeriesLabels(widget, chart);
+      syncLinkedHistoryVisibility(chart);
       chart.update();
       continue;
     }
@@ -542,7 +810,11 @@ function refreshCharts() {
 }
 
 function tickTabIfActive(tabId) {
-  if (state.activeTabId === tabId) refreshCharts();
+  if (state.activeTabId !== tabId) return;
+  const tab = activeTab();
+  const root = $('widgetsRoot');
+  if (tab && root) updateWidgetHistoryControls(root, tab);
+  refreshCharts();
 }
 
 function addWidget(type) {
@@ -750,11 +1022,14 @@ async function init() {
   const loaded = await window.appBridge.loadState();
   state.tabs = loaded.tabs || [];
   state.activeTabId = loaded.activeTabId || state.tabs[0]?.id;
+  state.historyByTab = loaded.historyByTab && typeof loaded.historyByTab === 'object'
+    ? loaded.historyByTab
+    : {};
 
   if (!state.tabs.length) addTab();
 
   for (const tab of state.tabs) {
-    state.historyByTab[tab.id] = [];
+    if (!Array.isArray(state.historyByTab[tab.id])) state.historyByTab[tab.id] = [];
     if (!tab.providerConfig.expiryStart) tab.providerConfig.expiryStart = tab.providerConfig.expiry || defaultExpiry();
     if (tab.providerConfig.expiryEnd == null) tab.providerConfig.expiryEnd = '';
     for (const widget of tab.widgets || []) {
