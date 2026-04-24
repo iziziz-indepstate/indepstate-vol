@@ -352,6 +352,35 @@ function renderWidgets() {
   root.querySelectorAll('.widget-card[data-widget-card-id]').forEach((card) => {
     const cardWidgetId = card.dataset.widgetCardId;
 
+    const setDragEnabled = (enabled) => {
+      card.draggable = Boolean(enabled);
+      if (enabled) {
+        card.removeAttribute('data-drag-disabled');
+      } else {
+        card.setAttribute('data-drag-disabled', 'true');
+      }
+    };
+
+    card.addEventListener('focusin', (evt) => {
+      if (!isInteractiveWidgetControl(evt.target)) return;
+      setDragEnabled(false);
+    });
+
+    card.addEventListener('focusout', () => {
+      const activeInsideCard = card.contains(document.activeElement);
+      if (!activeInsideCard) setDragEnabled(true);
+    });
+
+    card.addEventListener('pointerdown', (evt) => {
+      if (!isInteractiveWidgetControl(evt.target)) return;
+      setDragEnabled(false);
+    });
+
+    card.addEventListener('pointerup', () => {
+      const activeInsideCard = card.contains(document.activeElement);
+      if (!activeInsideCard) setDragEnabled(true);
+    });
+
     card.addEventListener('dragstart', (evt) => {
       if (isInteractiveWidgetControl(evt.target)) {
         evt.preventDefault();
@@ -367,6 +396,7 @@ function renderWidgets() {
       draggedWidgetId = null;
       card.classList.remove('is-dragging');
       root.querySelectorAll('.widget-card.drag-over').forEach((x) => x.classList.remove('drag-over'));
+      if (!card.contains(document.activeElement)) setDragEnabled(true);
     });
 
     card.addEventListener('dragover', (evt) => {
