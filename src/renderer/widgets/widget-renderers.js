@@ -20,6 +20,7 @@ export function createWidgetCard(widget, definition) {
   const expiryEndValue = String(widget?.config?.expiryEnd ?? definition?.defaultConfig?.expiryEnd ?? '');
   const tailStepsValue = Number(widget?.config?.tailSteps ?? definition?.defaultConfig?.tailSteps ?? 3);
   const strikeRangeValue = String(widget?.config?.strikeRange ?? definition?.defaultConfig?.strikeRange ?? '');
+  const isNDateSkewWidget = String(widget?.type || '').startsWith('ndate-skew-');
   const controls = Object.keys(controlsConfig).length
     ? `<div class="widget-controls widget-controls-inline">
         ${controlsConfig.strike ? `<label class="widget-control">S
@@ -36,6 +37,10 @@ export function createWidgetCard(widget, definition) {
         </label>` : ''}
         ${controlsConfig.tailSteps ? `<label class="widget-control">N
           <input type="number" min="1" class="widget-tail-steps-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.TAIL_STEPS}" value="${tailStepsValue}" />
+        </label>` : ''}
+        ${isNDateSkewWidget ? `<label class="widget-control widget-history-control">H
+          <select class="widget-history-select" multiple data-widget-history-widget-id="${widget.id}" title="Выберите один или несколько исторических снепшотов">
+          </select>
         </label>` : ''}
        </div>`
     : '';
@@ -56,17 +61,25 @@ function handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange) {
   const chart = legend?.chart;
   const datasetIndex = legendItem?.datasetIndex;
   if (!chart || !Number.isInteger(datasetIndex)) return;
+  const clickedDataset = chart.data.datasets?.[datasetIndex];
+  const linkedHistoryIndices = Array.isArray(clickedDataset?.linkedHistoryIndices)
+    ? clickedDataset.linkedHistoryIndices.filter((idx) => Number.isInteger(idx) && idx >= 0 && idx < chart.data.datasets.length)
+    : [];
+  const clickGroup = [datasetIndex, ...linkedHistoryIndices];
 
   const isCtrlClick = Boolean(evt?.native?.ctrlKey || evt?.ctrlKey);
   if (isCtrlClick) {
     const visibleIndices = chart.data.datasets
       .map((_, idx) => (chart.isDatasetVisible(idx) ? idx : null))
       .filter((idx) => idx != null);
-    const clickedIsVisible = chart.isDatasetVisible(datasetIndex);
-    const isAlreadyIsolated = clickedIsVisible && visibleIndices.length === 1 && visibleIndices[0] === datasetIndex;
+    const allGroupVisible = clickGroup.every((idx) => chart.isDatasetVisible(idx));
+    const visibleSet = new Set(visibleIndices);
+    const isAlreadyIsolated = allGroupVisible
+      && visibleIndices.length === clickGroup.length
+      && clickGroup.every((idx) => visibleSet.has(idx));
 
     chart.data.datasets.forEach((_, idx) => {
-      chart.setDatasetVisibility(idx, isAlreadyIsolated ? true : idx === datasetIndex);
+      chart.setDatasetVisibility(idx, isAlreadyIsolated ? true : clickGroup.includes(idx));
     });
     chart.update();
     if (typeof onLegendVisibilityChange === 'function') onLegendVisibilityChange(chart);
@@ -74,7 +87,7 @@ function handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange) {
   }
 
   const currentlyVisible = chart.isDatasetVisible(datasetIndex);
-  chart.setDatasetVisibility(datasetIndex, !currentlyVisible);
+  clickGroup.forEach((idx) => chart.setDatasetVisibility(idx, !currentlyVisible));
   chart.update();
   if (typeof onLegendVisibilityChange === 'function') onLegendVisibilityChange(chart);
 }

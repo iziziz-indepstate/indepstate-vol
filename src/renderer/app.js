@@ -91,7 +91,8 @@ function updatePollingControlsForActiveTab() {
 function persist() {
   window.appBridge.saveState({
     activeTabId: state.activeTabId,
-    tabs: state.tabs
+    tabs: state.tabs,
+    historyByTab: state.historyByTab
   });
 }
 
@@ -263,6 +264,69 @@ function destroyCharts() {
 function getHiddenSnapshotSeriesLabels(widget) {
   const hidden = widget?.config?.hiddenSnapshotSeriesLabels;
   return Array.isArray(hidden) ? hidden.filter((label) => typeof label === 'string' && label.trim()) : [];
+}
+
+function getSelectedHistorySnapshotTimes(widget) {
+  const selected = widget?.config?.historySnapshotTimes;
+  if (!Array.isArray(selected)) return [];
+  return selected
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+}
+
+function formatSnapshotOptionLabel(snapshot, idxFromEnd) {
+  const dt = new Date(snapshot?.time || 0);
+  const isValid = !Number.isNaN(dt.getTime());
+  const timeText = isValid ? dt.toLocaleString() : String(snapshot?.time || `Snapshot ${idxFromEnd}`);
+  return idxFromEnd > 0 ? `${timeText} (-${idxFromEnd})` : timeText;
+}
+
+function collectHistoricalComparisons(history, widget) {
+  const selectedSet = new Set(getSelectedHistorySnapshotTimes(widget));
+  if (!selectedSet.size || !Array.isArray(history) || history.length < 2) return [];
+
+  const latest = history[history.length - 1];
+  const out = [];
+  for (let idx = history.length - 2; idx >= 0; idx -= 1) {
+    const snapshot = history[idx];
+    const time = String(snapshot?.time || '');
+    if (!selectedSet.has(time)) continue;
+    const idxFromEnd = Math.max(1, history.length - 1 - idx);
+    out.push({
+      snapshot,
+      time,
+      idxFromEnd,
+      label: formatSnapshotOptionLabel(snapshot, idxFromEnd),
+      isLatestDuplicate: snapshot === latest
+    });
+  }
+  return out.filter((item) => !item.isLatestDuplicate);
+}
+
+function updateWidgetHistoryControls(root, tab) {
+  const history = Array.isArray(state.historyByTab?.[tab?.id]) ? state.historyByTab[tab.id] : [];
+  const latest = history[history.length - 1] || null;
+  const latestTime = String(latest?.time || '');
+
+  root.querySelectorAll('select[data-widget-history-widget-id]').forEach((select) => {
+    const widgetId = select.dataset.widgetHistoryWidgetId;
+    const widget = tab.widgets.find((w) => w.id === widgetId);
+    if (!widget) return;
+
+    widget.config ||= {};
+    const selectedTimes = new Set(getSelectedHistorySnapshotTimes(widget).filter((time) => time !== latestTime));
+    const optionsHtml = [];
+    for (let idx = history.length - 2; idx >= 0; idx -= 1) {
+      const snapshot = history[idx];
+      const time = String(snapshot?.time || '');
+      if (!time) continue;
+      const idxFromEnd = history.length - 1 - idx;
+      const selected = selectedTimes.has(time) ? ' selected' : '';
+      optionsHtml.push(`<option value="${time}"${selected}>${formatSnapshotOptionLabel(snapshot, idxFromEnd)}</option>`);
+    }
+    select.innerHTML = optionsHtml.join('');
+    select.disabled = optionsHtml.length === 0;
+  });
 }
 
 function syncHiddenSnapshotSeriesLabels(widget, chart) {
@@ -479,6 +543,19 @@ function renderWidgets() {
     });
   });
 
+  root.querySelectorAll('select[data-widget-history-widget-id]').forEach((select) => {
+    select.addEventListener('change', (evt) => {
+      const widgetId = evt.target.dataset.widgetHistoryWidgetId;
+      const target = tab.widgets.find((w) => w.id === widgetId);
+      if (!target) return;
+      target.config ||= {};
+      target.config.historySnapshotTimes = Array.from(evt.target.selectedOptions).map((option) => option.value);
+      refreshCharts();
+      persist();
+    });
+  });
+
+  updateWidgetHistoryControls(root, tab);
   refreshCharts();
 }
 
@@ -517,7 +594,69 @@ function refreshCharts() {
         }];
       }
 
-      chart.options.plugins.legend.display = chart.data.datasets.length > 1;
+      const hasMultipleBaseDatasets = chart.data.datasets.length > 1;
+      const historicalComparisons = collectHistoricalComparisons(history, widget);
+      const hasSingleSelectedSnapshot = historicalComparisons.length === 1;
+      const historyDatasets = [];
+      const baseDatasetsCount = chart.data.datasets.length;
+
+      for (const comparison of historicalComparisons) {
+        const historicalSeries = definition.buildSnapshotSeries(comparison.snapshot, widget);
+        if (!Array.isArray(historicalSeries?.labels) || !Array.isArray(historicalSeries?.datasets)) {
+          const baseDataset = chart.data.datasets[0];
+          if (!baseDataset) continue;
+          const byLabel = Object.fromEntries((historicalSeries?.labels || []).map((label, i) => [String(label), historicalSeries.values?.[i] ?? null]));
+          historyDatasets.push({
+            label: `${baseDataset.label} • ${comparison.label}`,
+            data: (chart.data.labels || []).map((label) => (String(label) in byLabel ? byLabel[String(label)] : null)),
+            borderWidth: 1,
+            tension: 0.2,
+            pointRadius: 0,
+            borderColor: baseDataset.borderColor || definition.color || '#7aa2ff',
+            borderDash: [6, 4],
+            hiddenInLegend: hasSingleSelectedSnapshot
+          });
+          continue;
+        }
+
+        for (let idx = 0; idx < chart.data.datasets.length; idx += 1) {
+          const baseDataset = chart.data.datasets[idx];
+          const seriesToUse = historicalSeries.datasets[idx] || historicalSeries.datasets.find((x) => x?.label === baseDataset.label);
+          if (!seriesToUse) continue;
+          const byLabel = Object.fromEntries((historicalSeries.labels || []).map((label, i) => [String(label), seriesToUse.data?.[i] ?? null]));
+          historyDatasets.push({
+            label: `${baseDataset.label} • ${comparison.label}`,
+            data: (chart.data.labels || []).map((label) => (String(label) in byLabel ? byLabel[String(label)] : null)),
+            borderWidth: 1,
+            tension: 0.2,
+            pointRadius: 0,
+            borderColor: baseDataset.borderColor || definition.color || '#7aa2ff',
+            borderDash: [6, 4],
+            hiddenInLegend: hasSingleSelectedSnapshot,
+            baseDatasetIndex: idx
+          });
+        }
+      }
+
+      chart.data.datasets.push(...historyDatasets);
+
+      if (historyDatasets.length) {
+        for (let idx = 0; idx < baseDatasetsCount; idx += 1) {
+          const linked = [];
+          for (let histIdx = baseDatasetsCount; histIdx < chart.data.datasets.length; histIdx += 1) {
+            const dataset = chart.data.datasets[histIdx];
+            if (dataset?.baseDatasetIndex === idx) linked.push(histIdx);
+          }
+          chart.data.datasets[idx].linkedHistoryIndices = linked;
+        }
+      }
+
+      chart.options.plugins.legend.labels.generateLabels = (legendChart) => {
+        const defaultGenerator = Chart.defaults.plugins.legend.labels.generateLabels;
+        return defaultGenerator(legendChart)
+          .filter((item) => !legendChart.data.datasets[item.datasetIndex]?.hiddenInLegend);
+      };
+      chart.options.plugins.legend.display = hasMultipleBaseDatasets || (!hasSingleSelectedSnapshot && historyDatasets.length > 0);
       applyHiddenSnapshotSeriesLabels(widget, chart);
       chart.update();
       continue;
@@ -542,7 +681,11 @@ function refreshCharts() {
 }
 
 function tickTabIfActive(tabId) {
-  if (state.activeTabId === tabId) refreshCharts();
+  if (state.activeTabId !== tabId) return;
+  const tab = activeTab();
+  const root = $('widgetsRoot');
+  if (tab && root) updateWidgetHistoryControls(root, tab);
+  refreshCharts();
 }
 
 function addWidget(type) {
@@ -750,11 +893,14 @@ async function init() {
   const loaded = await window.appBridge.loadState();
   state.tabs = loaded.tabs || [];
   state.activeTabId = loaded.activeTabId || state.tabs[0]?.id;
+  state.historyByTab = loaded.historyByTab && typeof loaded.historyByTab === 'object'
+    ? loaded.historyByTab
+    : {};
 
   if (!state.tabs.length) addTab();
 
   for (const tab of state.tabs) {
-    state.historyByTab[tab.id] = [];
+    if (!Array.isArray(state.historyByTab[tab.id])) state.historyByTab[tab.id] = [];
     if (!tab.providerConfig.expiryStart) tab.providerConfig.expiryStart = tab.providerConfig.expiry || defaultExpiry();
     if (tab.providerConfig.expiryEnd == null) tab.providerConfig.expiryEnd = '';
     for (const widget of tab.widgets || []) {

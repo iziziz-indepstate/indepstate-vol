@@ -350,6 +350,18 @@ canvas {
   flex: 1;
 }
 
+.widget-history-control {
+  align-items: flex-start;
+}
+
+.widget-history-select {
+  min-width: 146px;
+  width: 146px !important;
+  max-height: 74px;
+  padding: 2px 4px;
+  font-size: 11px;
+}
+
 .btn-icon {
   width: 24px;
   min-width: 24px;
