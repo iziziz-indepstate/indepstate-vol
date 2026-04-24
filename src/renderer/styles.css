@@ -307,6 +307,18 @@ input, select {
   font-size: 11px;
 }
 
+.widgets-history-sidecar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.widgets-history-sidecar-delete {
+  font-size: 10px;
+  padding: 3px 6px;
+  border-radius: 7px;
+}
+
 .widgets-history-sidecar-close {
   width: 20px;
   min-width: 20px;

@@ -324,13 +324,15 @@ function updateWidgetHistoryControls(root, tab) {
   const sidecarBody = root.querySelector('[data-history-sidecar-body]');
   const sidecarTitle = root.querySelector('[data-history-sidecar-title]');
   const sidecarClose = root.querySelector('[data-history-sidecar-close]');
+  const sidecarDelete = root.querySelector('[data-history-sidecar-delete]');
 
-  if (!sidecar || !sidecarBody || !sidecarTitle || !sidecarClose) return;
+  if (!sidecar || !sidecarBody || !sidecarTitle || !sidecarClose || !sidecarDelete) return;
 
   if (!hasComparableHistory || !widget || !String(widget?.type || '').startsWith('ndate-skew-')) {
     sidecar.hidden = true;
     sidecarBody.innerHTML = '';
     sidecarTitle.textContent = 'history';
+    sidecarDelete.disabled = true;
     return;
   }
 
@@ -358,6 +360,7 @@ function updateWidgetHistoryControls(root, tab) {
     : '<div class="widget-history-empty">no history</div>';
   sidecar.hidden = false;
   sidecarClose.disabled = false;
+  sidecarDelete.disabled = optionsHtml.length === 0;
 }
 
 function syncHiddenSnapshotSeriesLabels(widget, chart) {
@@ -425,7 +428,10 @@ function renderWidgets() {
   sidecar.innerHTML = `
     <div class="widgets-history-sidecar-header">
       <span data-history-sidecar-title>history</span>
-      <button type="button" class="btn btn-icon widgets-history-sidecar-close" data-history-sidecar-close aria-label="Close history panel">✕</button>
+      <div class="widgets-history-sidecar-actions">
+        <button type="button" class="btn widgets-history-sidecar-delete" data-history-sidecar-delete>delete unselected</button>
+        <button type="button" class="btn btn-icon widgets-history-sidecar-close" data-history-sidecar-close aria-label="Close history panel">✕</button>
+      </div>
     </div>
     <div class="widgets-history-sidecar-body" data-history-sidecar-body></div>
   `;
@@ -647,16 +653,35 @@ function renderWidgets() {
     });
   });
 
-  root.querySelectorAll('input[data-widget-history-option-widget-id]').forEach((checkbox) => {
-    checkbox.addEventListener('change', (evt) => {
-      const widgetId = evt.target.dataset.widgetHistoryOptionWidgetId;
-      if (!applyHistorySelection(widgetId)) return;
-      refreshCharts();
-      persist();
-    });
+  root.querySelector('[data-history-sidecar-body]')?.addEventListener('change', (evt) => {
+    const widgetId = evt.target?.dataset?.widgetHistoryOptionWidgetId;
+    if (!widgetId) return;
+    if (!applyHistorySelection(widgetId)) return;
+    refreshCharts();
+    persist();
   });
 
   root.querySelector('[data-history-sidecar-close]')?.addEventListener('click', closeHistorySidecar);
+  root.querySelector('[data-history-sidecar-delete]')?.addEventListener('click', () => {
+    const widget = tab.widgets.find((w) => w.id === historySidecarWidgetId);
+    if (!widget) return;
+
+    const selected = new Set(getSelectedHistorySnapshotTimes(widget));
+    const history = Array.isArray(state.historyByTab[tab.id]) ? state.historyByTab[tab.id] : [];
+    const latest = history[history.length - 1] || null;
+    const latestTime = String(latest?.time || '');
+
+    state.historyByTab[tab.id] = history.filter((snapshot) => {
+      const time = String(snapshot?.time || '');
+      if (!time) return false;
+      if (time === latestTime) return true;
+      return selected.has(time);
+    });
+
+    updateWidgetHistoryControls(root, tab);
+    refreshCharts();
+    persist();
+  });
 
   updateWidgetHistoryControls(root, tab);
   refreshCharts();
