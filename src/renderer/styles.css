@@ -351,7 +351,6 @@ canvas {
 }
 
 .widget-history-control {
-  position: relative;
   align-items: center;
 }
 
@@ -371,10 +370,7 @@ canvas {
   opacity: 0.55;
 }
 
-.widget-history-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
+.widget-history-drawer {
   min-width: 170px;
   max-height: 150px;
   overflow: auto;
@@ -382,7 +378,20 @@ canvas {
   border-radius: 8px;
   background: rgba(15, 17, 22, 0.98);
   padding: 5px;
-  z-index: 5;
+  z-index: 6;
+}
+
+.widget-history-drawer {
+  position: absolute;
+  left: 8px;
+  top: 34px;
+  bottom: 10px;
+  width: 180px;
+}
+
+.widget-card.is-history-open .widget-title,
+.widget-card.is-history-open canvas {
+  margin-left: 188px;
 }
 
 .widget-history-option {

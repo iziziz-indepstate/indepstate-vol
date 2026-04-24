@@ -40,7 +40,6 @@ export function createWidgetCard(widget, definition) {
         </label>` : ''}
         ${isNDateSkewWidget ? `<div class="widget-control widget-history-control">
           <button type="button" class="widget-history-toggle" data-widget-history-toggle-widget-id="${widget.id}" title="History">history</button>
-          <div class="widget-history-menu" data-widget-history-widget-id="${widget.id}" hidden></div>
         </div>` : ''}
        </div>`
     : '';
@@ -51,6 +50,7 @@ export function createWidgetCard(widget, definition) {
       <h3>${widget.title || definition.defaultTitle}</h3>
       ${controls}
     </div>
+    ${isNDateSkewWidget ? `<aside class="widget-history-drawer" data-widget-history-widget-id="${widget.id}" hidden></aside>` : ''}
     <canvas id="canvas-${widget.id}"></canvas>
   `;
 

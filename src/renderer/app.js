@@ -312,8 +312,8 @@ function updateWidgetHistoryControls(root, tab) {
   const latest = history[history.length - 1] || null;
   const latestTime = String(latest?.time || '');
 
-  root.querySelectorAll('[data-widget-history-widget-id]').forEach((menu) => {
-    const widgetId = menu.dataset.widgetHistoryWidgetId;
+  root.querySelectorAll('[data-widget-history-widget-id]').forEach((drawer) => {
+    const widgetId = drawer.dataset.widgetHistoryWidgetId;
     const widget = tab.widgets.find((w) => w.id === widgetId);
     if (!widget) return;
 
@@ -334,14 +334,19 @@ function updateWidgetHistoryControls(root, tab) {
         </label>
       `);
     }
-    menu.innerHTML = optionsHtml.length
+    drawer.innerHTML = optionsHtml.length
       ? optionsHtml.join('')
       : '<div class="widget-history-empty">no history</div>';
 
     const toggle = root.querySelector(`[data-widget-history-toggle-widget-id="${widgetId}"]`);
     if (toggle) {
-      toggle.disabled = optionsHtml.length === 0;
-      toggle.classList.toggle('is-empty', optionsHtml.length === 0);
+      const isEmpty = optionsHtml.length === 0;
+      toggle.disabled = isEmpty;
+      toggle.classList.toggle('is-empty', isEmpty);
+      if (isEmpty) {
+        drawer.hidden = true;
+        drawer.closest('.widget-card')?.classList.remove('is-history-open');
+      }
     }
   });
 }
@@ -583,6 +588,11 @@ function renderWidgets() {
     return true;
   };
 
+  const closeAllHistoryDrawers = () => {
+    root.querySelectorAll('.widget-history-drawer').forEach((node) => { node.hidden = true; });
+    root.querySelectorAll('.widget-card.is-history-open').forEach((card) => card.classList.remove('is-history-open'));
+  };
+
   root.querySelectorAll('[data-widget-history-toggle-widget-id]').forEach((toggleBtn) => {
     toggleBtn.addEventListener('click', (evt) => {
       const widgetId = evt.currentTarget.dataset.widgetHistoryToggleWidgetId;
@@ -610,11 +620,16 @@ function renderWidgets() {
         return;
       }
 
-      const menu = root.querySelector(`[data-widget-history-widget-id="${widgetId}"]`);
-      if (!menu || toggleBtn.disabled) return;
-      const willOpen = menu.hidden;
-      root.querySelectorAll('.widget-history-menu').forEach((node) => { node.hidden = true; });
-      if (willOpen) menu.hidden = false;
+      const drawer = root.querySelector(`[data-widget-history-widget-id="${widgetId}"]`);
+      const card = toggleBtn.closest('.widget-card');
+      if (!drawer || !card || toggleBtn.disabled) return;
+
+      const willOpen = drawer.hidden;
+      closeAllHistoryDrawers();
+      if (willOpen) {
+        drawer.hidden = false;
+        card.classList.add('is-history-open');
+      }
     });
   });
 
@@ -630,7 +645,8 @@ function renderWidgets() {
   if (!root.dataset.historyDropdownBound) {
     root.addEventListener('click', (evt) => {
       if (evt.target.closest('.widget-history-control')) return;
-      root.querySelectorAll('.widget-history-menu').forEach((node) => { node.hidden = true; });
+      if (evt.target.closest('.widget-history-drawer')) return;
+      closeAllHistoryDrawers();
     });
     root.dataset.historyDropdownBound = 'true';
   }
