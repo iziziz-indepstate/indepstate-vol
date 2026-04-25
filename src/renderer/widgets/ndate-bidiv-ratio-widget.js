@@ -134,16 +134,67 @@ function filterByWidgetExpiry(entries, widget) {
   return entries.filter(([expiry]) => expiry >= start && expiry <= end);
 }
 
+
+function buildCenterPoint(expiry, snapshot, reference, putStrikes, callStrikes) {
+  const putSet = new Set(putStrikes.map((strike) => normalizeDistanceKey(strike)));
+  const common = callStrikes.filter((strike) => putSet.has(normalizeDistanceKey(strike)));
+  if (!common.length) return null;
+
+  const centerStrike = common.reduce((best, strike) => {
+    if (!Number.isFinite(best)) return strike;
+    return Math.abs(strike - reference) < Math.abs(best - reference) ? strike : best;
+  }, Number.NaN);
+
+  if (!Number.isFinite(centerStrike)) return null;
+
+  const putBid = Number(snapshot?.putBidByStrike?.[centerStrike]);
+  const putIv = Number(snapshot?.putIvByStrike?.[centerStrike]);
+  const callBid = Number(snapshot?.callBidByStrike?.[centerStrike]);
+  const callIv = Number(snapshot?.callIvByStrike?.[centerStrike]);
+  if (![putBid, putIv, callBid, callIv].every(Number.isFinite)) return null;
+  if (putIv === 0 || callIv === 0) return null;
+
+  const putBidIV = putBid / putIv;
+  const callBidIV = callBid / callIv;
+  if (!Number.isFinite(putBidIV) || !Number.isFinite(callBidIV) || callBidIV === 0) return null;
+
+  const ratio = putBidIV / callBidIV;
+  if (!Number.isFinite(ratio)) return null;
+
+  return {
+    strike: centerStrike,
+    ratio,
+    meta: {
+      expiration: expiry,
+      reference,
+      putStrike: centerStrike,
+      callStrike: centerStrike,
+      putBid,
+      putIv,
+      callBid,
+      callIv,
+      putBidIV,
+      callBidIV,
+      ratio,
+      discount: 1 - ratio,
+      xSide: 'center'
+    }
+  };
+}
+
 function buildSingleExpirySeries(expiry, snapshot, widget) {
   const reference = resolveReferenceLevel(snapshot, widget);
   if (!Number.isFinite(reference)) return { labels: [], values: [], pointMeta: [] };
 
-  const putStrikes = Array.isArray(snapshot?.putStrikesAsc)
-    ? snapshot.putStrikesAsc.filter((strike) => Number.isFinite(strike) && strike < reference)
+  const putStrikesAll = Array.isArray(snapshot?.putStrikesAsc)
+    ? snapshot.putStrikesAsc.filter((strike) => Number.isFinite(strike))
     : [];
-  const callStrikes = Array.isArray(snapshot?.callStrikesAsc)
-    ? snapshot.callStrikesAsc.filter((strike) => Number.isFinite(strike) && strike > reference)
+  const callStrikesAll = Array.isArray(snapshot?.callStrikesAsc)
+    ? snapshot.callStrikesAsc.filter((strike) => Number.isFinite(strike))
     : [];
+
+  const putStrikes = putStrikesAll.filter((strike) => strike < reference);
+  const callStrikes = callStrikesAll.filter((strike) => strike > reference);
 
   if (!putStrikes.length || !callStrikes.length) return { labels: [], values: [], pointMeta: [] };
 
@@ -217,11 +268,8 @@ function buildSingleExpirySeries(expiry, snapshot, widget) {
     });
   }
 
-  rows.push({
-    strike: reference,
-    ratio: null,
-    meta: null
-  });
+  const centerPoint = buildCenterPoint(expiry, snapshot, reference, putStrikesAll, callStrikesAll);
+  if (centerPoint) rows.push(centerPoint);
 
   rows.sort((a, b) => a.strike - b.strike);
 
