@@ -203,10 +203,32 @@ function buildSingleExpirySeries(expiry, snapshot, widget) {
 
   const points = candidatePoints.filter((point) => selectedKeys.has(normalizeDistanceKey(point.distance)));
 
+  const rows = [];
+  for (const point of points) {
+    rows.push({
+      strike: point.meta.putStrike,
+      ratio: point.ratio,
+      meta: { ...point.meta, xSide: 'put' }
+    });
+    rows.push({
+      strike: point.meta.callStrike,
+      ratio: point.ratio,
+      meta: { ...point.meta, xSide: 'call' }
+    });
+  }
+
+  rows.push({
+    strike: reference,
+    ratio: null,
+    meta: null
+  });
+
+  rows.sort((a, b) => a.strike - b.strike);
+
   return {
-    labels: points.map((point) => String(Math.round(point.distance * 1e6) / 1e6)),
-    values: points.map((point) => point.ratio),
-    pointMeta: points.map((point) => point.meta)
+    labels: rows.map((row) => String(Math.round(row.strike * 1e6) / 1e6)),
+    values: rows.map((row) => row.ratio),
+    pointMeta: rows.map((row) => row.meta)
   };
 }
 
@@ -221,6 +243,7 @@ function formatRatioTooltip(context) {
 
   return [
     `expiration: ${meta.expiration}`,
+    `x side: ${meta.xSide || 'pair'}`,
     `put strike: ${formatNumber(meta.putStrike, 3)}`,
     `call strike: ${formatNumber(meta.callStrike, 3)}`,
     `put bid: ${formatNumber(meta.putBid, 4)}`,
