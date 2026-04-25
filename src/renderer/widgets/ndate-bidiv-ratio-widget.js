@@ -13,15 +13,114 @@ function normalizeDistanceKey(distance) {
   return String(Math.round(distance * 1e6) / 1e6);
 }
 
+const DEFAULT_SR_PATTERN = [5, 5, 5, 10];
+const DEFAULT_SR_POINTS = 10;
+
+function normalizeStrikeRangeConfig(raw) {
+  if (raw == null || raw === '') return { mode: 'pattern', pattern: DEFAULT_SR_PATTERN };
+
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return { mode: 'count', count: Math.max(1, Math.floor(raw)) };
+  }
+
+  if (Array.isArray(raw)) {
+    const pattern = raw
+      .map((x) => Number(x))
+      .filter((x) => Number.isFinite(x) && x > 0);
+    return pattern.length
+      ? { mode: 'pattern', pattern }
+      : { mode: 'pattern', pattern: DEFAULT_SR_PATTERN };
+  }
+
+  const asText = String(raw).trim();
+  if (!asText) return { mode: 'pattern', pattern: DEFAULT_SR_PATTERN };
+
+  const numeric = Number(asText);
+  if (Number.isFinite(numeric)) return { mode: 'count', count: Math.max(1, Math.floor(numeric)) };
+
+  if (asText.startsWith('[') && asText.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(asText);
+      if (Array.isArray(parsed)) return normalizeStrikeRangeConfig(parsed);
+    } catch {
+      return { mode: 'pattern', pattern: DEFAULT_SR_PATTERN };
+    }
+  }
+
+  return { mode: 'pattern', pattern: DEFAULT_SR_PATTERN };
+}
+
+function offsetsFromPattern(pattern, pointCount) {
+  const out = [];
+  let acc = 0;
+  for (let i = 0; i < pointCount; i += 1) {
+    const step = Number(pattern[i % pattern.length]);
+    if (!Number.isFinite(step) || step <= 0) continue;
+    acc += step;
+    out.push(acc);
+  }
+  return out;
+}
+
+function inferBaseStep(reference, putStrikes, callStrikes) {
+  const strikesAsc = Array.from(new Set([
+    ...putStrikes,
+    ...callStrikes,
+    reference
+  ])).filter(Number.isFinite).sort((a, b) => a - b);
+
+  const anchorIdx = strikesAsc.findIndex((strike) => strike >= reference);
+  const centerIdx = anchorIdx >= 0 ? anchorIdx : strikesAsc.length - 1;
+  const from = Math.max(1, centerIdx - 4);
+  const to = Math.min(strikesAsc.length - 1, centerIdx + 4);
+
+  const diffs = [];
+  for (let i = from; i <= to; i += 1) {
+    const diff = Math.abs(strikesAsc[i] - strikesAsc[i - 1]);
+    if (Number.isFinite(diff) && diff > 0) diffs.push(diff);
+  }
+
+  return diffs.length ? Math.min(...diffs) : 5;
+}
+
+function pickDistances(distancesAsc, reference, putStrikes, callStrikes, strikeRangeConfig) {
+  const normalized = normalizeStrikeRangeConfig(strikeRangeConfig);
+  if (normalized.mode === 'count') return distancesAsc.slice(0, normalized.count);
+
+  const baseStep = inferBaseStep(reference, putStrikes, callStrikes);
+  const offsets = offsetsFromPattern(normalized.pattern, DEFAULT_SR_POINTS);
+  const selected = [];
+  const used = new Set();
+
+  for (const offsetSteps of offsets) {
+    const targetDistance = baseStep * offsetSteps;
+    const picked = distancesAsc.find((distance) => distance >= targetDistance && !used.has(normalizeDistanceKey(distance)));
+    if (!Number.isFinite(picked)) continue;
+    const key = normalizeDistanceKey(picked);
+    used.add(key);
+    selected.push(picked);
+  }
+
+  return selected;
+}
+
+function toFiniteOrNull(raw) {
+  if (raw == null || raw === '') return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function resolveReferenceLevel(snapshot, widget) {
-  const forward = Number(snapshot?.forward ?? snapshot?.fwd ?? snapshot?.F ?? snapshot?.f);
-  if (Number.isFinite(forward)) return forward;
+  const forwardCandidates = [snapshot?.forward, snapshot?.fwd, snapshot?.F, snapshot?.f]
+    .map(toFiniteOrNull)
+    .filter((value) => Number.isFinite(value) && value > 0);
+  if (forwardCandidates.length) return forwardCandidates[0];
 
-  const configured = Number(widget?.config?.baseStrike);
-  if (Number.isFinite(configured)) return configured;
+  const configured = toFiniteOrNull(widget?.config?.baseStrike);
+  if (Number.isFinite(configured) && configured > 0) return configured;
 
-  const spot = Number(snapshot?.px ?? snapshot?.S);
-  if (Number.isFinite(spot)) return spot;
+  const spot = toFiniteOrNull(snapshot?.px ?? snapshot?.S);
+  if (Number.isFinite(spot) && spot > 0) return spot;
 
   return null;
 }
@@ -55,7 +154,7 @@ function buildSingleExpirySeries(expiry, snapshot, widget) {
     callByDistance.set(normalizeDistanceKey(distance), strike);
   }
 
-  const points = [];
+  const candidatePoints = [];
   for (const putStrike of putStrikes) {
     const distance = reference - putStrike;
     if (!Number.isFinite(distance) || distance <= 0) continue;
@@ -77,7 +176,7 @@ function buildSingleExpirySeries(expiry, snapshot, widget) {
     const ratio = putBidIV / callBidIV;
     if (!Number.isFinite(ratio)) continue;
 
-    points.push({
+    candidatePoints.push({
       distance,
       ratio,
       meta: {
@@ -97,7 +196,12 @@ function buildSingleExpirySeries(expiry, snapshot, widget) {
     });
   }
 
-  points.sort((a, b) => a.distance - b.distance);
+  candidatePoints.sort((a, b) => a.distance - b.distance);
+  const candidateDistances = candidatePoints.map((point) => point.distance);
+  const selectedDistances = pickDistances(candidateDistances, reference, putStrikes, callStrikes, widget?.config?.strikeRange);
+  const selectedKeys = new Set(selectedDistances.map((distance) => normalizeDistanceKey(distance)));
+
+  const points = candidatePoints.filter((point) => selectedKeys.has(normalizeDistanceKey(point.distance)));
 
   return {
     labels: points.map((point) => String(Math.round(point.distance * 1e6) / 1e6)),
@@ -139,12 +243,14 @@ export const nDateSkewBidIVRatioWidget = {
   defaultConfig: {
     baseStrike: 500,
     expiryStart: '',
-    expiryEnd: ''
+    expiryEnd: '',
+    strikeRange: ''
   },
   controls: {
     strike: true,
     expiryStart: true,
     expiryEnd: true,
+    strikeRange: true,
     strikeInputType: 'number'
   },
   buildSnapshotSeries: (snapshot, widget) => {
