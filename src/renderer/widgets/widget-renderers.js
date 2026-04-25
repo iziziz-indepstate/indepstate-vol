@@ -166,11 +166,11 @@ export function createWidgetChart(ctx, definition, options = {}) {
       },
       interaction: {
         mode: 'nearest',
-        intersect: false
+        intersect: true
       },
       plugins: {
         tooltip: {
-          intersect: false,
+          intersect: true,
           filter: (tooltipItem) => Boolean(tooltipItem?.chart?.$altTooltipPressed),
           callbacks: {
             label: tooltipLabelCallback
