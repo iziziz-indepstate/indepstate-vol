@@ -82,6 +82,17 @@ function hideTooltip(chart) {
   chart.update('none');
 }
 
+
+function applyAltTooltipState(chart, isPressed) {
+  if (!chart) return;
+  chart.$altTooltipPressed = Boolean(isPressed);
+  if (!chart.$altTooltipPressed) {
+    hideTooltip(chart);
+    return;
+  }
+  if (chart.$pointerInside) chart.update('none');
+}
+
 function handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange) {
   const chart = legend?.chart;
   const datasetIndex = legendItem?.datasetIndex;
@@ -120,7 +131,7 @@ function handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange) {
 export function createWidgetChart(ctx, definition, options = {}) {
   const onLegendVisibilityChange = options?.onLegendVisibilityChange;
   const hideXAxisValues = Boolean(definition?.hideXAxisValues);
-  return new Chart(ctx, {
+  const chart = new Chart(ctx, {
     type: 'line',
     data: {
       labels: [],
@@ -137,11 +148,14 @@ export function createWidgetChart(ctx, definition, options = {}) {
     options: {
       responsive: true,
       onHover: (evt, _active, chart) => {
+        chart.$pointerInside = true;
         const altPressed = Boolean(evt?.native?.altKey || evt?.altKey);
-        chart.$altTooltipPressed = altPressed;
-        if (!altPressed) hideTooltip(chart);
+        applyAltTooltipState(chart, altPressed);
       },
-      onLeave: (_evt, _active, chart) => hideTooltip(chart),
+      onLeave: (_evt, _active, chart) => {
+        chart.$pointerInside = false;
+        hideTooltip(chart);
+      },
       animation: false,
       scales: {
         x: {
@@ -175,4 +189,28 @@ export function createWidgetChart(ctx, definition, options = {}) {
       }
     }
   });
+
+  chart.$pointerInside = false;
+  chart.$altTooltipPressed = false;
+
+  const handleKeyDown = (evt) => {
+    if (evt?.key !== 'Alt') return;
+    applyAltTooltipState(chart, true);
+  };
+  const handleKeyUp = (evt) => {
+    if (evt?.key !== 'Alt') return;
+    applyAltTooltipState(chart, false);
+  };
+
+  window.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('keyup', handleKeyUp);
+
+  const originalDestroy = chart.destroy.bind(chart);
+  chart.destroy = (...args) => {
+    window.removeEventListener('keydown', handleKeyDown);
+    window.removeEventListener('keyup', handleKeyUp);
+    return originalDestroy(...args);
+  };
+
+  return chart;
 }
