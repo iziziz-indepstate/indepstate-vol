@@ -56,6 +56,42 @@ export function createWidgetCard(widget, definition) {
   return card;
 }
 
+
+function defaultTooltipLabel(context) {
+  const datasetLabel = context?.dataset?.label ? `${context.dataset.label}: ` : '';
+  const y = context?.parsed?.y;
+  return `${datasetLabel}${Number.isFinite(y) ? y : 'n/a'}`;
+}
+
+function tooltipLabelCallback(context) {
+  const formatter = context?.dataset?.tooltipFormatter;
+  if (typeof formatter === 'function') {
+    const formatted = formatter(context);
+    if (Array.isArray(formatted)) return formatted;
+    if (formatted == null) return '';
+    return String(formatted);
+  }
+
+  return defaultTooltipLabel(context);
+}
+
+
+function hideTooltip(chart) {
+  if (!chart?.tooltip) return;
+  chart.tooltip.setActiveElements([], { x: 0, y: 0 });
+  chart.update('none');
+}
+
+function applyAltTooltipState(chart, isPressed) {
+  if (!chart) return;
+  chart.$altTooltipPressed = Boolean(isPressed);
+  if (!chart.$altTooltipPressed) {
+    hideTooltip(chart);
+    return;
+  }
+  if (chart.$pointerInside) chart.update('none');
+}
+
 function handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange) {
   const chart = legend?.chart;
   const datasetIndex = legendItem?.datasetIndex;
@@ -94,7 +130,7 @@ function handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange) {
 export function createWidgetChart(ctx, definition, options = {}) {
   const onLegendVisibilityChange = options?.onLegendVisibilityChange;
   const hideXAxisValues = Boolean(definition?.hideXAxisValues);
-  return new Chart(ctx, {
+  const chart = new Chart(ctx, {
     type: 'line',
     data: {
       labels: [],
@@ -103,11 +139,22 @@ export function createWidgetChart(ctx, definition, options = {}) {
         borderWidth: 1,
         tension: 0.2,
         pointRadius: 0,
+        pointHitRadius: 14,
+        pointHoverRadius: 4,
         borderColor: definition.color || '#7aa2ff'
       }]
     },
     options: {
       responsive: true,
+      onHover: (evt, _active, chart) => {
+        chart.$pointerInside = true;
+        const altPressed = Boolean(evt?.native?.altKey || evt?.altKey);
+        applyAltTooltipState(chart, altPressed);
+      },
+      onLeave: (_evt, _active, chart) => {
+        chart.$pointerInside = false;
+        hideTooltip(chart);
+      },
       animation: false,
       scales: {
         x: {
@@ -116,7 +163,18 @@ export function createWidgetChart(ctx, definition, options = {}) {
           }
         }
       },
+      interaction: {
+        mode: 'nearest',
+        intersect: true
+      },
       plugins: {
+        tooltip: {
+          intersect: true,
+          filter: (tooltipItem) => Boolean(tooltipItem?.chart?.$altTooltipPressed),
+          callbacks: {
+            label: tooltipLabelCallback
+          }
+        },
         legend: {
           display: false,
           onClick: (evt, legendItem, legend) => handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange),
@@ -130,4 +188,28 @@ export function createWidgetChart(ctx, definition, options = {}) {
       }
     }
   });
+
+  chart.$pointerInside = false;
+  chart.$altTooltipPressed = false;
+
+  const handleKeyDown = (evt) => {
+    if (evt?.key !== 'Alt') return;
+    applyAltTooltipState(chart, true);
+  };
+  const handleKeyUp = (evt) => {
+    if (evt?.key !== 'Alt') return;
+    applyAltTooltipState(chart, false);
+  };
+
+  window.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('keyup', handleKeyUp);
+
+  const originalDestroy = chart.destroy.bind(chart);
+  chart.destroy = (...args) => {
+    window.removeEventListener('keydown', handleKeyDown);
+    window.removeEventListener('keyup', handleKeyUp);
+    return originalDestroy(...args);
+  };
+
+  return chart;
 }
