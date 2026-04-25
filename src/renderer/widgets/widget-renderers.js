@@ -82,6 +82,19 @@ function hideTooltip(chart) {
   chart.update('none');
 }
 
+function updateTooltipFromHoverEvent(chart, evt) {
+  if (!chart || !evt) return;
+  const active = chart.getElementsAtEventForMode(evt, 'point', { intersect: true }, false) || [];
+  if (!active.length) {
+    hideTooltip(chart);
+    return;
+  }
+
+  const activeElements = active.map(({ datasetIndex, index }) => ({ datasetIndex, index }));
+  chart.tooltip.setActiveElements(activeElements, { x: evt.x ?? 0, y: evt.y ?? 0 });
+  chart.update('none');
+}
+
 
 function applyAltTooltipState(chart, isPressed) {
   if (!chart) return;
@@ -90,7 +103,7 @@ function applyAltTooltipState(chart, isPressed) {
     hideTooltip(chart);
     return;
   }
-  if (chart.$pointerInside) chart.update('none');
+  if (chart.$pointerInside) updateTooltipFromHoverEvent(chart, chart.$lastHoverEvent);
 }
 
 function handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange) {
@@ -139,9 +152,9 @@ export function createWidgetChart(ctx, definition, options = {}) {
         data: [],
         borderWidth: 1,
         tension: 0.2,
-        pointRadius: 0,
-        pointHitRadius: 14,
-        pointHoverRadius: 4,
+        pointRadius: 2,
+        pointHitRadius: 3,
+        pointHoverRadius: 5,
         borderColor: definition.color || '#7aa2ff'
       }]
     },
@@ -149,11 +162,18 @@ export function createWidgetChart(ctx, definition, options = {}) {
       responsive: true,
       onHover: (evt, _active, chart) => {
         chart.$pointerInside = true;
+        chart.$lastHoverEvent = evt;
         const altPressed = Boolean(evt?.native?.altKey || evt?.altKey);
-        applyAltTooltipState(chart, altPressed);
+        if (!altPressed) {
+          applyAltTooltipState(chart, false);
+          return;
+        }
+        chart.$altTooltipPressed = true;
+        updateTooltipFromHoverEvent(chart, evt);
       },
       onLeave: (_evt, _active, chart) => {
         chart.$pointerInside = false;
+        chart.$lastHoverEvent = null;
         hideTooltip(chart);
       },
       animation: false,
@@ -165,11 +185,13 @@ export function createWidgetChart(ctx, definition, options = {}) {
         }
       },
       interaction: {
-        mode: 'nearest',
-        intersect: true
+        mode: 'point',
+        intersect: true,
+        axis: 'xy'
       },
       plugins: {
         tooltip: {
+          mode: 'point',
           intersect: true,
           filter: (tooltipItem) => Boolean(tooltipItem?.chart?.$altTooltipPressed),
           callbacks: {
@@ -192,6 +214,7 @@ export function createWidgetChart(ctx, definition, options = {}) {
 
   chart.$pointerInside = false;
   chart.$altTooltipPressed = false;
+  chart.$lastHoverEvent = null;
 
   const handleKeyDown = (evt) => {
     if (evt?.key !== 'Alt') return;
