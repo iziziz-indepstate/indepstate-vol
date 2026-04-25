@@ -11,6 +11,7 @@ import {
   nDateSkewCallWidget,
   nDateSkewBidCallWidget
 } from './ndate-call-skew-widget.js';
+import { nDateSkewBidIVRatioWidget } from './ndate-bidiv-ratio-widget.js';
 
 export const widgetDefinitions = [
   atmSkewWidget,
@@ -21,7 +22,8 @@ export const widgetDefinitions = [
   nDateSkewPutWidget,
   nDateSkewCallWidget,
   nDateSkewBidPutWidget,
-  nDateSkewBidCallWidget
+  nDateSkewBidCallWidget,
+  nDateSkewBidIVRatioWidget
 ];
 
 export const widgetRegistry = Object.fromEntries(widgetDefinitions.map((d) => [d.type, d]));

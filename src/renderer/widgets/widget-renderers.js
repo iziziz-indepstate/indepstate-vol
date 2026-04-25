@@ -56,6 +56,25 @@ export function createWidgetCard(widget, definition) {
   return card;
 }
 
+
+function defaultTooltipLabel(context) {
+  const datasetLabel = context?.dataset?.label ? `${context.dataset.label}: ` : '';
+  const y = context?.parsed?.y;
+  return `${datasetLabel}${Number.isFinite(y) ? y : 'n/a'}`;
+}
+
+function tooltipLabelCallback(context) {
+  const formatter = context?.dataset?.tooltipFormatter;
+  if (typeof formatter === 'function') {
+    const formatted = formatter(context);
+    if (Array.isArray(formatted)) return formatted;
+    if (formatted == null) return '';
+    return String(formatted);
+  }
+
+  return defaultTooltipLabel(context);
+}
+
 function handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange) {
   const chart = legend?.chart;
   const datasetIndex = legendItem?.datasetIndex;
@@ -117,6 +136,11 @@ export function createWidgetChart(ctx, definition, options = {}) {
         }
       },
       plugins: {
+        tooltip: {
+          callbacks: {
+            label: tooltipLabelCallback
+          }
+        },
         legend: {
           display: false,
           onClick: (evt, legendItem, legend) => handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange),

@@ -709,7 +709,9 @@ function refreshCharts() {
           borderWidth: 1,
           tension: 0.2,
           pointRadius: 0,
-          borderColor: dataset?.borderColor || definition.color || '#7aa2ff'
+          borderColor: dataset?.borderColor || definition.color || '#7aa2ff',
+          pointMeta: Array.isArray(dataset?.pointMeta) ? dataset.pointMeta : [],
+          tooltipFormatter: typeof dataset?.tooltipFormatter === 'function' ? dataset.tooltipFormatter : null
         }));
       } else {
         chart.data.datasets = [{
@@ -742,7 +744,9 @@ function refreshCharts() {
             pointRadius: 0,
             borderColor: baseDataset.borderColor || definition.color || '#7aa2ff',
             borderDash: [6, 4],
-            hiddenInLegend: hasSingleSelectedSnapshot
+            hiddenInLegend: hasSingleSelectedSnapshot,
+            pointMeta: [],
+            tooltipFormatter: typeof baseDataset?.tooltipFormatter === 'function' ? baseDataset.tooltipFormatter : null
           });
           continue;
         }
@@ -752,6 +756,7 @@ function refreshCharts() {
           const seriesToUse = historicalSeries.datasets[idx] || historicalSeries.datasets.find((x) => x?.label === baseDataset.label);
           if (!seriesToUse) continue;
           const byLabel = Object.fromEntries((historicalSeries.labels || []).map((label, i) => [String(label), seriesToUse.data?.[i] ?? null]));
+          const metaByLabel = Object.fromEntries((historicalSeries.labels || []).map((label, i) => [String(label), seriesToUse.pointMeta?.[i] ?? null]));
           historyDatasets.push({
             label: `${baseDataset.label} • ${comparison.label}`,
             data: (chart.data.labels || []).map((label) => (String(label) in byLabel ? byLabel[String(label)] : null)),
@@ -761,7 +766,9 @@ function refreshCharts() {
             borderColor: baseDataset.borderColor || definition.color || '#7aa2ff',
             borderDash: [6, 4],
             hiddenInLegend: hasSingleSelectedSnapshot,
-            baseDatasetIndex: idx
+            baseDatasetIndex: idx,
+            pointMeta: (chart.data.labels || []).map((label) => (String(label) in metaByLabel ? metaByLabel[String(label)] : null)),
+            tooltipFormatter: typeof baseDataset?.tooltipFormatter === 'function' ? baseDataset.tooltipFormatter : null
           });
         }
       }
