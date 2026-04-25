@@ -122,6 +122,8 @@ export function createWidgetChart(ctx, definition, options = {}) {
         borderWidth: 1,
         tension: 0.2,
         pointRadius: 0,
+        pointHitRadius: 14,
+        pointHoverRadius: 4,
         borderColor: definition.color || '#7aa2ff'
       }]
     },
@@ -135,8 +137,13 @@ export function createWidgetChart(ctx, definition, options = {}) {
           }
         }
       },
+      interaction: {
+        mode: 'nearest',
+        intersect: false
+      },
       plugins: {
         tooltip: {
+          intersect: false,
           callbacks: {
             label: tooltipLabelCallback
           }

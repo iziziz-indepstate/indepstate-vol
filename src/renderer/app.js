@@ -709,6 +709,8 @@ function refreshCharts() {
           borderWidth: 1,
           tension: 0.2,
           pointRadius: 0,
+          pointHitRadius: 14,
+          pointHoverRadius: 4,
           borderColor: dataset?.borderColor || definition.color || '#7aa2ff',
           pointMeta: Array.isArray(dataset?.pointMeta) ? dataset.pointMeta : [],
           tooltipFormatter: typeof dataset?.tooltipFormatter === 'function' ? dataset.tooltipFormatter : null
@@ -720,6 +722,8 @@ function refreshCharts() {
           borderWidth: 1,
           tension: 0.2,
           pointRadius: 0,
+          pointHitRadius: 14,
+          pointHoverRadius: 4,
           borderColor: definition.color || '#7aa2ff'
         }];
       }
@@ -742,6 +746,8 @@ function refreshCharts() {
             borderWidth: 1,
             tension: 0.2,
             pointRadius: 0,
+            pointHitRadius: 14,
+            pointHoverRadius: 4,
             borderColor: baseDataset.borderColor || definition.color || '#7aa2ff',
             borderDash: [6, 4],
             hiddenInLegend: hasSingleSelectedSnapshot,
@@ -763,6 +769,8 @@ function refreshCharts() {
             borderWidth: 1,
             tension: 0.2,
             pointRadius: 0,
+            pointHitRadius: 14,
+            pointHoverRadius: 4,
             borderColor: baseDataset.borderColor || definition.color || '#7aa2ff',
             borderDash: [6, 4],
             hiddenInLegend: hasSingleSelectedSnapshot,
