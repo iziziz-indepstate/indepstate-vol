@@ -75,6 +75,13 @@ function tooltipLabelCallback(context) {
   return defaultTooltipLabel(context);
 }
 
+
+function hideTooltip(chart) {
+  if (!chart?.tooltip) return;
+  chart.tooltip.setActiveElements([], { x: 0, y: 0 });
+  chart.update('none');
+}
+
 function handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange) {
   const chart = legend?.chart;
   const datasetIndex = legendItem?.datasetIndex;
@@ -129,6 +136,12 @@ export function createWidgetChart(ctx, definition, options = {}) {
     },
     options: {
       responsive: true,
+      onHover: (evt, _active, chart) => {
+        const altPressed = Boolean(evt?.native?.altKey || evt?.altKey);
+        chart.$altTooltipPressed = altPressed;
+        if (!altPressed) hideTooltip(chart);
+      },
+      onLeave: (_evt, _active, chart) => hideTooltip(chart),
       animation: false,
       scales: {
         x: {
@@ -144,6 +157,7 @@ export function createWidgetChart(ctx, definition, options = {}) {
       plugins: {
         tooltip: {
           intersect: false,
+          filter: (tooltipItem) => Boolean(tooltipItem?.chart?.$altTooltipPressed),
           callbacks: {
             label: tooltipLabelCallback
           }
