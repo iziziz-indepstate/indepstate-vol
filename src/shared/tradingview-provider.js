@@ -24,7 +24,7 @@ async function tvPostOptions(apiBase, bodyText) {
 
 function buildOptionsBody({ root, expiry, ticker }) {
   return JSON.stringify({
-    columns: ['ask', 'bid', 'currency', 'delta', 'expiration', 'gamma', 'iv', 'option-type', 'pricescale', 'rho', 'root', 'strike', 'theoPrice', 'theta', 'vega', 'bid_iv', 'ask_iv'],
+    columns: ['ask', 'bid', 'currency', 'delta', 'expiration', 'gamma', 'iv', 'option-type', 'pricescale', 'rho', 'root', 'strike', 'theoPrice', 'theta', 'vega', 'bid_iv', 'ask_iv', 'volume', 'open_interest'],
     filter: [
       { left: 'type', operation: 'equal', right: 'option' },
       { left: 'expiration', operation: 'equal', right: Number(expiry) },
@@ -62,8 +62,20 @@ function parseOptions(json) {
       strike,
       type,
       bid: toNum(f[idx.bid]),
+      ask: toNum(f[idx.ask]),
+      mid: (() => {
+        const bid = toNum(f[idx.bid]);
+        const ask = toNum(f[idx.ask]);
+        return bid != null && ask != null ? (bid + ask) / 2 : null;
+      })(),
       iv: toNum(f[idx.iv]),
-      bid_iv: toNum(f[idx.bid_iv])
+      bid_iv: toNum(f[idx.bid_iv]),
+      delta: toNum(f[idx.delta]),
+      gamma: toNum(f[idx.gamma]),
+      theta: toNum(f[idx.theta]),
+      vega: toNum(f[idx.vega]),
+      volume: toNum(f[idx.volume]),
+      openInterest: toNum(f[idx.open_interest])
     });
     strikesSet.add(strike);
   }
@@ -240,6 +252,24 @@ function expandExpiryRange(startValue, endValue) {
 }
 
 function buildBasePoint(px, byTypeStrike, nowIso) {
+  const optionQuotes = [];
+  for (const row of byTypeStrike.values()) {
+    optionQuotes.push({
+      type: row.type,
+      strike: row.strike,
+      bid: row.bid ?? null,
+      ask: row.ask ?? null,
+      mid: row.mid ?? null,
+      iv: row.iv ?? null,
+      delta: row.delta ?? null,
+      gamma: row.gamma ?? null,
+      theta: row.theta ?? null,
+      vega: row.vega ?? null,
+      volume: row.volume ?? null,
+      openInterest: row.openInterest ?? null
+    });
+  }
+
   const strikesSorted = Array.from(new Set([
     ...buildCallStrikesAsc(byTypeStrike),
     ...buildPutStrikesAsc(byTypeStrike)
@@ -264,7 +294,13 @@ function buildBasePoint(px, byTypeStrike, nowIso) {
     callBidIvByStrike: buildCallBidIvByStrike(byTypeStrike),
     callBidByStrike: buildCallBidByStrike(byTypeStrike),
     callIvByStrike: buildCallIvByStrike(byTypeStrike),
-    callStrikesAsc: buildCallStrikesAsc(byTypeStrike)
+    callStrikesAsc: buildCallStrikesAsc(byTypeStrike),
+    optionQuotes,
+    atmIv: (() => {
+      const values = [atmPut?.iv ?? null, atmCall?.iv ?? null].filter((x) => Number.isFinite(x));
+      if (!values.length) return null;
+      return values.reduce((acc, x) => acc + x, 0) / values.length;
+    })()
   };
 }
 

@@ -50,7 +50,10 @@ export function createWidgetCard(widget, definition) {
       <h3>${widget.title || definition.defaultTitle}</h3>
       ${controls}
     </div>
-    <canvas id="canvas-${widget.id}"></canvas>
+    ${definition?.mode === 'table'
+      ? `<div id="widget-body-${widget.id}" class="widget-body"></div>`
+      : `<canvas id="canvas-${widget.id}"></canvas>`
+    }
   `;
 
   return card;
