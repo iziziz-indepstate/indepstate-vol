@@ -166,12 +166,13 @@ function buildCandidates(snapshot, config) {
         const breakevenInsideExpectedMove = Number.isFinite(expectedMoveLow) && Number.isFinite(expectedMoveHigh)
           ? breakeven >= expectedMoveLow && breakeven <= expectedMoveHigh
           : null;
+        const isPutFamily = spreadType.startsWith('put');
         const shortMatchesExpectedMove = Number.isFinite(expectedMoveLow) && Number.isFinite(expectedMoveHigh)
           ? shortLeg.strike >= expectedMoveLow && shortLeg.strike <= expectedMoveHigh
           : Number.isFinite(expectedMoveLow)
-            ? shortLeg.strike >= expectedMoveLow
+            ? (isPutFamily ? shortLeg.strike <= expectedMoveLow : shortLeg.strike >= expectedMoveLow)
             : Number.isFinite(expectedMoveHigh)
-              ? shortLeg.strike <= expectedMoveHigh
+              ? (isPutFamily ? shortLeg.strike <= expectedMoveHigh : shortLeg.strike >= expectedMoveHigh)
               : true;
 
         if (enforceExpectedMoveRange && !shortMatchesExpectedMove) continue;
