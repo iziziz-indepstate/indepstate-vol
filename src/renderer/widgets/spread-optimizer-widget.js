@@ -63,8 +63,6 @@ function buildCandidates(snapshot, config) {
   const minRewardToRisk = Math.max(0, toNum(config.minRewardToRisk) ?? 0);
   const minCreditToWidth = Math.max(0, toNum(config.minCreditToWidth) ?? 0);
   const maxAllowedSpreadPct = toNum(config.maxAllowedSpreadPct) ?? 0.35;
-  const minOpenInterest = Math.max(0, toNum(config.minOpenInterest) ?? 0);
-  const minVolume = Math.max(0, toNum(config.minVolume) ?? 0);
   const regimeBias = String(config.regimeBias || 'neutral');
   const expectedMoveLow = toNum(config.expectedMoveLow);
   const expectedMoveHigh = toNum(config.expectedMoveHigh);
@@ -175,10 +173,6 @@ function buildCandidates(snapshot, config) {
         if (shortInsideExpectedMove) flags.push('SHORT_STRIKE_INSIDE_EXPECTED_MOVE');
         if (breakevenInsideExpectedMove) flags.push('BREAKEVEN_INSIDE_EXPECTED_MOVE');
         if (shortSpreadPct > 0.2 || longSpreadPct > 0.2) flags.push('WIDE_BID_ASK');
-        if (shortLeg.volume == null || longLeg.volume == null) flags.push('LOW_VOLUME');
-        else if (shortLeg.volume < minVolume || longLeg.volume < minVolume) flags.push('LOW_VOLUME');
-        if (shortLeg.openInterest == null || longLeg.openInterest == null) flags.push('LOW_OPEN_INTEREST');
-        else if (shortLeg.openInterest < minOpenInterest || longLeg.openInterest < minOpenInterest) flags.push('LOW_OPEN_INTEREST');
         if (longLegCostRatio > 0.75) flags.push('LONG_LEG_EXPENSIVE');
         if (isCredit && creditToWidth < 0.08) flags.push('LOW_CREDIT_TO_WIDTH');
         if (rewardToRisk < 0.1) flags.push('POOR_REWARD_TO_RISK');
@@ -220,7 +214,7 @@ function buildCandidates(snapshot, config) {
           breakevenInsideExpectedMove,
           bidAskSpreadPctShort: shortSpreadPct,
           bidAskSpreadPctLong: longSpreadPct,
-          liquidityScore: Math.max(0, 100 - ((shortSpreadPct + longSpreadPct) * 100) - (flags.includes('LOW_VOLUME') ? 15 : 0) - (flags.includes('LOW_OPEN_INTEREST') ? 15 : 0)),
+          liquidityScore: Math.max(0, 100 - ((shortSpreadPct + longSpreadPct) * 100)),
           flags
         });
       }

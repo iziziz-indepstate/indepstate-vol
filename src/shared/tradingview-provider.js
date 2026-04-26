@@ -24,7 +24,7 @@ async function tvPostOptions(apiBase, bodyText) {
 
 function buildOptionsBody({ root, expiry, ticker }) {
   return JSON.stringify({
-    columns: ['ask', 'bid', 'currency', 'delta', 'expiration', 'gamma', 'iv', 'option-type', 'pricescale', 'rho', 'root', 'strike', 'theoPrice', 'theta', 'vega', 'bid_iv', 'ask_iv', 'volume', 'open_interest'],
+    columns: ['ask', 'bid', 'currency', 'delta', 'expiration', 'gamma', 'iv', 'option-type', 'pricescale', 'rho', 'root', 'strike', 'theoPrice', 'theta', 'vega', 'bid_iv', 'ask_iv'],
     filter: [
       { left: 'type', operation: 'equal', right: 'option' },
       { left: 'expiration', operation: 'equal', right: Number(expiry) },
@@ -73,9 +73,7 @@ function parseOptions(json) {
       delta: toNum(f[idx.delta]),
       gamma: toNum(f[idx.gamma]),
       theta: toNum(f[idx.theta]),
-      vega: toNum(f[idx.vega]),
-      volume: toNum(f[idx.volume]),
-      openInterest: toNum(f[idx.open_interest])
+      vega: toNum(f[idx.vega])
     });
     strikesSet.add(strike);
   }
@@ -264,9 +262,7 @@ function buildBasePoint(px, byTypeStrike, nowIso) {
       delta: row.delta ?? null,
       gamma: row.gamma ?? null,
       theta: row.theta ?? null,
-      vega: row.vega ?? null,
-      volume: row.volume ?? null,
-      openInterest: row.openInterest ?? null
+      vega: row.vega ?? null
     });
   }
 
