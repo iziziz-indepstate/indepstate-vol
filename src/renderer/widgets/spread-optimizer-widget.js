@@ -166,13 +166,15 @@ function buildCandidates(snapshot, config) {
         const breakevenInsideExpectedMove = Number.isFinite(expectedMoveLow) && Number.isFinite(expectedMoveHigh)
           ? breakeven >= expectedMoveLow && breakeven <= expectedMoveHigh
           : null;
-        const spreadIntersectsExpectedMove = Number.isFinite(expectedMoveLow) && Number.isFinite(expectedMoveHigh)
-          ? Math.max(Math.min(shortLeg.strike, longLeg.strike), expectedMoveLow) <= Math.min(Math.max(shortLeg.strike, longLeg.strike), expectedMoveHigh)
-          : null;
+        const shortMatchesExpectedMove = Number.isFinite(expectedMoveLow) && Number.isFinite(expectedMoveHigh)
+          ? shortLeg.strike >= expectedMoveLow && shortLeg.strike <= expectedMoveHigh
+          : Number.isFinite(expectedMoveLow)
+            ? shortLeg.strike >= expectedMoveLow
+            : Number.isFinite(expectedMoveHigh)
+              ? shortLeg.strike <= expectedMoveHigh
+              : true;
 
-        if (enforceExpectedMoveRange && Number.isFinite(expectedMoveLow) && Number.isFinite(expectedMoveHigh) && !spreadIntersectsExpectedMove) {
-          continue;
-        }
+        if (enforceExpectedMoveRange && !shortMatchesExpectedMove) continue;
 
         const longLegCostRatio = longLeg.ask / shortLeg.bid;
         const creditCaptureRatio = isCredit ? net / shortLeg.bid : null;
