@@ -66,6 +66,7 @@ function buildCandidates(snapshot, config) {
   const regimeBias = String(config.regimeBias || 'neutral');
   const expectedMoveLow = toNum(config.expectedMoveLow);
   const expectedMoveHigh = toNum(config.expectedMoveHigh);
+  const enforceExpectedMoveRange = Boolean(config.enforceExpectedMoveRange);
 
   const quotes = quotesRaw
     .filter((q) => Number.isFinite(q.strike) && q.strike >= strikeMin && q.strike <= strikeMax)
@@ -165,6 +166,13 @@ function buildCandidates(snapshot, config) {
         const breakevenInsideExpectedMove = Number.isFinite(expectedMoveLow) && Number.isFinite(expectedMoveHigh)
           ? breakeven >= expectedMoveLow && breakeven <= expectedMoveHigh
           : null;
+        const spreadIntersectsExpectedMove = Number.isFinite(expectedMoveLow) && Number.isFinite(expectedMoveHigh)
+          ? Math.max(Math.min(shortLeg.strike, longLeg.strike), expectedMoveLow) <= Math.min(Math.max(shortLeg.strike, longLeg.strike), expectedMoveHigh)
+          : null;
+
+        if (enforceExpectedMoveRange && Number.isFinite(expectedMoveLow) && Number.isFinite(expectedMoveHigh) && !spreadIntersectsExpectedMove) {
+          continue;
+        }
 
         const longLegCostRatio = longLeg.ask / shortLeg.bid;
         const creditCaptureRatio = isCredit ? net / shortLeg.bid : null;
@@ -331,7 +339,10 @@ export const spreadOptimizerWidget = {
     maxAllowedSpreadPct: 0.35,
     regimeBias: 'neutral',
     sortBy: 'efficiencyScore',
-    useMid: false
+    useMid: false,
+    expectedMoveLow: null,
+    expectedMoveHigh: null,
+    enforceExpectedMoveRange: true
   },
   render: ({ container, snapshot, widget, onConfigChange }) => {
     const cfg = widget.config || {};
@@ -355,7 +366,10 @@ export const spreadOptimizerWidget = {
             ${SORTS.map((x) => `<option value="${x}" ${cfg.sortBy === x ? 'selected' : ''}>${x}</option>`).join('')}
           </select>
         </label>
+        <label>EM Low <input data-spread-opt-param="expectedMoveLow" type="number" value="${cfg.expectedMoveLow ?? ''}" /></label>
+        <label>EM High <input data-spread-opt-param="expectedMoveHigh" type="number" value="${cfg.expectedMoveHigh ?? ''}" /></label>
         <label class="spread-opt-checkbox"><input data-spread-opt-param="useMid" type="checkbox" ${cfg.useMid ? 'checked' : ''}/> Use Mid</label>
+        <label class="spread-opt-checkbox"><input data-spread-opt-param="enforceExpectedMoveRange" type="checkbox" ${cfg.enforceExpectedMoveRange ? 'checked' : ''}/> Only EM Range</label>
       </div>
       <div class="spread-opt-table-wrap">
         <table class="spread-opt-table">
