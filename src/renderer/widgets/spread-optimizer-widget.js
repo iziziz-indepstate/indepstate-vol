@@ -50,6 +50,20 @@ function parseSpreadTypes(raw) {
   return [...SPREAD_TYPES];
 }
 
+function spreadPnlAtPrice(spreadType, shortStrike, longStrike, net, price) {
+  if (!Number.isFinite(price)) return null;
+  if (spreadType === 'put_credit') {
+    return net - Math.max(0, shortStrike - price) + Math.max(0, longStrike - price);
+  }
+  if (spreadType === 'call_credit') {
+    return net - Math.max(0, price - shortStrike) + Math.max(0, price - longStrike);
+  }
+  if (spreadType === 'put_debit') {
+    return Math.max(0, longStrike - price) - Math.max(0, shortStrike - price) - net;
+  }
+  return Math.max(0, price - longStrike) - Math.max(0, price - shortStrike) - net;
+}
+
 function buildCandidates(snapshot, config) {
   const expiry = String(config.expiry || snapshot?.expiry || '').trim();
   const expirySnapshot = snapshot?.byExpiry?.[expiry] || snapshot;
@@ -172,16 +186,17 @@ function buildCandidates(snapshot, config) {
         const breakevenInsideExpectedMove = Number.isFinite(expectedMoveLow) && Number.isFinite(expectedMoveHigh)
           ? breakeven >= expectedMoveLow && breakeven <= expectedMoveHigh
           : null;
-        const isPutFamily = spreadType.startsWith('put');
-        const shortMatchesExpectedMove = Number.isFinite(expectedMoveLow) && Number.isFinite(expectedMoveHigh)
-          ? shortLeg.strike >= expectedMoveLow && shortLeg.strike <= expectedMoveHigh
-          : Number.isFinite(expectedMoveLow)
-            ? (isPutFamily ? shortLeg.strike <= expectedMoveLow : shortLeg.strike >= expectedMoveLow)
-            : Number.isFinite(expectedMoveHigh)
-              ? (isPutFamily ? shortLeg.strike <= expectedMoveHigh : shortLeg.strike >= expectedMoveHigh)
-              : true;
+        const emCheckPrices = [];
+        if (Number.isFinite(expectedMoveLow)) emCheckPrices.push(expectedMoveLow);
+        if (Number.isFinite(expectedMoveHigh)) emCheckPrices.push(expectedMoveHigh);
+        if (Number.isFinite(expectedMoveLow) && Number.isFinite(expectedMoveHigh)) {
+          emCheckPrices.push((expectedMoveLow + expectedMoveHigh) / 2);
+        }
+        const hasProfitInsideExpectedMove = emCheckPrices.length
+          ? emCheckPrices.some((price) => (spreadPnlAtPrice(spreadType, shortLeg.strike, longLeg.strike, net, price) ?? Number.NEGATIVE_INFINITY) > 0)
+          : true;
 
-        if (enforceExpectedMoveRange && !shortMatchesExpectedMove) continue;
+        if (enforceExpectedMoveRange && !hasProfitInsideExpectedMove) continue;
 
         const longLegCostRatio = longLeg.ask / shortLeg.bid;
         const creditCaptureRatio = isCredit ? net / shortLeg.bid : null;
