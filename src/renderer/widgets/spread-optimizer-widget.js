@@ -2,6 +2,8 @@ const SPREAD_TYPES = ['put_credit', 'call_credit', 'put_debit', 'call_debit'];
 const SORTS = ['efficiencyScore', 'creditToWidth', 'rewardToRisk', 'ivRichnessVsAtm', 'distanceBreakevenPct', 'liquidityScore', 'maxProfit', 'maxLoss'];
 
 function toNum(x) {
+  if (x == null) return null;
+  if (typeof x === 'string' && x.trim() === '') return null;
   const n = Number(x);
   return Number.isFinite(n) ? n : null;
 }
