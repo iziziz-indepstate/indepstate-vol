@@ -491,6 +491,16 @@ canvas {
   font-size: 11px;
 }
 
+.spread-opt-controls select {
+  background: rgba(15, 17, 22, 0.95);
+  color: var(--text);
+}
+
+.spread-opt-controls select option {
+  background: #12151d;
+  color: var(--text);
+}
+
 .spread-opt-checkbox {
   flex-direction: row !important;
   align-items: center;

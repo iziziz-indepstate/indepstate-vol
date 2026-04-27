@@ -1,4 +1,5 @@
 const SPREAD_TYPES = ['put_credit', 'call_credit', 'put_debit', 'call_debit'];
+const SPREAD_TYPE_FILTER_OPTIONS = ['all', ...SPREAD_TYPES];
 const SORTS = ['efficiencyScore', 'creditToWidth', 'rewardToRisk', 'ivRichnessVsAtm', 'distanceBreakevenPct', 'liquidityScore', 'maxProfit', 'maxLoss'];
 
 function toNum(x) {
@@ -88,7 +89,10 @@ function buildCandidates(snapshot, config) {
     call: quotes.filter((q) => q.type === 'call').sort((a, b) => a.strike - b.strike)
   };
 
-  const types = parseSpreadTypes(config.spreadTypes);
+  const spreadTypeFilter = String(config.spreadTypeFilter || 'all');
+  const types = spreadTypeFilter !== 'all' && SPREAD_TYPES.includes(spreadTypeFilter)
+    ? [spreadTypeFilter]
+    : parseSpreadTypes(config.spreadTypes);
   const atmIv = toNum(config.atmIv) ?? toNum(expirySnapshot?.atmIv);
 
   const candidates = [];
@@ -333,6 +337,7 @@ export const spreadOptimizerWidget = {
   defaultTitle: 'SpreadOptimizer',
   defaultConfig: {
     spreadTypes: [...SPREAD_TYPES],
+    spreadTypeFilter: 'all',
     strikeMin: null,
     strikeMax: null,
     minWidth: 1,
@@ -364,6 +369,11 @@ export const spreadOptimizerWidget = {
         <label>Regime
           <select data-spread-opt-param="regimeBias">
             ${['neutral', 'bullish', 'bearish', 'fragile_bullish', 'risk_off', 'squeeze'].map((x) => `<option value="${x}" ${cfg.regimeBias === x ? 'selected' : ''}>${x}</option>`).join('')}
+          </select>
+        </label>
+        <label>Type
+          <select data-spread-opt-param="spreadTypeFilter">
+            ${SPREAD_TYPE_FILTER_OPTIONS.map((x) => `<option value="${x}" ${String(cfg.spreadTypeFilter || 'all') === x ? 'selected' : ''}>${x}</option>`).join('')}
           </select>
         </label>
         <label>Sort
