@@ -278,6 +278,16 @@ input, select {
   gap: 10px;
 }
 
+.widget-card-wide {
+  grid-column: span 2;
+}
+
+@media (max-width: 1100px) {
+  .widget-card-wide {
+    grid-column: span 1;
+  }
+}
+
 #widgetsRoot {
   position: relative;
   overflow: visible;
@@ -461,3 +471,88 @@ canvas {
   right: 8px;
   z-index: 2;
 }
+
+.widget-body {
+  width: 100%;
+}
+
+.spread-opt-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.spread-opt-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.spread-opt-controls select {
+  background: rgba(15, 17, 22, 0.95);
+  color: var(--text);
+}
+
+.spread-opt-controls select option {
+  background: #12151d;
+  color: var(--text);
+}
+
+.spread-opt-checkbox {
+  flex-direction: row !important;
+  align-items: center;
+  margin-top: 18px;
+}
+
+.spread-opt-table-wrap {
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.spread-opt-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.spread-opt-table thead th {
+  position: sticky;
+  top: 0;
+  background: #151a23;
+  z-index: 1;
+}
+
+.spread-opt-table th,
+.spread-opt-table td {
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 5px 6px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.spread-opt-table tbody tr:hover {
+  background: rgba(122, 162, 255, 0.08);
+}
+
+.spread-opt-flag {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 1px 6px;
+  margin: 1px;
+  background: rgba(249, 115, 22, 0.2);
+  border: 1px solid rgba(249, 115, 22, 0.45);
+  color: #ffb973;
+}
+
+.spread-opt-eff {
+  font-weight: 700;
+  color: #facc15;
+}
+
+.spread-opt-eff.good { color: #22c55e; }
+.spread-opt-eff.bad { color: #ef4444; }

@@ -258,7 +258,9 @@ function closeRenameTabModal() {
 }
 
 function destroyCharts() {
-  for (const { chart } of chartInstances.values()) chart.destroy();
+  for (const { chart } of chartInstances.values()) {
+    if (chart && typeof chart.destroy === 'function') chart.destroy();
+  }
   chartInstances.clear();
 }
 
@@ -441,6 +443,17 @@ function renderWidgets() {
   for (const widget of tab.widgets) {
     const definition = getWidgetDefinition(widget.type);
     if (!definition) continue;
+
+    if ((definition.mode || 'timeseries') === 'table') {
+      chartInstances.set(widget.id, {
+        chart: null,
+        mode: 'table',
+        metric: null,
+        definition,
+        widget
+      });
+      continue;
+    }
 
     const ctx = document.getElementById(`canvas-${widget.id}`)?.getContext('2d');
     if (!ctx) continue;
@@ -696,6 +709,20 @@ function refreshCharts() {
 
   for (const entry of chartInstances.values()) {
     const { chart, mode, metric, definition, widget } = entry;
+    if (mode === 'table' && typeof definition.render === 'function') {
+      const target = document.getElementById(`widget-body-${widget.id}`);
+      if (!target) continue;
+      definition.render({
+        container: target,
+        snapshot: latest,
+        widget,
+        onConfigChange: () => {
+          persist();
+          refreshCharts();
+        }
+      });
+      continue;
+    }
 
     if (mode === 'snapshot-series' && typeof definition.buildSnapshotSeries === 'function') {
       const widgetSnapshot = latest;
