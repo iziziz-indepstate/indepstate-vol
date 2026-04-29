@@ -97,6 +97,20 @@ function persist() {
   });
 }
 
+function tabSupportsHistorySnapshots(tab) {
+  if (!tab || !Array.isArray(tab.widgets)) return false;
+  return tab.widgets.some((widget) => String(widget?.type || '').startsWith('ndate-skew-'));
+}
+
+function ensureTabHistoryPolicy(tab) {
+  if (!tab?.id) return;
+  if (!tabSupportsHistorySnapshots(tab)) {
+    state.historyByTab[tab.id] = [];
+    return;
+  }
+  if (!Array.isArray(state.historyByTab[tab.id])) state.historyByTab[tab.id] = [];
+}
+
 function applyTabToForm(tab) {
   $('providerKey').value = tab.providerKey;
   $('apiBase').value = tab.providerConfig.apiBase || '';
@@ -478,6 +492,7 @@ function renderWidgets() {
     btn.addEventListener('click', (evt) => {
       const wid = evt.target.getAttribute('data-widget-id');
       tab.widgets = tab.widgets.filter((w) => w.id !== wid);
+      ensureTabHistoryPolicy(tab);
       renderWidgets();
       persist();
     });
@@ -922,7 +937,14 @@ async function tickTab(tabId) {
     setTabStatus(tabId, `Loading snapshot (${tab.title})...`);
     const point = await provider.fetchSnapshot(tab.providerConfig, skewMetrics);
 
-    state.historyByTab[tab.id] ||= [];
+    ensureTabHistoryPolicy(tab);
+    if (!tabSupportsHistorySnapshots(tab)) {
+      tickTabIfActive(tabId);
+      setTabStatus(tabId, `ok • ${tab.title} • history disabled (no history-input chart)`);
+      persist();
+      return;
+    }
+
     state.historyByTab[tab.id].push(point);
 
     const keep = Math.max(20, Number(tab.providerConfig.keepPoints) || 200);
@@ -1064,14 +1086,12 @@ async function init() {
   const loaded = await window.appBridge.loadState();
   state.tabs = loaded.tabs || [];
   state.activeTabId = loaded.activeTabId || state.tabs[0]?.id;
-  state.historyByTab = loaded.historyByTab && typeof loaded.historyByTab === 'object'
-    ? loaded.historyByTab
-    : {};
+  state.historyByTab = {};
 
   if (!state.tabs.length) addTab();
 
   for (const tab of state.tabs) {
-    if (!Array.isArray(state.historyByTab[tab.id])) state.historyByTab[tab.id] = [];
+    ensureTabHistoryPolicy(tab);
     if (!tab.providerConfig.expiryStart) tab.providerConfig.expiryStart = tab.providerConfig.expiry || defaultExpiry();
     if (tab.providerConfig.expiryEnd == null) tab.providerConfig.expiryEnd = '';
     for (const widget of tab.widgets || []) {
