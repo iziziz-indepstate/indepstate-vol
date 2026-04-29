@@ -1086,7 +1086,9 @@ async function init() {
   const loaded = await window.appBridge.loadState();
   state.tabs = loaded.tabs || [];
   state.activeTabId = loaded.activeTabId || state.tabs[0]?.id;
-  state.historyByTab = {};
+  state.historyByTab = loaded.historyByTab && typeof loaded.historyByTab === 'object'
+    ? loaded.historyByTab
+    : {};
 
   if (!state.tabs.length) addTab();
 
