@@ -1,15 +1,39 @@
 {
-  "name": "indepstate-vol-dashboard",
-  "version": "0.1.0",
+  "name": "is-vol",
+  "productName": "IS-VOL",
+  "version": "1.0.0",
   "description": "Electron dashboard for market volatility analytics",
   "main": "src/main/main.cjs",
   "scripts": {
-    "start": "electron ."
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "release": "electron-builder --win --publish always"
   },
   "devDependencies": {
-    "electron": "^37.0.0"
+    "electron": "^37.0.0",
+    "electron-builder": "^24.13.3"
   },
   "dependencies": {
-    "chart.js": "^4.5.1"
+    "chart.js": "^4.5.1",
+    "electron-updater": "^6.1.1"
+  },
+  "build": {
+    "appId": "is-vol",
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "assets/app.ico",
+      "target": "nsis"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "detsam",
+        "repo": "indepstate-vol"
+      }
+    ]
   }
 }

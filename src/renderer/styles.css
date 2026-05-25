@@ -9,11 +9,34 @@
 
 * { box-sizing: border-box; }
 html, body { height: 100%; }
+html {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+}
+
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
   font: 13px/1.35 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+.widgets-history-sidecar,
+.widget-controls,
+.spread-opt-table-wrap {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.widgets-history-sidecar::-webkit-scrollbar,
+.widget-controls::-webkit-scrollbar,
+.spread-opt-table-wrap::-webkit-scrollbar {
+  display: none;
 }
 
 .app-shell {

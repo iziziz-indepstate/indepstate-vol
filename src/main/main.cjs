@@ -1,6 +1,9 @@
 const path = require('path');
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const { loadState, saveState } = require('./store.cjs');
+const { startAutoUpdater } = require('./auto-updater.cjs');
+
+app.setName('IS-VOL');
 
 const DEFAULT_STATE = {
   activeTabId: 'tab-1',
@@ -59,8 +62,10 @@ const DEFAULT_STATE = {
 
 function createWindow() {
   const win = new BrowserWindow({
+    title: 'IS-VOL',
     width: 1300,
     height: 900,
+    icon: path.join(__dirname, '../../assets/app.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -69,9 +74,15 @@ function createWindow() {
   });
 
   win.loadFile(path.join(__dirname, '../renderer/index.html'));
+  win.on('page-title-updated', (event) => {
+    event.preventDefault();
+  });
 }
 
 app.whenReady().then(() => {
+  startAutoUpdater();
+  Menu.setApplicationMenu(null);
+
   ipcMain.handle('state:load', async () => {
     return loadState(app.getPath('userData'), DEFAULT_STATE);
   });
