@@ -27,7 +27,3 @@ npm start
 - nDate-Skew-Bid-Put / nDate-Skew-Bid-Call (аналогично nDate-Skew, но отображают денежный `bid` из ответа `/options/scan2`, поле `bid`, индекс `1`)
 - nDate-Skew-BidIV-Ratio (для каждой выбранной экспирации строит `ratio = (putBid/putIV) / (callBid/callIV)` по симметричным страйкам вокруг reference-уровня: `forward` при наличии, иначе пользовательский `S`; tooltip показывает `discount = 1 - ratio` и все промежуточные поля, а при `ratio < 1` put-защита считается дешевле call-крыла; поддерживает `E1/E2/SR` как остальные nDate-Skew виджеты)
 - IV-Current (временной ряд `IV` по выбранному страйку; в поле `S` можно указать конкретный страйк или `ATM`)
-
-### Reference
-
-- Концептуальная справка по идее и интерпретации `nDate-Skew-BidIV-Ratio`: <https://chatgpt.com/g/g-p-6805dc91d2d881918d724ce57eccce39-trading-fy26/c/69ebc283-78a4-83eb-b654-236569efb008>
