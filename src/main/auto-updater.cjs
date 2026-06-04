@@ -4,11 +4,6 @@ function startAutoUpdater() {
   try {
     autoUpdater.autoDownload = true;
     autoUpdater.allowPrerelease = false;
-    autoUpdater.setFeedURL({
-      provider: 'github',
-      owner: 'detsam',
-      repo: 'indepstate-vol'
-    });
   } catch (err) {
     console.error('[auto-updater] setup failed', err);
   }
