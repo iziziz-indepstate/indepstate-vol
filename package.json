@@ -32,7 +32,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "detsam",
+        "owner": "iziziz-indepstate",
         "repo": "indepstate-vol"
       }
     ]
