@@ -2,6 +2,8 @@
 
 Electron dashboard for volatility analytics with pluggable data providers and pluggable widgets.
 
+The standalone `SPX IV / RV` widget supports interchangeable local, FRED, Cboe, and Yahoo market-data providers. It can run in local, remote, or hybrid cached mode for VIX9D vs SPX RV 9D, VIX vs SPX RV 30D, and custom horizons.
+
 ## Run
 
 ```bash

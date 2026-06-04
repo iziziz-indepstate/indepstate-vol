@@ -272,8 +272,12 @@ function closeRenameTabModal() {
 }
 
 function destroyCharts() {
-  for (const { chart } of chartInstances.values()) {
+  for (const { chart, definition, widget } of chartInstances.values()) {
     if (chart && typeof chart.destroy === 'function') chart.destroy();
+    if (typeof definition?.destroy === 'function') {
+      const target = document.getElementById(`widget-body-${widget.id}`);
+      if (target) definition.destroy(target);
+    }
   }
   chartInstances.clear();
 }

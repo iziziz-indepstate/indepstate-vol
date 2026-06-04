@@ -1,6 +1,8 @@
 const path = require('path');
 const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const { loadState, saveState } = require('./store.cjs');
+const { loadLocalMarketSeries } = require('./local-market-data.cjs');
+const { createMarketDataService } = require('./market-data-providers.cjs');
 const { startAutoUpdater } = require('./auto-updater.cjs');
 
 app.setName('IS-VOL');
@@ -82,6 +84,9 @@ function createWindow() {
 app.whenReady().then(() => {
   startAutoUpdater();
   Menu.setApplicationMenu(null);
+  const marketDataService = createMarketDataService({
+    cacheDir: path.join(app.getPath('userData'), 'market-data-cache')
+  });
 
   ipcMain.handle('state:load', async () => {
     return loadState(app.getPath('userData'), DEFAULT_STATE);
@@ -90,6 +95,14 @@ app.whenReady().then(() => {
   ipcMain.handle('state:save', async (_evt, state) => {
     saveState(app.getPath('userData'), state);
     return { ok: true };
+  });
+
+  ipcMain.handle('market-data:load-local-series', async (_evt, source) => {
+    return loadLocalMarketSeries(source);
+  });
+
+  ipcMain.handle('market-data:get-daily-history', async (_evt, params) => {
+    return marketDataService.getDailyHistory(params || {});
   });
 
   createWindow();

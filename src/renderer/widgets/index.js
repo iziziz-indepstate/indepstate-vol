@@ -13,6 +13,7 @@ import {
 } from './ndate-call-skew-widget.js';
 import { nDateSkewBidIVRatioWidget } from './ndate-bidiv-ratio-widget.js';
 import { spreadOptimizerWidget } from './spread-optimizer-widget.js';
+import { ivRvWidget } from './iv-rv-widget.js';
 
 export const widgetDefinitions = [
   atmSkewWidget,
@@ -25,7 +26,8 @@ export const widgetDefinitions = [
   nDateSkewBidPutWidget,
   nDateSkewBidCallWidget,
   nDateSkewBidIVRatioWidget,
-  spreadOptimizerWidget
+  spreadOptimizerWidget,
+  ivRvWidget
 ];
 
 export const widgetRegistry = Object.fromEntries(widgetDefinitions.map((d) => [d.type, d]));
