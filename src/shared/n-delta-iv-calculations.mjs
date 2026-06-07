@@ -1,3 +1,5 @@
+import { resolveStrikeSelection } from './option-chain-utils.js';
+
 const OPTION_TYPES = new Set(['put', 'call']);
 
 function toNum(value) {
@@ -57,6 +59,26 @@ function sideQuotes(expirySnapshot, optionType) {
     .filter((quote) => Number.isFinite(quote.strike));
 }
 
+function resolveAnchorStrike(expirySnapshot, optionType, baseStrike) {
+  if (baseStrike == null || baseStrike === '') return null;
+  const normalized = String(baseStrike).trim().toUpperCase();
+  if (normalized !== 'ATM') return toNum(baseStrike);
+
+  const strikesAsc = sideQuotes(expirySnapshot, optionType)
+    .map((quote) => quote.strike)
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+  return resolveStrikeSelection(strikesAsc, normalized, expirySnapshot?.px).strike;
+}
+
+function filterQuotesFromAnchor(quotes, optionType, anchorStrike) {
+  if (!Number.isFinite(anchorStrike)) return quotes;
+  if (normalizeOptionType(optionType) === 'put') {
+    return quotes.filter((quote) => quote.strike <= anchorStrike);
+  }
+  return quotes.filter((quote) => quote.strike >= anchorStrike);
+}
+
 function deltaDistance(quote, optionType, targetDelta) {
   const delta = toNum(quote?.delta);
   if (!Number.isFinite(delta)) return Number.POSITIVE_INFINITY;
@@ -64,10 +86,11 @@ function deltaDistance(quote, optionType, targetDelta) {
   return Math.abs(delta - targetDelta);
 }
 
-export function selectNearestDeltaQuote(expirySnapshot, optionType, targetDelta) {
+export function selectNearestDeltaQuote(expirySnapshot, optionType, targetDelta, baseStrike) {
   const type = normalizeOptionType(optionType);
   const target = normalizeTargetDelta(targetDelta);
-  const candidates = sideQuotes(expirySnapshot, type);
+  const anchorStrike = resolveAnchorStrike(expirySnapshot, type, baseStrike);
+  const candidates = filterQuotesFromAnchor(sideQuotes(expirySnapshot, type), type, anchorStrike);
   if (!candidates.length) return null;
 
   return candidates.reduce((best, quote) => {
@@ -107,9 +130,19 @@ function avg(values) {
   return valid.reduce((acc, value) => acc + value, 0) / valid.length;
 }
 
-export function calculateAtmIV(expirySnapshot) {
+export function calculateAtmIV(expirySnapshot, atmStrikeOverride) {
   const pairs = groupValidQuotesByStrike(expirySnapshot);
   if (!pairs.length) return { atmStrike: null, atmIV: null };
+
+  const overrideStrike = toNum(atmStrikeOverride);
+  if (Number.isFinite(overrideStrike)) {
+    const selectedOverride = pairs.find((pair) => pair.strike === overrideStrike);
+    if (!selectedOverride) return { atmStrike: overrideStrike, atmIV: null };
+    return {
+      atmStrike: selectedOverride.strike,
+      atmIV: avg([toNum(selectedOverride.call?.iv), toNum(selectedOverride.put?.iv)])
+    };
+  }
 
   const reference = toNum(expirySnapshot?.px);
   let selected = null;
@@ -162,6 +195,7 @@ export function calculateNDeltaIVPoint(snapshot, config = {}) {
       expiration,
       optionType,
       targetDelta,
+      anchorStrike: null,
       matchedStrike: null,
       matchedDelta: null,
       deltaIV: null,
@@ -172,8 +206,9 @@ export function calculateNDeltaIVPoint(snapshot, config = {}) {
     };
   }
 
-  const match = selectNearestDeltaQuote(expirySnapshot, optionType, targetDelta);
-  const { atmStrike, atmIV } = calculateAtmIV(expirySnapshot);
+  const anchorStrike = resolveAnchorStrike(expirySnapshot, optionType, config.baseStrike);
+  const match = selectNearestDeltaQuote(expirySnapshot, optionType, targetDelta, config.baseStrike);
+  const { atmStrike, atmIV } = calculateAtmIV(expirySnapshot, anchorStrike);
   const deltaIV = toNum(match?.iv);
   const deltaIVPremium = Number.isFinite(deltaIV) && Number.isFinite(atmIV) ? deltaIV - atmIV : null;
 
@@ -182,6 +217,7 @@ export function calculateNDeltaIVPoint(snapshot, config = {}) {
     expiration,
     optionType,
     targetDelta,
+    anchorStrike,
     matchedStrike: toNum(match?.strike),
     matchedDelta: toNum(match?.delta),
     deltaIV,

@@ -695,6 +695,14 @@ function renderWidgets() {
   }
 
   root.querySelectorAll(widgetParamSelector).forEach((input) => {
+    input.addEventListener('input', (evt) => {
+      const wid = evt.target.dataset[WIDGET_PARAM_DATASET.WIDGET_ID];
+      const paramName = evt.target.dataset[WIDGET_PARAM_DATASET.PARAM_NAME];
+      if (!setWidgetParamValue(wid, paramName, evt.target.value)) return;
+      if (shouldRefreshOnWidgetParamChange(paramName)) refreshCharts();
+      persist();
+    });
+
     input.addEventListener('change', (evt) => {
       const wid = evt.target.dataset[WIDGET_PARAM_DATASET.WIDGET_ID];
       const paramName = evt.target.dataset[WIDGET_PARAM_DATASET.PARAM_NAME];

@@ -40,6 +40,7 @@ This keeps responsibilities clean:
   type: "n-delta-iv",
   config: {
     symbol: string,
+    baseStrike: number | "ATM",
     optionType: "put" | "call",
     targetDelta: number,
     expiration: string
@@ -59,6 +60,7 @@ type NDeltaIVPoint = {
   expiration: string
   optionType: "put" | "call"
   targetDelta: number
+  anchorStrike: number | null
   matchedStrike: number | null
   matchedDelta: number | null
   deltaIV: number | null

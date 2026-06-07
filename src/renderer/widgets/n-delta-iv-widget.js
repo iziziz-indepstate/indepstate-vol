@@ -33,6 +33,7 @@ function pointTooltip(context) {
     `Expiration: ${displayExpiry(meta.expiration)}`,
     `Option type: ${String(meta.optionType || '').toUpperCase() || 'n/a'}`,
     `Target delta: ${fmtDelta(meta.targetDelta)}`,
+    `Anchor strike: ${fmtNum(meta.anchorStrike, 0)}`,
     `Matched strike: ${fmtNum(meta.matchedStrike, 0)}`,
     `Matched delta: ${fmtDelta(meta.matchedDelta)}`,
     `nD IV: ${fmtPct(meta.deltaIV)}`,
@@ -54,12 +55,15 @@ export const nDeltaIVWidget = {
   hideXAxisValues: true,
   defaultConfig: {
     symbol: 'SPX',
+    baseStrike: 'ATM',
     optionType: 'put',
     targetDelta: 0.25,
     expiration: '',
     showPremiumSpread: true
   },
   controls: {
+    strike: true,
+    strikeInputType: 'text',
     optionType: true,
     targetDelta: true,
     expiration: true
@@ -72,7 +76,6 @@ export const nDeltaIVWidget = {
       return Number.isNaN(dt.getTime()) ? String(point.timestamp || '') : dt.toLocaleTimeString();
     });
     const optionLabel = String(cfg.optionType || 'put').toUpperCase();
-    const title = `n-Delta IV | ${cfg.symbol || 'SPX'} | ${optionLabel} ${deltaLabel(cfg.targetDelta)} | Exp ${displayExpiry(cfg.expiration)}`;
     const baseDataset = {
       borderWidth: 1,
       tension: 0.2,
@@ -107,6 +110,6 @@ export const nDeltaIVWidget = {
       });
     }
 
-    return { labels, datasets, title };
+    return { labels, datasets };
   }
 };
