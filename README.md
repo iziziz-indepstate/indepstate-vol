@@ -20,6 +20,7 @@ npm start
 - **Metric abstraction**: metric definitions (`key` + `compute`) live in `src/renderer/widgets/metrics.js` and are passed into providers for calculation.
 - **Dashboard tabs**: each tab stores its own provider config and widget list.
 - **State persistence**: tab layout and config are saved to Electron `userData/dashboard-state.json` and restored on the next launch.
+- **Open UI MCP proxy**: while the app is running, agents can inspect loaded dashboard tabs, widgets, and widget datasets through the local MCP endpoint. Details: [MCP Server](docs/mcp-server.md).
 
 ## Included Widgets
 

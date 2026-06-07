@@ -7,6 +7,11 @@ import {
   shouldRefreshOnWidgetParamChange,
   WIDGET_PARAM_DATASET
 } from './widgets/widget-params.js';
+import {
+  createChartRuntimeData,
+  createDashboardRuntimeSnapshot,
+  createMcpRuntimeStore
+} from '../shared/mcp-runtime-store.mjs';
 
 const providers = {
   tradingview: new TradingViewProvider()
@@ -24,6 +29,7 @@ const tabRefreshInFlight = new Set();
 const tabStatus = {};
 const chartInstances = new Map();
 const widgetDataStore = new Map();
+const mcpRuntimeStore = createMcpRuntimeStore();
 let tabContextTargetId = null;
 let renameTargetTabId = null;
 let draggedTabId = null;
@@ -236,6 +242,7 @@ function deleteTabById(tabId) {
   state.tabs.splice(idx, 1);
   delete state.historyByTab[tabId];
   delete tabStatus[tabId];
+  mcpRuntimeStore.clearTab(tabId);
   stopTabPolling(tabId);
 
   if (state.activeTabId === tabId) {
@@ -291,19 +298,62 @@ function widgetDataKey(tabId, widgetId) {
   return `${tabId || ''}:${widgetId || ''}`;
 }
 
-function publishWidgetData(tabId, widgetId, data) {
+function publishWidgetData(tabId, widgetId, data, sourceSnapshotTime = null) {
   if (!tabId || !widgetId) return;
-  widgetDataStore.set(widgetDataKey(tabId, widgetId), {
+  const output = {
     ...data,
     tabId,
     widgetId,
     updatedAt: new Date().toISOString()
+  };
+  widgetDataStore.set(widgetDataKey(tabId, widgetId), output);
+  mcpRuntimeStore.set(tabId, widgetId, {
+    kind: 'table',
+    mode: 'table',
+    type: data?.type || null,
+    status: data?.status || 'ok',
+    title: data?.title || null,
+    sourceSnapshotTime,
+    output
   });
 }
 
 function clearWidgetData(tabId, widgetId) {
   if (!tabId || !widgetId) return;
   widgetDataStore.delete(widgetDataKey(tabId, widgetId));
+  mcpRuntimeStore.clear(tabId, widgetId);
+}
+
+function publishMcpWidgetRuntimeData(tabId, widgetId, data) {
+  if (!tabId || !widgetId) return;
+  mcpRuntimeStore.set(tabId, widgetId, data);
+}
+
+function dashboardRuntimeSnapshot() {
+  return createDashboardRuntimeSnapshot({
+    state,
+    widgetDefinitions,
+    getRuntimeData: (tabId, widgetId) => mcpRuntimeStore.get(tabId, widgetId)
+  });
+}
+
+function bindMcpRuntimeBridge() {
+  if (typeof window.appBridge?.onMcpRuntimeStateRequest !== 'function') return;
+  window.appBridge.onMcpRuntimeStateRequest((message) => {
+    const requestId = message?.requestId;
+    if (!requestId) return;
+    try {
+      window.appBridge.sendMcpRuntimeStateResponse({
+        requestId,
+        payload: dashboardRuntimeSnapshot()
+      });
+    } catch (err) {
+      window.appBridge.sendMcpRuntimeStateResponse({
+        requestId,
+        error: err?.message || String(err)
+      });
+    }
+  });
 }
 
 function readWidgetDataByType(tab, type) {
@@ -765,6 +815,17 @@ async function refreshCharts() {
 
   const history = state.historyByTab[tab.id] || [];
   const latest = history[history.length - 1] || null;
+  const publishChartRuntime = (entry, title = '') => {
+    publishMcpWidgetRuntimeData(tab.id, entry.widget.id, createChartRuntimeData({
+      widget: entry.widget,
+      definition: entry.definition,
+      labels: entry.chart?.data?.labels || [],
+      datasets: entry.chart?.data?.datasets || [],
+      title,
+      historyLength: history.length,
+      sourceSnapshotTime: latest?.time || null
+    }));
+  };
 
   const entries = Array.from(chartInstances.values());
   const producerRenderTasks = [];
@@ -883,6 +944,7 @@ async function refreshCharts() {
       applyHiddenSnapshotSeriesLabels(widget, chart);
       syncLinkedHistoryVisibility(chart);
       chart.update();
+      publishChartRuntime(entry);
       continue;
     }
 
@@ -906,6 +968,7 @@ async function refreshCharts() {
       chart.options.plugins.title.display = Boolean(series?.title);
       chart.options.plugins.title.text = series?.title || '';
       chart.update();
+      publishChartRuntime(entry, series?.title || '');
       continue;
     }
 
@@ -917,6 +980,7 @@ async function refreshCharts() {
       });
       chart.options.plugins.legend.display = false;
       chart.update();
+      publishChartRuntime(entry);
       continue;
     }
 
@@ -924,6 +988,7 @@ async function refreshCharts() {
     chart.data.datasets[0].data = history.map((x) => x[metric]);
     chart.options.plugins.legend.display = false;
     chart.update();
+    publishChartRuntime(entry);
   }
 
   await Promise.all(producerRenderTasks);
@@ -945,6 +1010,7 @@ async function renderTableWidgetEntry(entry, latest, history) {
   const target = document.getElementById(`widget-body-${widget.id}`);
   if (!target) return;
   const tab = activeTab();
+  let publishedStructuredData = false;
 
   await definition.render({
     container: target,
@@ -952,7 +1018,10 @@ async function renderTableWidgetEntry(entry, latest, history) {
     history,
     widgets: tab?.widgets || [],
     widgetData: {
-      publish: (data) => publishWidgetData(tab?.id, widget.id, data),
+      publish: (data) => {
+        publishedStructuredData = true;
+        publishWidgetData(tab?.id, widget.id, data, latest?.time || null);
+      },
       clear: () => clearWidgetData(tab?.id, widget.id),
       readByType: (type) => readWidgetDataByType(tab, type)
     },
@@ -970,6 +1039,18 @@ async function renderTableWidgetEntry(entry, latest, history) {
       broadcastTableWidgetConfig(widget.id, paramName, value);
     }
   });
+  if (!publishedStructuredData) {
+    publishMcpWidgetRuntimeData(tab?.id, widget.id, {
+      kind: 'table',
+      mode: 'table',
+      type: widget.type,
+      status: 'no_data_contract',
+      title: widget.title || definition.defaultTitle || widget.type,
+      config: { ...(widget.config || {}) },
+      sourceSnapshotTime: latest?.time || null,
+      message: 'This table widget rendered in the UI but did not publish a structured data contract.'
+    });
+  }
   entry.hasRendered = true;
 }
 
@@ -1236,6 +1317,7 @@ function bindEvents() {
 }
 
 async function init() {
+  bindMcpRuntimeBridge();
   populateWidgetTypeSelect();
   bindEvents();
   const loaded = await window.appBridge.loadState();

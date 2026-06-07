@@ -4,8 +4,12 @@ const { loadState, saveState } = require('./store.cjs');
 const { loadLocalMarketSeries } = require('./local-market-data.cjs');
 const { createMarketDataService } = require('./market-data-providers.cjs');
 const { startAutoUpdater } = require('./auto-updater.cjs');
+const { startMcpServer } = require('./mcp-server.cjs');
 
 app.setName('IS-VOL');
+
+let mainWindow = null;
+let mcpServer = null;
 
 const DEFAULT_STATE = {
   activeTabId: 'tab-1',
@@ -79,6 +83,10 @@ function createWindow() {
   win.on('page-title-updated', (event) => {
     event.preventDefault();
   });
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null;
+  });
+  mainWindow = win;
 }
 
 app.whenReady().then(() => {
@@ -106,10 +114,20 @@ app.whenReady().then(() => {
   });
 
   createWindow();
+  mcpServer = startMcpServer({
+    getWindow: () => mainWindow
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on('before-quit', () => {
+  if (mcpServer) {
+    mcpServer.close().catch(() => {});
+    mcpServer = null;
+  }
 });
 
 app.on('window-all-closed', () => {

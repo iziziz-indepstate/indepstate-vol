@@ -15,8 +15,10 @@
     "electron-builder": "^24.13.3"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "chart.js": "^4.5.1",
-    "electron-updater": "^6.1.1"
+    "electron-updater": "^6.1.1",
+    "zod": "^4.4.3"
   },
   "build": {
     "appId": "is-vol",

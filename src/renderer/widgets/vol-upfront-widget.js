@@ -102,13 +102,21 @@ export const volUpfrontWidget = {
   consumesWidgetData: true,
   defaultTitle: 'Vol Upfront',
   destroy: destroyChart,
-  render: async ({ container, widgetData }) => {
+  render: async ({ container, widgetData, widget }) => {
     const renderVersion = (renderVersions.get(container) || 0) + 1;
     renderVersions.set(container, renderVersion);
     destroyChart(container);
 
     const straddleOutputs = widgetData?.readByType?.('atm-straddle') || [];
     if (straddleOutputs.length < 2) {
+      widgetData?.publish?.({
+        type: volUpfrontWidget.type,
+        status: 'not_enough_inputs',
+        title: widget?.title || volUpfrontWidget.defaultTitle,
+        points: [],
+        segments: [],
+        errors: ['Add at least two Straddle ATM widgets to calculate forward vol.']
+      });
       container.innerHTML = '<div class="vol-upfront-content"><div class="vol-upfront-empty">Add at least two Straddle ATM widgets to calculate forward vol.</div></div>';
       return;
     }
@@ -133,6 +141,14 @@ export const volUpfrontWidget = {
 
     const segments = calculateForwardVols(points);
     if (renderVersions.get(container) !== renderVersion) return;
+    widgetData?.publish?.({
+      type: volUpfrontWidget.type,
+      status: points.length >= 2 && segments.length ? 'ok' : 'not_enough_valid_inputs',
+      title: widget?.title || volUpfrontWidget.defaultTitle,
+      points: [...points].sort((a, b) => a.dte - b.dte),
+      segments,
+      errors
+    });
 
     if (points.length < 2 || !segments.length) {
       container.innerHTML = `

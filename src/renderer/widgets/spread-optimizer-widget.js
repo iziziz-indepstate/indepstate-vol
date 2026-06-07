@@ -369,11 +369,20 @@ export const spreadOptimizerWidget = {
     expectedMoveHigh: null,
     enforceExpectedMoveRange: true
   },
-  render: ({ container, snapshot, widget, onConfigChange }) => {
+  render: ({ container, snapshot, widget, widgetData, onConfigChange }) => {
     const cfg = widget.config || {};
     const candidates = buildCandidates(snapshot || {}, cfg);
     sortRows(candidates, cfg.sortBy);
     const top = candidates.slice(0, 50);
+    widgetData?.publish?.({
+      type: spreadOptimizerWidget.type,
+      status: snapshot ? 'ok' : 'no_snapshot',
+      title: widget.title || spreadOptimizerWidget.defaultTitle,
+      config: { ...cfg },
+      sourceSnapshotTime: snapshot?.time || null,
+      candidates: top,
+      totalCandidates: candidates.length
+    });
 
     container.innerHTML = `
       <div class="spread-opt-controls">
