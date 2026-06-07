@@ -33,6 +33,43 @@ This keeps responsibilities clean:
 
 `Vol Upfront` consumes published `Straddle ATM` outputs from the current tab and calculates forward volatility from their `snapshot.dte` and `snapshot.atmIv` fields. It does not recalculate straddles.
 
+`n-Delta IV` reads the tab's historical option-chain snapshots and produces three aligned chart series for one expiration:
+
+```ts
+{
+  type: "n-delta-iv",
+  config: {
+    symbol: string,
+    optionType: "put" | "call",
+    targetDelta: number,
+    expiration: string
+  },
+  points: NDeltaIVPoint[],
+  deltaIVSeries: Array<number | null>,
+  atmIVSeries: Array<number | null>,
+  deltaIVPremiumSeries: Array<number | null>
+}
+```
+
+Each point follows this shape:
+
+```ts
+type NDeltaIVPoint = {
+  timestamp: string | number
+  expiration: string
+  optionType: "put" | "call"
+  targetDelta: number
+  matchedStrike: number | null
+  matchedDelta: number | null
+  deltaIV: number | null
+  atmStrike: number | null
+  atmIV: number | null
+  deltaIVPremium: number | null
+}
+```
+
+The first implementation calculates this output in the renderer from history and does not persist or republish it through the widget data store yet.
+
 ## Implementation Notes
 
 - The widget data store is local to the renderer runtime.

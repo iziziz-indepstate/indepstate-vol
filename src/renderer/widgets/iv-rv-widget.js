@@ -180,6 +180,7 @@ export const ivRvWidget = {
   mode: 'table',
   gridSpan: 6,
   defaultTitle: 'SPX IV / RV',
+  refreshOnDashboardRefresh: false,
   defaultConfig: {
     horizon: '9d',
     dataMode: 'remote',

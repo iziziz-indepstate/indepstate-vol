@@ -771,6 +771,7 @@ async function refreshCharts() {
   for (const entry of entries) {
     const { chart, mode, metric, definition, widget } = entry;
     if (mode === 'table' && typeof definition.render === 'function' && !definition.consumesWidgetData) {
+      if (definition.refreshOnDashboardRefresh === false && entry.hasRendered) continue;
       producerRenderTasks.push(renderTableWidgetEntry(entry, latest, history));
       continue;
     }
@@ -885,6 +886,29 @@ async function refreshCharts() {
       continue;
     }
 
+    if (mode === 'timeseries-custom' && typeof definition.buildTimeSeries === 'function') {
+      const series = definition.buildTimeSeries(history, widget);
+      chart.data.labels = Array.isArray(series?.labels) ? series.labels : [];
+      chart.data.datasets = (Array.isArray(series?.datasets) ? series.datasets : []).map((dataset, idx) => ({
+        label: dataset?.label || `Series ${idx + 1}`,
+        data: Array.isArray(dataset?.data) ? dataset.data : [],
+        borderWidth: dataset?.borderWidth ?? 1,
+        tension: dataset?.tension ?? 0.2,
+        pointRadius: dataset?.pointRadius ?? 0,
+        pointHitRadius: dataset?.pointHitRadius ?? 14,
+        pointHoverRadius: dataset?.pointHoverRadius ?? 4,
+        borderColor: dataset?.borderColor || definition.color || '#7aa2ff',
+        pointMeta: Array.isArray(dataset?.pointMeta) ? dataset.pointMeta : [],
+        tooltipFormatter: typeof dataset?.tooltipFormatter === 'function' ? dataset.tooltipFormatter : null
+      }));
+      chart.options.plugins.legend.display = chart.data.datasets.length > 1;
+      chart.options.plugins.title ||= {};
+      chart.options.plugins.title.display = Boolean(series?.title);
+      chart.options.plugins.title.text = series?.title || '';
+      chart.update();
+      continue;
+    }
+
     if (mode === 'timeseries-custom' && typeof definition.extractTimeSeriesValue === 'function') {
       chart.data.labels = history.map((x) => new Date(x.time).toLocaleTimeString());
       chart.data.datasets[0].data = history.map((x) => {
@@ -946,6 +970,7 @@ async function renderTableWidgetEntry(entry, latest, history) {
       broadcastTableWidgetConfig(widget.id, paramName, value);
     }
   });
+  entry.hasRendered = true;
 }
 
 async function refreshSingleTableWidget(widgetId) {

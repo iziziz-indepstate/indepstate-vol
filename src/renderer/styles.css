@@ -448,12 +448,27 @@ canvas {
   font-size: 12px;
 }
 
+.widget-control select {
+  width: 64px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
 .widget-controls {
   display: flex;
   gap: 4px;
   flex-wrap: nowrap;
   margin-bottom: 0;
   overflow-x: auto;
+}
+
+.widget-control .widget-expiration-input {
+  width: 92px;
+}
+
+.widget-control .widget-target-delta-input {
+  width: 60px;
 }
 
 .widget-ticker-input {

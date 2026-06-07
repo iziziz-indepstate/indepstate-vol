@@ -24,6 +24,9 @@ export function createWidgetCard(widget, definition) {
   const expiryEndValue = String(widget?.config?.expiryEnd ?? definition?.defaultConfig?.expiryEnd ?? '');
   const tailStepsValue = Number(widget?.config?.tailSteps ?? definition?.defaultConfig?.tailSteps ?? 3);
   const strikeRangeValue = String(widget?.config?.strikeRange ?? definition?.defaultConfig?.strikeRange ?? '');
+  const optionTypeValue = String(widget?.config?.optionType ?? definition?.defaultConfig?.optionType ?? 'put');
+  const targetDeltaValue = Number(widget?.config?.targetDelta ?? definition?.defaultConfig?.targetDelta ?? 0.25);
+  const expirationValue = String(widget?.config?.expiration ?? definition?.defaultConfig?.expiration ?? '');
   const isNDateSkewWidget = String(widget?.type || '').startsWith('ndate-skew-');
   const controls = Object.keys(controlsConfig).length
     ? `<div class="widget-controls widget-controls-inline">
@@ -41,6 +44,18 @@ export function createWidgetCard(widget, definition) {
         </label>` : ''}
         ${controlsConfig.tailSteps ? `<label class="widget-control">N
           <input type="number" min="1" class="widget-tail-steps-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.TAIL_STEPS}" value="${tailStepsValue}" />
+        </label>` : ''}
+        ${controlsConfig.optionType ? `<label class="widget-control">T
+          <select class="widget-option-type-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.OPTION_TYPE}">
+            <option value="put" ${optionTypeValue === 'put' ? 'selected' : ''}>put</option>
+            <option value="call" ${optionTypeValue === 'call' ? 'selected' : ''}>call</option>
+          </select>
+        </label>` : ''}
+        ${controlsConfig.targetDelta ? `<label class="widget-control">D
+          <input type="number" min="0.01" max="0.99" step="0.01" class="widget-target-delta-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.TARGET_DELTA}" value="${targetDeltaValue}" />
+        </label>` : ''}
+        ${controlsConfig.expiration ? `<label class="widget-control">Exp
+          <input type="text" class="widget-expiration-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.EXPIRATION}" value="${expirationValue}" placeholder="20260612" />
         </label>` : ''}
         ${isNDateSkewWidget ? `<div class="widget-control widget-history-control">
           <button type="button" class="widget-history-toggle" data-widget-history-toggle-widget-id="${widget.id}" title="History">H</button>
@@ -175,6 +190,12 @@ export function createWidgetChart(ctx, definition, options = {}) {
         intersect: true
       },
       plugins: {
+        title: {
+          display: false,
+          color: '#eaeaf0',
+          font: { size: 11, weight: '600' },
+          padding: { top: 0, bottom: 6 }
+        },
         tooltip: {
           intersect: true,
           filter: (tooltipItem) => Boolean(tooltipItem?.chart?.$altTooltipPressed),

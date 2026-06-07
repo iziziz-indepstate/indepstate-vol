@@ -16,10 +16,12 @@ import { spreadOptimizerWidget } from './spread-optimizer-widget.js';
 import { ivRvWidget } from './iv-rv-widget.js';
 import { atmStraddleWidget } from './atm-straddle-widget.js';
 import { volUpfrontWidget } from './vol-upfront-widget.js';
+import { nDeltaIVWidget } from './n-delta-iv-widget.js';
 
 export const widgetDefinitions = [
   atmStraddleWidget,
   volUpfrontWidget,
+  nDeltaIVWidget,
   atmSkewWidget,
   tailSkewWidget,
   ivCurrentWidget,
