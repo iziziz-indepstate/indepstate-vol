@@ -24,14 +24,14 @@ npm start
 
 ## Included Widgets
 
-- **Straddle ATM**: text widget for the selected symbol and expiry tenor. It selects expiry, picks the ATM call/put pair, calculates the ATM straddle, implied move, expected range, ATM IV, quote quality, and comparison state. Details: [Straddle ATM Widget](docs/atm-straddle-widget.md).
+- **Straddle ATM**: text widget for the selected symbol and expiry tenor. It selects expiry, picks the ATM call/put pair, calculates the ATM straddle, implied move, expected range, ATM IV, quote quality, and comparison state. `ATM K` accepts an exact strike or `ATM`. Details: [Straddle ATM Widget](docs/atm-straddle-widget.md).
 - **Vol Upfront**: chart and table widget that reads Straddle ATM widgets on the same tab and calculates adjacent forward volatility segments. Details: [Vol Upfront Widget](docs/vol-upfront-widget.md).
 - **ATM Call-Put Skew**: time series for `dAtm = callATM.iv - putATM.iv`.
 - **+/-3 Strike Put-Call Skew**: time series for `dTail = put(-steps).bid_iv - call(+steps).bid_iv`.
-- **nDate Put Skew**: put `bid_iv` by a configurable strike ladder from a base strike, with `E1`, `E2`, and `SR` controls for expiry range and strike pattern.
-- **nDate Call Skew**: call-side counterpart of nDate Put Skew.
-- **nDate Skew Bid Put / Call**: nDate skew variants that chart option bid values instead of bid IV.
-- **nDate Skew BidIV Ratio**: ratio widget for symmetric strikes around a reference level: `(putBid / putIV) / (callBid / callIV)`.
+- **nDate Put Skew**: put `bid_iv` by a configurable strike ladder from a base strike, with `E1`, `E2`, and `SR` controls for expiry range and strike pattern. `S` accepts an exact strike or `ATM`.
+- **nDate Call Skew**: call-side counterpart of nDate Put Skew. `S` accepts an exact strike or `ATM`.
+- **nDate Skew Bid Put / Call**: nDate skew variants that chart option bid values instead of bid IV. `S` accepts an exact strike or `ATM`.
+- **nDate Skew BidIV Ratio**: ratio widget for symmetric strikes around a reference level: `(putBid / putIV) / (callBid / callIV)`. `S` accepts an exact strike or `ATM`.
 - **IV Current**: time series for IV at a selected strike. The `S` control accepts an exact strike or `ATM`.
 - **Spread Optimizer**: table widget that ranks candidate vertical spreads by configurable risk, liquidity, and regime inputs.
 - **SPX IV / RV**: standalone table and chart widget for implied-vs-realized volatility comparisons.

@@ -15,8 +15,8 @@ The widget answers:
 
 - `Tenor`: target expiry bucket. Calendar-day mapping is `0DTE=0`, `1D=1`, `1W=7`, `2W=14`, `1M=30`, `2M=60`, `3M=90`, `6M=180`.
 - `Expiry`: optional exact override selected from the date picker in `YYYY-MM-DD` format. When set, tenor-based selection is skipped.
-- `ATM K`: optional exact ATM strike override. When empty, the calculator selects ATM automatically from the reference price. When set, the selected expiry must contain a valid call/put pair at that strike.
-- `Spot S`: optional manual reference price. When empty, the widget uses spot from the datasource. When set, this value drives ATM selection, implied move percent, and expected range.
+- `ATM K`: optional ATM strike override. It accepts an exact strike or explicit `ATM`. When empty or set to `ATM`, the calculator selects the valid call/put pair nearest to the reference price. When set to a number, the selected expiry must contain a valid call/put pair at that strike.
+- `Spot S`: optional manual reference price. It accepts a number or explicit `Auto`. When empty or set to `Auto`, the widget uses spot from the datasource (`snapshot.px`). When set to a number, this value drives ATM selection, implied move percent, and expected range.
 - `Pick`: expiry selection mode: `nearest`, `at_or_after`, or `at_or_before`.
 - `Compare`: `previous_close`, `previous_snapshot`, or `none`. The app uses stored option-chain snapshots from the current tab. If comparison data is unavailable, the widget still renders the current value and shows comparison unavailable.
 - `Compact`: dashboard-card layout with headline values only.
@@ -40,7 +40,7 @@ When `Expiry` is set, the exact expiry is used and tenor-based selection is skip
 
 ## ATM Strike Selection
 
-For the selected expiry, the calculator builds call/put pairs by strike and excludes invalid quotes. If `ATM K` is set, that exact strike is used. Otherwise, it selects the strike nearest to the reference price. If strikes are tied by distance, the pair with better quote quality wins. If the reference price is missing, the calculation layer can fall back to the most delta-neutral pair using `callDelta + putDelta`.
+For the selected expiry, the calculator builds call/put pairs by strike and excludes invalid quotes. If `ATM K` is numeric, that exact strike is used. If `ATM K` is empty or `ATM`, it selects the strike nearest to the reference price. If strikes are tied by distance, the pair with better quote quality wins. If the reference price is missing, the calculation layer can fall back to the most delta-neutral pair using `callDelta + putDelta`.
 
 ## Quote Quality
 

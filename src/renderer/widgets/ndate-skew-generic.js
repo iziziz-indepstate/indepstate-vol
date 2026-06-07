@@ -1,3 +1,5 @@
+import { resolveConfiguredStrike } from '../../shared/option-chain-utils.js';
+
 function findAnchorIndex(strikesAsc, baseStrike, direction) {
   const exact = strikesAsc.findIndex((s) => s === baseStrike);
   if (exact !== -1) return exact;
@@ -165,8 +167,10 @@ function filterByWidgetExpiry(entries, widget) {
 function computeSingleSeries(snapshot, widget, mapKey, valueKey, side, direction, xOrder, computePointValue) {
   const ivByStrike = snapshot?.[mapKey] || {};
   const strikesAsc = safeStrikes(snapshot, side, mapKey);
-  const configured = Number(widget?.config?.baseStrike);
-  const baseStrike = Number.isFinite(configured) ? configured : 500;
+  const { strike: baseStrike } = resolveConfiguredStrike(strikesAsc, widget?.config?.baseStrike, {
+    snapshot,
+    defaultStrike: 500
+  });
 
   const selected = pickStrikesFromChain(strikesAsc, baseStrike, direction, widget?.config?.strikeRange);
   const points = selected.map((strike) => ({
@@ -218,7 +222,7 @@ export function createNDateSkewWidget({
       expiryStart: true,
       expiryEnd: true,
       strikeRange: true,
-      strikeInputType: 'number'
+      strikeInputType: 'text'
     },
     buildSnapshotSeries: (snapshot, widget) => {
       if (snapshot?.byExpiry && typeof snapshot.byExpiry === 'object') {

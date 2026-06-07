@@ -106,6 +106,19 @@ test('selects manual ATM strike override when provided', () => {
   assert.throws(() => selectAtmPair(snap, 105, time, 'mid', 105), /ATM strike 105/);
 });
 
+test('accepts explicit ATM strike override token', () => {
+  const snap = expirySnap(107, [
+    quote('call', 100),
+    quote('put', 100),
+    quote('call', 110),
+    quote('put', 110)
+  ]);
+
+  const selected = selectAtmPair(snap, 107, time, 'mid', 'ATM');
+  assert.equal(selected.strike, 110);
+  assert.equal(selected.atmSelectionMethod, 'explicit_atm');
+});
+
 test('validates quote edge cases', () => {
   assert.deepEqual(validateQuote(quote('call', 100), time).flags, []);
   assert.ok(validateQuote(quote('call', 100, { bid: null, mark: 5 }), time, 'mark').flags.includes('MISSING_BID_ASK'));
@@ -157,6 +170,33 @@ test('uses manual reference price for ATM selection and implied move percent', a
   assert.equal(result.referencePriceSource, 'manual');
   assert.equal(result.atmStrike, 6050);
   assert.ok(Math.abs(result.straddle.impliedMovePct - (101 / 6051)) < 1e-12);
+});
+
+test('treats explicit Auto spot control value as datasource spot mode', async () => {
+  const snap = snapshot({
+    20260614: expirySnap(6024.33, [
+      quote('call', 6025, { bid: 57, ask: 59 }),
+      quote('put', 6025, { bid: 54, ask: 56 })
+    ])
+  }, 6024.33);
+
+  const manualReferenceRaw = 'Auto';
+  const manualReferenceToken = manualReferenceRaw.toUpperCase();
+  const hasManualReferencePrice = manualReferenceRaw !== ''
+    && manualReferenceToken !== 'AUTO'
+    && manualReferenceToken !== 'ATM';
+  const result = await calculateAtmStraddle({
+    snapshot: snap,
+    tenor: '1W',
+    snapshotTime: time,
+    compareTo: 'none',
+    manualReferencePrice: hasManualReferencePrice ? manualReferenceRaw : undefined,
+    referencePriceMode: hasManualReferencePrice ? 'manual' : 'spot'
+  });
+
+  assert.equal(result.referencePrice, 6024.33);
+  assert.equal(result.referencePriceSource, 'spot');
+  assert.equal(result.atmStrike, 6025);
 });
 
 test('calculates historical comparison and handles missing comparison data', async () => {

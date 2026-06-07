@@ -1,3 +1,5 @@
+import { normalizeStrikeConfig } from './option-chain-utils.js';
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const DEFAULT_STALE_MS = 15 * 60 * 1000;
 
@@ -206,10 +208,10 @@ export function selectAtmPair(expirySnapshot, referencePrice, snapshotTime, quot
 
   if (!pairs.length) throw new Error('No valid call/put pair found near reference price for selected expiry.');
 
-  const manualStrike = toNum(atmStrikeOverride);
-  if (Number.isFinite(manualStrike)) {
-    const found = pairs.find((pair) => pair.strike === manualStrike);
-    if (!found) throw new Error(`No valid call/put pair found for ATM strike ${manualStrike}.`);
+  const override = normalizeStrikeConfig(atmStrikeOverride);
+  if (override.kind === 'numeric') {
+    const found = pairs.find((pair) => pair.strike === override.value);
+    if (!found) throw new Error(`No valid call/put pair found for ATM strike ${override.value}.`);
     return { ...found, atmSelectionMethod: 'manual_strike' };
   }
 
@@ -222,7 +224,7 @@ export function selectAtmPair(expirySnapshot, referencePrice, snapshotTime, quot
       if (pairDist === bestDist && pairQualityScore(pair.call, pair.put, snapshotTime, quoteMode) < pairQualityScore(best.call, best.put, snapshotTime, quoteMode)) return pair;
       return best;
     }, null);
-    return { ...found, atmSelectionMethod: 'nearest_to_reference' };
+    return { ...found, atmSelectionMethod: override.kind === 'atm' ? 'explicit_atm' : 'nearest_to_reference' };
   }
 
   const deltaPairs = pairs.filter((pair) => Number.isFinite(toNum(pair.call?.delta)) && Number.isFinite(toNum(pair.put?.delta)));

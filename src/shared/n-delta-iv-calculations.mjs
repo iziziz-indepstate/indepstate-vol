@@ -1,4 +1,4 @@
-import { resolveStrikeSelection } from './option-chain-utils.js';
+import { resolveConfiguredStrike } from './option-chain-utils.js';
 
 const OPTION_TYPES = new Set(['put', 'call']);
 
@@ -60,15 +60,13 @@ function sideQuotes(expirySnapshot, optionType) {
 }
 
 function resolveAnchorStrike(expirySnapshot, optionType, baseStrike) {
-  if (baseStrike == null || baseStrike === '') return null;
-  const normalized = String(baseStrike).trim().toUpperCase();
-  if (normalized !== 'ATM') return toNum(baseStrike);
-
   const strikesAsc = sideQuotes(expirySnapshot, optionType)
     .map((quote) => quote.strike)
     .filter(Number.isFinite)
     .sort((a, b) => a - b);
-  return resolveStrikeSelection(strikesAsc, normalized, expirySnapshot?.px).strike;
+  return resolveConfiguredStrike(strikesAsc, baseStrike, {
+    snapshot: expirySnapshot
+  }).strike;
 }
 
 function filterQuotesFromAnchor(quotes, optionType, anchorStrike) {

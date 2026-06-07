@@ -1,3 +1,5 @@
+import { resolveConfiguredStrike, referencePriceFromSnapshot } from '../../shared/option-chain-utils.js';
+
 function formatNumber(value, digits = 4) {
   if (!Number.isFinite(value)) return 'n/a';
   return Number(value).toFixed(digits);
@@ -111,15 +113,27 @@ function toFiniteOrNull(raw) {
 }
 
 function resolveReferenceLevel(snapshot, widget) {
+  const putStrikes = Array.isArray(snapshot?.putStrikesAsc)
+    ? snapshot.putStrikesAsc.filter((strike) => Number.isFinite(strike))
+    : [];
+  const callStrikes = Array.isArray(snapshot?.callStrikesAsc)
+    ? snapshot.callStrikesAsc.filter((strike) => Number.isFinite(strike))
+    : [];
+  const strikesAsc = Array.from(new Set([...putStrikes, ...callStrikes])).sort((a, b) => a - b);
+  const configured = String(widget?.config?.baseStrike ?? '').trim();
+  if (configured.toUpperCase() === 'ATM') {
+    return resolveConfiguredStrike(strikesAsc, configured, { snapshot }).strike;
+  }
+
   const forwardCandidates = [snapshot?.forward, snapshot?.fwd, snapshot?.F, snapshot?.f]
     .map(toFiniteOrNull)
     .filter((value) => Number.isFinite(value) && value > 0);
   if (forwardCandidates.length) return forwardCandidates[0];
 
-  const configured = toFiniteOrNull(widget?.config?.baseStrike);
-  if (Number.isFinite(configured) && configured > 0) return configured;
+  const configuredStrike = resolveConfiguredStrike(strikesAsc, configured, { defaultStrike: null }).strike;
+  if (Number.isFinite(configuredStrike) && configuredStrike > 0) return configuredStrike;
 
-  const spot = toFiniteOrNull(snapshot?.px ?? snapshot?.S);
+  const spot = referencePriceFromSnapshot(snapshot);
   if (Number.isFinite(spot) && spot > 0) return spot;
 
   return null;
@@ -322,7 +336,7 @@ export const nDateSkewBidIVRatioWidget = {
     expiryStart: true,
     expiryEnd: true,
     strikeRange: true,
-    strikeInputType: 'number'
+    strikeInputType: 'text'
   },
   buildSnapshotSeries: (snapshot, widget) => {
     if (!snapshot?.byExpiry || typeof snapshot.byExpiry !== 'object') {

@@ -60,3 +60,57 @@ export function resolveStrikeSelection(strikesSorted, configuredStrike, underlyi
 
   return { strike: Number.isFinite(nearest) ? nearest : null, mode: 'nearest' };
 }
+
+export function referencePriceFromSnapshot(snapshot) {
+  const candidates = [
+    snapshot?.px,
+    snapshot?.S,
+    snapshot?.spot,
+    snapshot?.underlyingPrice,
+    snapshot?.referencePrice
+  ];
+  for (const candidate of candidates) {
+    const parsed = Number(candidate);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+export function normalizeStrikeConfig(value) {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return { kind: 'empty', value: null };
+  if (normalized.toUpperCase() === 'ATM') return { kind: 'atm', value: 'ATM' };
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric)
+    ? { kind: 'numeric', value: numeric }
+    : { kind: 'invalid', value: null };
+}
+
+export function resolveConfiguredStrike(strikesSorted, configuredStrike, options = {}) {
+  const normalized = normalizeStrikeConfig(configuredStrike);
+  const fallback = options.defaultStrike == null ? Number.NaN : Number(options.defaultStrike);
+
+  if (normalized.kind === 'empty') {
+    return {
+      strike: Number.isFinite(fallback) ? fallback : null,
+      mode: Number.isFinite(fallback) ? 'default' : 'empty'
+    };
+  }
+
+  if (normalized.kind === 'atm') {
+    return resolveStrikeSelection(
+      strikesSorted,
+      'ATM',
+      options.underlyingPrice ?? referencePriceFromSnapshot(options.snapshot)
+    );
+  }
+
+  if (normalized.kind === 'numeric') {
+    return { strike: normalized.value, mode: 'numeric' };
+  }
+
+  return {
+    strike: Number.isFinite(fallback) ? fallback : null,
+    mode: Number.isFinite(fallback) ? 'default' : 'invalid'
+  };
+}

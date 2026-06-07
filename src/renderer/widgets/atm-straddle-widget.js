@@ -49,6 +49,7 @@ const BADGE_TOOLTIPS = Object.freeze({
   STALE_QUOTE: 'Quote timestamp is older than the freshness threshold.',
   NEGATIVE_OR_INVALID_QUOTE: 'Bid/ask/mid is invalid, negative, or crossed.',
   manual_strike: 'ATM strike was manually set from the ATM K control.',
+  explicit_atm: 'ATM strike was explicitly requested by ATM K and selected nearest to the reference price.',
   nearest_to_reference: 'ATM strike was selected as the valid call/put pair nearest to the reference price.',
   delta_neutral_fallback: 'ATM strike was selected by minimizing call delta plus put delta because reference price was unavailable.'
 });
@@ -95,10 +96,10 @@ function renderControls(cfg) {
       </label>
       ${expiryControl}
       <label class="straddle-control-narrow">ATM K
-        <input data-straddle-param="atmStrikeOverride" type="number" value="${esc(cfg.atmStrikeOverride || '')}" placeholder="Auto" />
+        <input data-straddle-param="atmStrikeOverride" type="text" value="${esc(cfg.atmStrikeOverride || '')}" placeholder="ATM" />
       </label>
       <label class="straddle-control-narrow">Spot S
-        <input data-straddle-param="manualReferencePrice" type="number" value="${esc(cfg.manualReferencePrice || '')}" placeholder="Auto" />
+        <input data-straddle-param="manualReferencePrice" type="text" value="${esc(cfg.manualReferencePrice || '')}" placeholder="Auto" />
       </label>
       ${advancedControls}
       <label class="straddle-checkbox">
@@ -209,7 +210,7 @@ export const atmStraddleWidget = {
     tenor: '1W',
     expiryOverride: '',
     atmStrikeOverride: '',
-    manualReferencePrice: '',
+    manualReferencePrice: 'Auto',
     referencePriceMode: 'spot',
     expirySelectionMode: 'nearest',
     quoteMode: 'mid',
@@ -232,7 +233,11 @@ export const atmStraddleWidget = {
     }
 
     try {
-      const hasManualReferencePrice = String(cfg.manualReferencePrice ?? '').trim() !== '';
+      const manualReferenceRaw = String(cfg.manualReferencePrice ?? '').trim();
+      const manualReferenceToken = manualReferenceRaw.toUpperCase();
+      const hasManualReferencePrice = manualReferenceRaw !== ''
+        && manualReferenceToken !== 'AUTO'
+        && manualReferenceToken !== 'ATM';
       const result = await calculateAtmStraddle({
         ...cfg,
         expiryOverride: cfg.expiryOverride || undefined,
