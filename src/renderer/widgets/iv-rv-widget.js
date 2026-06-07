@@ -178,6 +178,7 @@ function bindControls(container, widget, onConfigChange) {
 export const ivRvWidget = {
   type: 'iv-rv-local',
   mode: 'table',
+  gridSpan: 6,
   defaultTitle: 'SPX IV / RV',
   defaultConfig: {
     horizon: '9d',
