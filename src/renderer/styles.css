@@ -303,17 +303,32 @@ select option {
 
 .widget-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
 }
 
-.widget-card-wide {
+.widget-card {
   grid-column: span 2;
 }
 
+.widget-card-wide {
+  grid-column: span 3;
+}
+
+.widget-card[data-grid-span="3"] {
+  grid-column: span 3;
+}
+
+.widget-card[data-grid-span="6"] {
+  grid-column: span 6;
+}
+
 @media (max-width: 1100px) {
-  .widget-card-wide {
-    grid-column: span 1;
+  .widget-card,
+  .widget-card-wide,
+  .widget-card[data-grid-span="3"],
+  .widget-card[data-grid-span="6"] {
+    grid-column: span 6;
   }
 }
 
@@ -396,6 +411,12 @@ select option {
   color: var(--muted);
   min-height: 28px;
   padding-right: 30px;
+  cursor: grab;
+  user-select: none;
+}
+
+.widget-card.is-dragging .widget-title {
+  cursor: grabbing;
 }
 
 .widget-title h3 {
@@ -503,6 +524,7 @@ canvas {
 
 .widget-body {
   width: 100%;
+  user-select: text;
 }
 
 .spread-opt-controls {
@@ -719,7 +741,184 @@ canvas {
   margin-top: 6px;
 }
 
+.straddle-controls {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 5px 6px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+
+.straddle-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  grid-column: span 2;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.straddle-controls .straddle-control-narrow {
+  grid-column: span 1;
+}
+
+.straddle-controls input,
+.straddle-controls select {
+  min-width: 0;
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 11px;
+}
+
+.straddle-checkbox {
+  flex-direction: row !important;
+  align-items: center;
+  grid-column: span 1;
+  padding-bottom: 5px;
+  white-space: nowrap;
+}
+
+.straddle-checkbox input {
+  width: 13px !important;
+  min-width: 13px !important;
+  height: 13px;
+  margin: 0;
+  padding: 0;
+}
+
+.straddle-text {
+  margin: 0;
+  color: var(--text);
+  font: 12px/1.38 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  user-select: text;
+}
+
+.straddle-section {
+  margin-top: 8px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.straddle-heading,
+.straddle-compact-title {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.straddle-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.straddle-badge {
+  display: inline-block;
+  border: 1px solid rgba(122, 162, 255, 0.35);
+  border-radius: 999px;
+  padding: 1px 6px;
+  margin: 1px;
+  background: rgba(122, 162, 255, 0.12);
+  color: #b9ccff;
+  font-size: 10px;
+  vertical-align: baseline;
+}
+
+.straddle-compact {
+  display: grid;
+  gap: 3px;
+  color: var(--text);
+  font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  user-select: text;
+}
+
+.straddle-compact-value {
+  font-size: 17px;
+  font-weight: 750;
+}
+
+.straddle-muted,
+.straddle-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.straddle-error {
+  color: #fbbf24;
+  font-size: 12px;
+}
+
+.vol-upfront-chart-wrap canvas {
+  width: 100% !important;
+  height: 190px !important;
+}
+
+.vol-upfront-content {
+  width: 100%;
+  max-width: calc((100% - 10px) / 2);
+  margin: 0 auto;
+}
+
+.vol-upfront-info {
+  margin-top: 8px;
+}
+
+.vol-upfront-points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.vol-upfront-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.vol-upfront-table th,
+.vol-upfront-table td {
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  padding: 4px 5px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.vol-upfront-table th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.vol-upfront-status {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 1px 6px;
+  border: 1px solid rgba(122, 162, 255, 0.35);
+  background: rgba(122, 162, 255, 0.12);
+  color: #b9ccff;
+}
+
+.vol-upfront-status.bad,
+.vol-upfront-warning {
+  color: #fbbf24;
+}
+
+.vol-upfront-empty {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 @media (max-width: 1100px) {
+  .vol-upfront-content {
+    max-width: 100%;
+  }
+
   .ivrv-controls,
   .ivrv-summary,
   .ivrv-charts {

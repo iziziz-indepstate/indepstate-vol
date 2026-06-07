@@ -14,8 +14,12 @@ import {
 import { nDateSkewBidIVRatioWidget } from './ndate-bidiv-ratio-widget.js';
 import { spreadOptimizerWidget } from './spread-optimizer-widget.js';
 import { ivRvWidget } from './iv-rv-widget.js';
+import { atmStraddleWidget } from './atm-straddle-widget.js';
+import { volUpfrontWidget } from './vol-upfront-widget.js';
 
 export const widgetDefinitions = [
+  atmStraddleWidget,
+  volUpfrontWidget,
   atmSkewWidget,
   tailSkewWidget,
   ivCurrentWidget,

@@ -23,6 +23,7 @@ const tabTickInFlight = new Set();
 const tabRefreshInFlight = new Set();
 const tabStatus = {};
 const chartInstances = new Map();
+const widgetDataStore = new Map();
 let tabContextTargetId = null;
 let renameTargetTabId = null;
 let draggedTabId = null;
@@ -99,7 +100,11 @@ function persist() {
 
 function tabSupportsHistorySnapshots(tab) {
   if (!tab || !Array.isArray(tab.widgets)) return false;
-  return tab.widgets.some((widget) => String(widget?.type || '').startsWith('ndate-skew-'));
+  return tab.widgets.some((widget) => {
+    const type = String(widget?.type || '');
+    const definition = getWidgetDefinition(type);
+    return type.startsWith('ndate-skew-') || Boolean(definition?.requiresHistory);
+  });
 }
 
 function ensureTabHistoryPolicy(tab) {
@@ -280,6 +285,33 @@ function destroyCharts() {
     }
   }
   chartInstances.clear();
+}
+
+function widgetDataKey(tabId, widgetId) {
+  return `${tabId || ''}:${widgetId || ''}`;
+}
+
+function publishWidgetData(tabId, widgetId, data) {
+  if (!tabId || !widgetId) return;
+  widgetDataStore.set(widgetDataKey(tabId, widgetId), {
+    ...data,
+    tabId,
+    widgetId,
+    updatedAt: new Date().toISOString()
+  });
+}
+
+function clearWidgetData(tabId, widgetId) {
+  if (!tabId || !widgetId) return;
+  widgetDataStore.delete(widgetDataKey(tabId, widgetId));
+}
+
+function readWidgetDataByType(tab, type) {
+  if (!tab || !type) return [];
+  return (tab.widgets || [])
+    .filter((widget) => widget.type === type)
+    .map((widget) => widgetDataStore.get(widgetDataKey(tab.id, widget.id)))
+    .filter(Boolean);
 }
 
 function getHiddenSnapshotSeriesLabels(widget) {
@@ -496,6 +528,7 @@ function renderWidgets() {
     btn.addEventListener('click', (evt) => {
       const wid = evt.target.getAttribute('data-widget-id');
       tab.widgets = tab.widgets.filter((w) => w.id !== wid);
+      clearWidgetData(tab.id, wid);
       ensureTabHistoryPolicy(tab);
       renderWidgets();
       persist();
@@ -509,6 +542,7 @@ function renderWidgets() {
 
   root.querySelectorAll('.widget-card[data-widget-card-id]').forEach((card) => {
     const cardWidgetId = card.dataset.widgetCardId;
+    let canDragWidgetFromHeader = false;
 
     const setDragEnabled = (enabled) => {
       card.draggable = Boolean(enabled);
@@ -530,17 +564,22 @@ function renderWidgets() {
     });
 
     card.addEventListener('pointerdown', (evt) => {
-      if (!isInteractiveWidgetControl(evt.target)) return;
-      setDragEnabled(false);
+      canDragWidgetFromHeader = Boolean(evt.target.closest('.widget-title')) && !isInteractiveWidgetControl(evt.target);
+      if (isInteractiveWidgetControl(evt.target)) setDragEnabled(false);
     });
 
     card.addEventListener('pointerup', () => {
       const activeInsideCard = card.contains(document.activeElement);
       if (!activeInsideCard) setDragEnabled(true);
+      canDragWidgetFromHeader = false;
+    });
+
+    card.addEventListener('pointercancel', () => {
+      canDragWidgetFromHeader = false;
     });
 
     card.addEventListener('dragstart', (evt) => {
-      if (isInteractiveWidgetControl(evt.target)) {
+      if (isInteractiveWidgetControl(evt.target) || !canDragWidgetFromHeader) {
         evt.preventDefault();
         return;
       }
@@ -552,6 +591,7 @@ function renderWidgets() {
 
     card.addEventListener('dragend', () => {
       draggedWidgetId = null;
+      canDragWidgetFromHeader = false;
       card.classList.remove('is-dragging');
       root.querySelectorAll('.widget-card.drag-over').forEach((x) => x.classList.remove('drag-over'));
       if (!card.contains(document.activeElement)) setDragEnabled(true);
@@ -719,29 +759,22 @@ function renderWidgets() {
   refreshCharts();
 }
 
-function refreshCharts() {
+async function refreshCharts() {
   const tab = activeTab();
   if (!tab) return;
 
   const history = state.historyByTab[tab.id] || [];
   const latest = history[history.length - 1] || null;
 
-  for (const entry of chartInstances.values()) {
+  const entries = Array.from(chartInstances.values());
+  const producerRenderTasks = [];
+  for (const entry of entries) {
     const { chart, mode, metric, definition, widget } = entry;
-    if (mode === 'table' && typeof definition.render === 'function') {
-      const target = document.getElementById(`widget-body-${widget.id}`);
-      if (!target) continue;
-      definition.render({
-        container: target,
-        snapshot: latest,
-        widget,
-        onConfigChange: () => {
-          persist();
-          refreshCharts();
-        }
-      });
+    if (mode === 'table' && typeof definition.render === 'function' && !definition.consumesWidgetData) {
+      producerRenderTasks.push(renderTableWidgetEntry(entry, latest, history));
       continue;
     }
+    if (mode === 'table') continue;
 
     if (mode === 'snapshot-series' && typeof definition.buildSnapshotSeries === 'function') {
       const widgetSnapshot = latest;
@@ -868,6 +901,99 @@ function refreshCharts() {
     chart.options.plugins.legend.display = false;
     chart.update();
   }
+
+  await Promise.all(producerRenderTasks);
+
+  const consumerRenderTasks = [];
+  for (const entry of entries) {
+    const { mode, definition } = entry;
+    if (mode === 'table' && typeof definition.render === 'function' && definition.consumesWidgetData) {
+      consumerRenderTasks.push(renderTableWidgetEntry(entry, latest, history));
+    }
+  }
+  await Promise.all(consumerRenderTasks);
+}
+
+async function renderTableWidgetEntry(entry, latest, history) {
+  const { mode, definition, widget } = entry || {};
+  if (mode !== 'table' || typeof definition?.render !== 'function' || !widget?.id) return;
+
+  const target = document.getElementById(`widget-body-${widget.id}`);
+  if (!target) return;
+  const tab = activeTab();
+
+  await definition.render({
+    container: target,
+    snapshot: latest,
+    history,
+    widgets: tab?.widgets || [],
+    widgetData: {
+      publish: (data) => publishWidgetData(tab?.id, widget.id, data),
+      clear: () => clearWidgetData(tab?.id, widget.id),
+      readByType: (type) => readWidgetDataByType(tab, type)
+    },
+    widget,
+    onConfigChange: () => {
+      persist();
+      refreshSingleTableWidget(widget.id)
+        .then(() => {
+          if (widget.type === 'atm-straddle') return refreshVolUpfrontWidgets();
+          return null;
+        })
+        .catch((err) => console.error('Failed to refresh table widget', err));
+    },
+    onConfigBroadcast: (paramName, value) => {
+      broadcastTableWidgetConfig(widget.id, paramName, value);
+    }
+  });
+}
+
+async function refreshSingleTableWidget(widgetId) {
+  const tab = activeTab();
+  if (!tab || !widgetId) return;
+
+  const entry = chartInstances.get(widgetId);
+  if (!entry || entry.mode !== 'table') return;
+
+  const history = state.historyByTab[tab.id] || [];
+  const latest = history[history.length - 1] || null;
+  await renderTableWidgetEntry(entry, latest, history);
+}
+
+function broadcastTableWidgetConfig(sourceWidgetId, paramName, value) {
+  const tab = activeTab();
+  if (!tab || !sourceWidgetId || !paramName) return;
+
+  const sourceWidget = tab.widgets.find((widget) => widget.id === sourceWidgetId);
+  if (!sourceWidget) return;
+
+  const updatedWidgetIds = [];
+  for (const widget of tab.widgets) {
+    if (widget.id === sourceWidgetId || widget.type !== sourceWidget.type) continue;
+    widget.config ||= {};
+    widget.config[paramName] = value;
+    updatedWidgetIds.push(widget.id);
+  }
+
+  if (!updatedWidgetIds.length) return;
+  persist();
+  Promise.all(updatedWidgetIds.map((widgetId) => refreshSingleTableWidget(widgetId)))
+    .then(() => {
+      if (sourceWidget.type === 'atm-straddle') return refreshVolUpfrontWidgets();
+      return null;
+    })
+    .catch((err) => console.error('Failed to broadcast table widget config', err));
+}
+
+async function refreshVolUpfrontWidgets() {
+  const tab = activeTab();
+  if (!tab) return;
+
+  const tasks = [];
+  for (const widget of tab.widgets || []) {
+    if (widget.type === 'vol-upfront') tasks.push(refreshSingleTableWidget(widget.id));
+  }
+  await Promise.all(tasks);
 }
 
 function tickTabIfActive(tabId) {

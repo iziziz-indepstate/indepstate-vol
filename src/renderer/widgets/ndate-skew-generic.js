@@ -204,6 +204,7 @@ export function createNDateSkewWidget({
   return {
     type,
     mode: 'snapshot-series',
+    gridSpan: 3,
     defaultTitle: title,
     color,
     defaultConfig: {

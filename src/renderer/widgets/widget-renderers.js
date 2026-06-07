@@ -3,7 +3,10 @@ import { WIDGET_PARAM_NAMES } from './widget-params.js';
 export function createWidgetCard(widget, definition) {
   const card = document.createElement('article');
   card.className = 'widget-card';
-  if (definition?.mode === 'table') card.classList.add('widget-card-wide');
+  if (definition?.mode === 'table' && definition?.wide !== false) card.classList.add('widget-card-wide');
+  if (Number.isInteger(definition?.gridSpan) && definition.gridSpan > 1) {
+    card.dataset.gridSpan = String(definition.gridSpan);
+  }
   card.draggable = true;
   card.dataset.widgetCardId = widget.id;
 

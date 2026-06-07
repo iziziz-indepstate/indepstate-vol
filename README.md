@@ -11,21 +11,32 @@ npm install
 npm start
 ```
 
-## Current implementation
+## Current Implementation
 
-- **Provider abstraction**: `providers[providerKey]` map in renderer. Right now includes `TradingViewProvider` only.
-- **Widget abstraction**: each widget lives in `src/renderer/widgets/` as a separate script file, composed via a central registry.
-- **nDate generic engine**: put/call nDate widgets are created from one generic parametrized implementation (side + direction).
+- **Provider abstraction**: the renderer keeps a `providers[providerKey]` map. The current live option-chain provider is `TradingViewProvider`.
+- **Widget abstraction**: each widget lives in `src/renderer/widgets/` and is composed through the central widget registry.
+- **Widget data outputs**: widgets can publish structured outputs for other widgets to consume. This makes derived widgets depend on widget contracts instead of recalculating upstream logic. Details: [Widget Data Contracts](docs/widget-data-contracts.md).
+- **nDate generic engine**: put/call nDate widgets are created from one generic parameterized implementation.
 - **Metric abstraction**: metric definitions (`key` + `compute`) live in `src/renderer/widgets/metrics.js` and are passed into providers for calculation.
-- **Dashboard tabs**: each tab stores its own provider config and list of widgets.
-- **State persistence**: tab layout + config are saved to Electron `userData/dashboard-state.json` and restored on next launch.
+- **Dashboard tabs**: each tab stores its own provider config and widget list.
+- **State persistence**: tab layout and config are saved to Electron `userData/dashboard-state.json` and restored on the next launch.
 
-## Included widgets
+## Included Widgets
 
-- ATM Call-Put Skew (`dAtm = callATM.iv - putATM.iv`)
-- ±3 Strike Put-Call Skew (`dTail = put(-steps).bid_iv - call(+steps).bid_iv`)
-- nDate-Put-Skew (изменение `put bid_iv` по пользовательской лесенке страйков от заданного уровня, с полями `E1/E2/SR` для диапазона экспираций и паттерна страйков; `SR` поддерживает массив шага вроде `[5,5,5,10]` или число количества страйков от центрального)
-- nDate-Call-Skew (аналогично nDate-Put-Skew, но по `call bid_iv` и лесенка страйков вверх от указанного страйка, включая поддержку `E1/E2/SR`)
-- nDate-Skew-Bid-Put / nDate-Skew-Bid-Call (аналогично nDate-Skew, но отображают денежный `bid` из ответа `/options/scan2`, поле `bid`, индекс `1`)
-- nDate-Skew-BidIV-Ratio (для каждой выбранной экспирации строит `ratio = (putBid/putIV) / (callBid/callIV)` по симметричным страйкам вокруг reference-уровня: `forward` при наличии, иначе пользовательский `S`; tooltip показывает `discount = 1 - ratio` и все промежуточные поля, а при `ratio < 1` put-защита считается дешевле call-крыла; поддерживает `E1/E2/SR` как остальные nDate-Skew виджеты)
-- IV-Current (временной ряд `IV` по выбранному страйку; в поле `S` можно указать конкретный страйк или `ATM`)
+- **Straddle ATM**: text widget for the selected symbol and expiry tenor. It selects expiry, picks the ATM call/put pair, calculates the ATM straddle, implied move, expected range, ATM IV, quote quality, and comparison state. Details: [Straddle ATM Widget](docs/atm-straddle-widget.md).
+- **Vol Upfront**: chart and table widget that reads Straddle ATM widgets on the same tab and calculates adjacent forward volatility segments. Details: [Vol Upfront Widget](docs/vol-upfront-widget.md).
+- **ATM Call-Put Skew**: time series for `dAtm = callATM.iv - putATM.iv`.
+- **+/-3 Strike Put-Call Skew**: time series for `dTail = put(-steps).bid_iv - call(+steps).bid_iv`.
+- **nDate Put Skew**: put `bid_iv` by a configurable strike ladder from a base strike, with `E1`, `E2`, and `SR` controls for expiry range and strike pattern.
+- **nDate Call Skew**: call-side counterpart of nDate Put Skew.
+- **nDate Skew Bid Put / Call**: nDate skew variants that chart option bid values instead of bid IV.
+- **nDate Skew BidIV Ratio**: ratio widget for symmetric strikes around a reference level: `(putBid / putIV) / (callBid / callIV)`.
+- **IV Current**: time series for IV at a selected strike. The `S` control accepts an exact strike or `ATM`.
+- **Spread Optimizer**: table widget that ranks candidate vertical spreads by configurable risk, liquidity, and regime inputs.
+- **SPX IV / RV**: standalone table and chart widget for implied-vs-realized volatility comparisons.
+
+## Tests
+
+```bash
+npm test
+```
