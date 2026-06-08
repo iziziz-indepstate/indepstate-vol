@@ -555,6 +555,8 @@ function renderWidgets() {
       continue;
     }
 
+    if (widget.collapsed) continue;
+
     const ctx = document.getElementById(`canvas-${widget.id}`)?.getContext('2d');
     if (!ctx) continue;
 
@@ -626,6 +628,17 @@ function renderWidgets() {
 
     card.addEventListener('pointercancel', () => {
       canDragWidgetFromHeader = false;
+    });
+
+    card.querySelector('[data-widget-collapse-handle]')?.addEventListener('dblclick', (evt) => {
+      if (isInteractiveWidgetControl(evt.target)) return;
+      const target = tab.widgets.find((w) => w.id === cardWidgetId);
+      if (!target) return;
+
+      evt.preventDefault();
+      target.collapsed = !target.collapsed;
+      renderWidgets();
+      persist();
     });
 
     card.addEventListener('dragstart', (evt) => {
@@ -839,6 +852,7 @@ async function refreshCharts() {
   const producerRenderTasks = [];
   for (const entry of entries) {
     const { chart, mode, metric, definition, widget } = entry;
+    if (widget?.collapsed && mode !== 'table') continue;
     if (mode === 'table' && typeof definition.render === 'function' && !definition.consumesWidgetData) {
       if (definition.refreshOnDashboardRefresh === false && entry.hasRendered) continue;
       producerRenderTasks.push(renderTableWidgetEntry(entry, latest, history));

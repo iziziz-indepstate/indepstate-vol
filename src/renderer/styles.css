@@ -304,6 +304,7 @@ select option {
 .widget-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
+  align-items: start;
   gap: 10px;
 }
 
@@ -415,6 +416,10 @@ select option {
   user-select: none;
 }
 
+.widget-card-collapsed .widget-title {
+  margin-bottom: 0;
+}
+
 .widget-card.is-dragging .widget-title {
   cursor: grabbing;
 }
@@ -430,6 +435,10 @@ select option {
 canvas {
   width: 100% !important;
   height: 240px !important;
+}
+
+.widget-card-collapsed canvas {
+  display: none !important;
 }
 
 .widget-control {
@@ -540,6 +549,20 @@ canvas {
 .widget-body {
   width: 100%;
   user-select: text;
+}
+
+.widget-card-collapsed .widget-body {
+  margin-top: 8px;
+}
+
+.widget-card-collapsed .widget-body > :not(.straddle-controls):not(.ivrv-controls):not(.spread-opt-controls) {
+  display: none !important;
+}
+
+.widget-card-collapsed .straddle-controls,
+.widget-card-collapsed .ivrv-controls,
+.widget-card-collapsed .spread-opt-controls {
+  margin-bottom: 0;
 }
 
 .spread-opt-controls {

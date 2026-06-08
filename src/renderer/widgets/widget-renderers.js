@@ -3,6 +3,7 @@ import { WIDGET_PARAM_NAMES } from './widget-params.js';
 export function createWidgetCard(widget, definition) {
   const card = document.createElement('article');
   card.className = 'widget-card';
+  if (widget.collapsed) card.classList.add('widget-card-collapsed');
   if (definition?.mode === 'table' && definition?.wide !== false) card.classList.add('widget-card-wide');
   if (Number.isInteger(definition?.gridSpan) && definition.gridSpan > 1) {
     card.dataset.gridSpan = String(definition.gridSpan);
@@ -65,7 +66,7 @@ export function createWidgetCard(widget, definition) {
 
   card.innerHTML = `
     <button class="btn btn-icon widget-remove-btn" data-widget-id="${widget.id}" aria-label="Remove widget" title="Remove widget">✕</button>
-    <div class="widget-title">
+    <div class="widget-title" data-widget-collapse-handle="true" aria-expanded="${widget.collapsed ? 'false' : 'true'}" title="Double-click to ${widget.collapsed ? 'expand' : 'collapse'}">
       <h3>${widget.title || definition.defaultTitle}</h3>
       ${controls}
     </div>
