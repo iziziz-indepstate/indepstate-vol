@@ -12,6 +12,7 @@ import {
   createDashboardRuntimeSnapshot,
   createMcpRuntimeStore
 } from '../shared/mcp-runtime-store.mjs';
+import { trimSnapshotForWidgets } from '../shared/snapshot-trim.mjs';
 
 const providers = {
   tradingview: new TradingViewProvider()
@@ -120,6 +121,11 @@ function ensureTabHistoryPolicy(tab) {
     return;
   }
   if (!Array.isArray(state.historyByTab[tab.id])) state.historyByTab[tab.id] = [];
+}
+
+function trimHistoryForTab(tab) {
+  if (!tab?.id || !Array.isArray(state.historyByTab[tab.id])) return;
+  state.historyByTab[tab.id] = state.historyByTab[tab.id].map((snapshot) => trimSnapshotForWidgets(snapshot, tab));
 }
 
 function applyTabToForm(tab) {
@@ -1194,6 +1200,19 @@ async function tickTab(tabId) {
   try {
     setTabStatus(tabId, `Loading snapshot (${tab.title})...`);
     const point = await provider.fetchSnapshot(tab.providerConfig, skewMetrics);
+    try {
+      await window.appBridge.saveRawSnapshot?.({
+        tab: {
+          id: tab.id,
+          title: tab.title,
+          providerKey: tab.providerKey,
+          providerConfig: tab.providerConfig
+        },
+        snapshot: point
+      });
+    } catch (err) {
+      console.warn('Failed to save raw snapshot', err);
+    }
 
     ensureTabHistoryPolicy(tab);
     if (!tabSupportsHistorySnapshots(tab)) {
@@ -1203,7 +1222,8 @@ async function tickTab(tabId) {
       return;
     }
 
-    state.historyByTab[tab.id].push(point);
+    const storedPoint = trimSnapshotForWidgets(point, tab);
+    state.historyByTab[tab.id].push(storedPoint);
 
     const keep = Math.max(20, Number(tab.providerConfig.keepPoints) || 200);
     while (state.historyByTab[tab.id].length > keep) {
@@ -1351,6 +1371,7 @@ async function init() {
 
   if (!state.tabs.length) addTab();
 
+  let compactedLoadedHistory = false;
   for (const tab of state.tabs) {
     ensureTabHistoryPolicy(tab);
     if (!tab.providerConfig.expiryStart) tab.providerConfig.expiryStart = tab.providerConfig.expiry || defaultExpiry();
@@ -1364,6 +1385,8 @@ async function init() {
         widget.config.expiryStart = widget.config.expiry;
       }
     }
+    trimHistoryForTab(tab);
+    compactedLoadedHistory = compactedLoadedHistory || Boolean(state.historyByTab[tab.id]?.length);
   }
 
   if (!state.activeTabId) state.activeTabId = state.tabs[0].id;
@@ -1373,6 +1396,7 @@ async function init() {
   renderWidgets();
   updatePollingControlsForActiveTab();
   setTabStatus(state.activeTabId, 'ready');
+  if (compactedLoadedHistory) persist();
 }
 
 init();

@@ -5,6 +5,7 @@ const { loadLocalMarketSeries } = require('./local-market-data.cjs');
 const { createMarketDataService } = require('./market-data-providers.cjs');
 const { startAutoUpdater } = require('./auto-updater.cjs');
 const { startMcpServer } = require('./mcp-server.cjs');
+const { defaultRawSnapshotDir, saveRawSnapshot } = require('./raw-snapshot-store.cjs');
 
 app.setName('IS-VOL');
 
@@ -103,6 +104,10 @@ app.whenReady().then(() => {
   ipcMain.handle('state:save', async (_evt, state) => {
     saveState(app.getPath('userData'), state);
     return { ok: true };
+  });
+
+  ipcMain.handle('raw-snapshot:save', async (_evt, payload) => {
+    return saveRawSnapshot(defaultRawSnapshotDir(app), payload || {});
   });
 
   ipcMain.handle('market-data:load-local-series', async (_evt, source) => {
