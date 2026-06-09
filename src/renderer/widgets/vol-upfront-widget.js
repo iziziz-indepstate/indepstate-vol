@@ -52,7 +52,7 @@ function createChart(container, segments) {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            label: (context) => `Forward vol: ${fmt(context.parsed.y, 2)}%`
+            label: (context) => `Forward vol: ${fmt(context.parsed.y, 1)}%`
           }
         }
       },
@@ -61,7 +61,7 @@ function createChart(container, segments) {
         y: {
           ticks: {
             color: 'rgba(234,234,240,0.65)',
-            callback: (value) => `${value}%`
+            callback: (value) => `${fmt(Number(value), 1)}%`
           }
         }
       }

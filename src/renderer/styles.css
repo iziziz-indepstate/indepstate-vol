@@ -109,6 +109,20 @@ body {
   cursor: pointer;
 }
 
+.btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.btn.is-active,
+.btn.is-active:disabled {
+  opacity: 1;
+  border-color: rgba(35, 197, 94, 0.8);
+  background: rgba(35, 197, 94, 0.18);
+  color: #d8ffe7;
+  box-shadow: 0 0 0 1px rgba(35, 197, 94, 0.18), 0 0 12px rgba(35, 197, 94, 0.28);
+}
+
 .btn-compact {
   padding: 6px 8px;
 }

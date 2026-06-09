@@ -90,7 +90,10 @@ function updatePollingControlsForActiveTab() {
   const tab = activeTab();
   const running = tab ? tabTimers.has(tab.id) : false;
   const refreshing = tab ? tabRefreshInFlight.has(tab.id) : false;
-  $('startBtn').disabled = running || refreshing;
+  const startBtn = $('startBtn');
+  startBtn.disabled = running || refreshing;
+  startBtn.classList.toggle('is-active', running);
+  startBtn.setAttribute('aria-pressed', String(running));
   $('stopBtn').disabled = !running || refreshing;
   $('refreshBtn').disabled = refreshing;
   $('clearSnapshotBtn').disabled = refreshing;
@@ -568,7 +571,7 @@ function renderWidgets() {
 
     const chart = createWidgetChart(ctx, definition, {
       onLegendVisibilityChange: () => {
-        if ((definition.mode || 'timeseries') !== 'snapshot-series') return;
+        if (!['snapshot-series', 'timeseries-custom'].includes(definition.mode || 'timeseries')) return;
         syncHiddenSnapshotSeriesLabels(widget, chart);
         persist();
       }
@@ -995,6 +998,7 @@ async function refreshCharts() {
       chart.options.plugins.title ||= {};
       chart.options.plugins.title.display = Boolean(series?.title);
       chart.options.plugins.title.text = series?.title || '';
+      applyHiddenSnapshotSeriesLabels(widget, chart);
       chart.update();
       publishChartRuntime(entry, series?.title || '');
       continue;
