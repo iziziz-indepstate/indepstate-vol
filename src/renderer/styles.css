@@ -223,6 +223,18 @@ body {
   color: var(--muted);
 }
 
+.config-grid .checkbox-field {
+  min-height: 58px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox-field input {
+  width: auto;
+  margin: 0;
+}
+
 input, select {
   width: 100%;
   border: 1px solid var(--border);

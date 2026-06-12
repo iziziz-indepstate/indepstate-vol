@@ -1,0 +1,11 @@
+IS-VOL v1.2.1
+
+Changes
+- Added a Data Source checkbox to disable saving raw snapshots to disk.
+- Added a Data Source checkbox to disable history snapshot compaction for sources that need full uncompressed history.
+- Kept existing Data Source behavior as the default for old and new tabs: raw snapshots are saved and history snapshots are compacted unless explicitly disabled.
+- Added migration-safe defaults for older dashboard state files.
+
+Verification
+- node --check src\renderer\app.js
+- npm test: 60 tests passed

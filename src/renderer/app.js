@@ -126,12 +126,28 @@ function ensureTabHistoryPolicy(tab) {
   if (!Array.isArray(state.historyByTab[tab.id])) state.historyByTab[tab.id] = [];
 }
 
+function normalizeProviderConfig(providerConfig = {}) {
+  if (providerConfig.saveRawSnapshots == null) providerConfig.saveRawSnapshots = true;
+  if (providerConfig.compactHistorySnapshots == null) providerConfig.compactHistorySnapshots = true;
+  return providerConfig;
+}
+
+function shouldSaveRawSnapshots(tab) {
+  return tab?.providerConfig?.saveRawSnapshots !== false;
+}
+
+function shouldCompactHistorySnapshots(tab) {
+  return tab?.providerConfig?.compactHistorySnapshots !== false;
+}
+
 function trimHistoryForTab(tab) {
   if (!tab?.id || !Array.isArray(state.historyByTab[tab.id])) return;
+  if (!shouldCompactHistorySnapshots(tab)) return;
   state.historyByTab[tab.id] = state.historyByTab[tab.id].map((snapshot) => trimSnapshotForWidgets(snapshot, tab));
 }
 
 function applyTabToForm(tab) {
+  tab.providerConfig = normalizeProviderConfig(tab.providerConfig || {});
   $('providerKey').value = tab.providerKey;
   $('apiBase').value = tab.providerConfig.apiBase || '';
   $('ticker').value = tab.providerConfig.ticker || '';
@@ -141,6 +157,8 @@ function applyTabToForm(tab) {
   $('yahooSymbol').value = tab.providerConfig.yahooSymbol || '';
   $('pollSec').value = String(tab.providerConfig.pollSec ?? 5);
   $('keepPoints').value = String(tab.providerConfig.keepPoints ?? 200);
+  $('saveRawSnapshots').checked = shouldSaveRawSnapshots(tab);
+  $('compactHistorySnapshots').checked = shouldCompactHistorySnapshots(tab);
 }
 
 function readFormToTab(tab) {
@@ -153,7 +171,9 @@ function readFormToTab(tab) {
     expiryEnd: $('expiryEnd').value.trim(),
     yahooSymbol: $('yahooSymbol').value.trim(),
     pollSec: Number($('pollSec').value) || 5,
-    keepPoints: Number($('keepPoints').value) || 200
+    keepPoints: Number($('keepPoints').value) || 200,
+    saveRawSnapshots: $('saveRawSnapshots').checked,
+    compactHistorySnapshots: $('compactHistorySnapshots').checked
   };
 }
 
@@ -1173,7 +1193,9 @@ function addTab() {
       expiryEnd: '',
       yahooSymbol: 'SPY',
       pollSec: 5,
-      keepPoints: 200
+      keepPoints: 200,
+      saveRawSnapshots: true,
+      compactHistorySnapshots: true
     },
     widgets: []
   };
@@ -1204,18 +1226,20 @@ async function tickTab(tabId) {
   try {
     setTabStatus(tabId, `Loading snapshot (${tab.title})...`);
     const point = await provider.fetchSnapshot(tab.providerConfig, skewMetrics);
-    try {
-      await window.appBridge.saveRawSnapshot?.({
-        tab: {
-          id: tab.id,
-          title: tab.title,
-          providerKey: tab.providerKey,
-          providerConfig: tab.providerConfig
-        },
-        snapshot: point
-      });
-    } catch (err) {
-      console.warn('Failed to save raw snapshot', err);
+    if (shouldSaveRawSnapshots(tab)) {
+      try {
+        await window.appBridge.saveRawSnapshot?.({
+          tab: {
+            id: tab.id,
+            title: tab.title,
+            providerKey: tab.providerKey,
+            providerConfig: tab.providerConfig
+          },
+          snapshot: point
+        });
+      } catch (err) {
+        console.warn('Failed to save raw snapshot', err);
+      }
     }
 
     ensureTabHistoryPolicy(tab);
@@ -1226,7 +1250,9 @@ async function tickTab(tabId) {
       return;
     }
 
-    const storedPoint = trimSnapshotForWidgets(point, tab);
+    const storedPoint = shouldCompactHistorySnapshots(tab)
+      ? trimSnapshotForWidgets(point, tab)
+      : point;
     state.historyByTab[tab.id].push(storedPoint);
 
     const keep = Math.max(20, Number(tab.providerConfig.keepPoints) || 200);
@@ -1351,7 +1377,7 @@ function bindEvents() {
     if (evt.target === $('renameTabModal')) closeRenameTabModal();
   });
 
-  ['providerKey', 'apiBase', 'ticker', 'root', 'expiryStart', 'expiryEnd', 'yahooSymbol', 'pollSec', 'keepPoints'].forEach((id) => {
+  ['providerKey', 'apiBase', 'ticker', 'root', 'expiryStart', 'expiryEnd', 'yahooSymbol', 'pollSec', 'keepPoints', 'saveRawSnapshots', 'compactHistorySnapshots'].forEach((id) => {
     $(id).addEventListener('change', () => {
       const tab = activeTab();
       if (!tab) return;
@@ -1377,6 +1403,7 @@ async function init() {
 
   let compactedLoadedHistory = false;
   for (const tab of state.tabs) {
+    tab.providerConfig = normalizeProviderConfig(tab.providerConfig || {});
     ensureTabHistoryPolicy(tab);
     if (!tab.providerConfig.expiryStart) tab.providerConfig.expiryStart = tab.providerConfig.expiry || defaultExpiry();
     if (tab.providerConfig.expiryEnd == null) tab.providerConfig.expiryEnd = '';
