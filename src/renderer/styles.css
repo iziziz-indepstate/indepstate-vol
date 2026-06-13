@@ -544,9 +544,27 @@ canvas {
   color: var(--muted);
 }
 
+.widget-history-option.is-colored {
+  color: var(--history-color);
+}
+
 .widget-history-option input {
   width: 12px;
   height: 12px;
+}
+
+.widget-history-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--history-color);
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.18);
+}
+
+.widget-history-setting {
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+  padding-bottom: 6px;
 }
 
 .widget-history-empty {

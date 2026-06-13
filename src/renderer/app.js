@@ -37,6 +37,11 @@ let draggedTabId = null;
 let historySidecarWidgetId = null;
 
 const $ = (id) => document.getElementById(id);
+const HISTORY_SNAPSHOT_PALETTE = ['#7dffb3', '#7aa2ff', '#f97316', '#eab308', '#d946ef', '#06b6d4', '#ef4444', '#f472b6'];
+
+function historySnapshotColor(idx) {
+  return HISTORY_SNAPSHOT_PALETTE[idx % HISTORY_SNAPSHOT_PALETTE.length];
+}
 
 function activeTab() {
   return state.tabs.find((t) => t.id === state.activeTabId);
@@ -406,6 +411,14 @@ function getSelectedHistorySnapshotTimes(widget) {
     .filter(Boolean);
 }
 
+function shouldUseCommonHistoryStrikeRange(widget) {
+  return widget?.config?.commonHistoryStrikeRange === true;
+}
+
+function shouldHideCurrentSnapshotSeries(widget) {
+  return widget?.config?.hideCurrentSnapshotSeries === true;
+}
+
 function formatSnapshotOptionLabel(snapshot, idxFromEnd) {
   const dt = new Date(snapshot?.time || 0);
   const isValid = !Number.isNaN(dt.getTime());
@@ -418,10 +431,13 @@ function historyOptionId(widgetId, time, idx) {
 }
 
 function collectHistoricalComparisons(history, widget) {
-  const selectedSet = new Set(getSelectedHistorySnapshotTimes(widget));
+  const selectedTimes = getSelectedHistorySnapshotTimes(widget);
+  const selectedSet = new Set(selectedTimes);
   if (!selectedSet.size || !Array.isArray(history) || history.length < 2) return [];
 
   const latest = history[history.length - 1];
+  const useHistoryColors = selectedTimes.length > 1;
+  const colorByTime = new Map(selectedTimes.map((time, idx) => [time, useHistoryColors ? historySnapshotColor(idx) : null]));
   const out = [];
   for (let idx = history.length - 2; idx >= 0; idx -= 1) {
     const snapshot = history[idx];
@@ -433,6 +449,7 @@ function collectHistoricalComparisons(history, widget) {
       time,
       idxFromEnd,
       label: formatSnapshotOptionLabel(snapshot, idxFromEnd),
+      historyColor: colorByTime.get(time) || null,
       isLatestDuplicate: snapshot === latest
     });
   }
@@ -468,7 +485,14 @@ function updateWidgetHistoryControls(root, tab) {
   }
 
   widget.config ||= {};
-  const selectedTimes = new Set(getSelectedHistorySnapshotTimes(widget).filter((time) => time !== latestTime));
+  const selectedHistoryTimes = getSelectedHistorySnapshotTimes(widget).filter((time) => time !== latestTime);
+  const selectedTimes = new Set(selectedHistoryTimes);
+  const commonRangeChecked = shouldUseCommonHistoryStrikeRange(widget) ? ' checked' : '';
+  const hideCurrentChecked = shouldHideCurrentSnapshotSeries(widget) ? ' checked' : '';
+  const selectedColorByTime = new Map();
+  if (selectedHistoryTimes.length > 1) {
+    selectedHistoryTimes.forEach((time, idx) => selectedColorByTime.set(time, historySnapshotColor(idx)));
+  }
   const optionsHtml = [];
   for (let idx = history.length - 2; idx >= 0; idx -= 1) {
     const snapshot = history[idx];
@@ -477,9 +501,13 @@ function updateWidgetHistoryControls(root, tab) {
     const idxFromEnd = history.length - 1 - idx;
     const selected = selectedTimes.has(time) ? ' checked' : '';
     const optionId = historyOptionId(widget.id, time, idxFromEnd);
+    const historyColor = selectedColorByTime.get(time);
+    const colorStyle = historyColor ? ` style="--history-color: ${historyColor}"` : '';
+    const swatch = historyColor ? '<span class="widget-history-swatch" aria-hidden="true"></span>' : '';
     optionsHtml.push(`
-      <label class="widget-history-option" for="${optionId}">
+      <label class="widget-history-option${historyColor ? ' is-colored' : ''}" for="${optionId}"${colorStyle}>
         <input id="${optionId}" type="checkbox" value="${time}"${selected} data-widget-history-option-widget-id="${widget.id}" />
+        ${swatch}
         <span>${formatSnapshotOptionLabel(snapshot, idxFromEnd)}</span>
       </label>
     `);
@@ -487,7 +515,14 @@ function updateWidgetHistoryControls(root, tab) {
 
   sidecarTitle.textContent = `history • ${widget.title || widget.type}`;
   sidecarBody.innerHTML = optionsHtml.length
-    ? optionsHtml.join('')
+    ? `<label class="widget-history-option widget-history-setting">
+        <input type="checkbox"${commonRangeChecked} data-widget-history-common-range-widget-id="${widget.id}" />
+        <span>common strike range</span>
+      </label>
+      <label class="widget-history-option widget-history-setting">
+        <input type="checkbox"${hideCurrentChecked} data-widget-history-hide-current-widget-id="${widget.id}" />
+        <span>hide current</span>
+      </label>${optionsHtml.join('')}`
     : '<div class="widget-history-empty">no history</div>';
   sidecar.hidden = false;
   sidecarClose.disabled = false;
@@ -523,6 +558,107 @@ function syncLinkedHistoryVisibility(chart) {
       chart.setDatasetVisibility(linkedIdx, baseVisible);
     });
   });
+}
+
+function sortChartLabels(labels, referenceLabels = []) {
+  const uniqueLabels = Array.from(new Set((labels || []).map((label) => String(label))));
+  const numeric = uniqueLabels.every((label) => Number.isFinite(Number(label)));
+  if (!numeric) return uniqueLabels.sort((a, b) => a.localeCompare(b));
+
+  const reference = (referenceLabels || []).map(Number).filter(Number.isFinite);
+  const descending = reference.length >= 2 && reference[0] > reference[reference.length - 1];
+  return uniqueLabels.sort((a, b) => descending ? Number(b) - Number(a) : Number(a) - Number(b));
+}
+
+function numericRangeForDataset(labels, data) {
+  let min = Infinity;
+  let max = -Infinity;
+  (labels || []).forEach((label, idx) => {
+    const x = Number(label);
+    const y = Array.isArray(data) ? data[idx] : null;
+    if (!Number.isFinite(x) || !Number.isFinite(Number(y))) return;
+    min = Math.min(min, x);
+    max = Math.max(max, x);
+  });
+  return min <= max ? { min, max } : null;
+}
+
+function commonNumericRange(seriesSpecs) {
+  const ranges = (seriesSpecs || [])
+    .map((spec) => numericRangeForDataset(spec?.labels, spec?.data))
+    .filter(Boolean);
+  if (ranges.length < 2) return null;
+
+  const min = Math.max(...ranges.map((range) => range.min));
+  const max = Math.min(...ranges.map((range) => range.max));
+  return min <= max ? { min, max } : null;
+}
+
+function outerNumericRange(seriesSpecs) {
+  const ranges = (seriesSpecs || [])
+    .map((spec) => numericRangeForDataset(spec?.labels, spec?.data))
+    .filter(Boolean);
+  if (!ranges.length) return null;
+
+  const min = Math.min(...ranges.map((range) => range.min));
+  const max = Math.max(...ranges.map((range) => range.max));
+  return min <= max ? { min, max } : null;
+}
+
+function finiteLabelSetForDataset(labels, data) {
+  const out = new Set();
+  (labels || []).forEach((label, idx) => {
+    const x = Number(label);
+    const y = Array.isArray(data) ? data[idx] : null;
+    if (Number.isFinite(x) && Number.isFinite(Number(y))) out.add(String(label));
+  });
+  return out;
+}
+
+function commonFiniteLabels(seriesSpecs) {
+  const sets = (seriesSpecs || [])
+    .map((spec) => finiteLabelSetForDataset(spec?.labels, spec?.data))
+    .filter((set) => set.size > 0);
+  if (sets.length < 2) return null;
+
+  let common = new Set(sets[0]);
+  for (const set of sets.slice(1)) {
+    common = new Set([...common].filter((label) => set.has(label)));
+  }
+  return common.size ? common : null;
+}
+
+function labelInRange(label, range) {
+  if (!range) return true;
+  const numeric = Number(label);
+  return Number.isFinite(numeric) && numeric >= range.min && numeric <= range.max;
+}
+
+function labelAllowed(label, range = null, allowedLabels = null) {
+  if (allowedLabels && !allowedLabels.has(String(label))) return false;
+  return labelInRange(label, range);
+}
+
+function datasetPointsForLabels(labels, data, pointMeta = [], range = null, allowedLabels = null) {
+  const points = [];
+  const meta = [];
+  (labels || []).forEach((label, idx) => {
+    if (!labelAllowed(label, range, allowedLabels)) return;
+    const y = Array.isArray(data) ? data[idx] : null;
+    if (!Number.isFinite(Number(y))) return;
+    points.push({ x: String(label), y });
+    meta.push(Array.isArray(pointMeta) ? pointMeta[idx] ?? null : null);
+  });
+  return { points, meta };
+}
+
+function convertDatasetToPointData(dataset, sourceLabels, range = null, allowedLabels = null) {
+  const { points, meta } = datasetPointsForLabels(sourceLabels, dataset?.data, dataset?.pointMeta, range, allowedLabels);
+  return {
+    ...dataset,
+    data: points,
+    pointMeta: Array.isArray(dataset?.pointMeta) ? meta : dataset?.pointMeta
+  };
 }
 
 function renderWidgets() {
@@ -777,13 +913,22 @@ function renderWidgets() {
     });
   });
 
-  const applyHistorySelection = (widgetId) => {
+  const applyHistorySelection = (widgetId, changedInput = null) => {
     const target = tab.widgets.find((w) => w.id === widgetId);
     if (!target) return false;
     target.config ||= {};
     const checked = Array.from(root.querySelectorAll(`input[data-widget-history-option-widget-id="${widgetId}"]:checked`))
       .map((node) => node.value);
-    target.config.historySnapshotTimes = checked;
+    if (changedInput?.value) {
+      const prev = Array.isArray(target.config.historySnapshotTimes) ? target.config.historySnapshotTimes.map(String) : [];
+      if (changedInput.checked) {
+        target.config.historySnapshotTimes = [...prev.filter((time) => checked.includes(time) && time !== changedInput.value), changedInput.value];
+      } else {
+        target.config.historySnapshotTimes = prev.filter((time) => checked.includes(time) && time !== changedInput.value);
+      }
+    } else {
+      target.config.historySnapshotTimes = checked;
+    }
     return true;
   };
 
@@ -800,6 +945,9 @@ function renderWidgets() {
       if (evt.ctrlKey) {
         const sourceChecked = Array.from(root.querySelectorAll(`input[data-widget-history-option-widget-id="${widgetId}"]:checked`))
           .map((node) => node.value);
+        const sourceWidget = tab.widgets.find((widget) => widget.id === widgetId);
+        const sourceCommonRange = shouldUseCommonHistoryStrikeRange(sourceWidget);
+        const sourceHideCurrent = shouldHideCurrentSnapshotSeries(sourceWidget);
         let hasChanges = false;
         for (const widget of tab.widgets) {
           if (!String(widget?.type || '').startsWith('ndate-skew-')) continue;
@@ -808,6 +956,14 @@ function renderWidgets() {
           const next = [...sourceChecked];
           if (JSON.stringify(prev) !== JSON.stringify(next)) {
             widget.config.historySnapshotTimes = next;
+            hasChanges = true;
+          }
+          if (widget.config.commonHistoryStrikeRange !== sourceCommonRange) {
+            widget.config.commonHistoryStrikeRange = sourceCommonRange;
+            hasChanges = true;
+          }
+          if (widget.config.hideCurrentSnapshotSeries !== sourceHideCurrent) {
+            widget.config.hideCurrentSnapshotSeries = sourceHideCurrent;
             hasChanges = true;
           }
         }
@@ -826,9 +982,32 @@ function renderWidgets() {
   });
 
   root.querySelector('[data-history-sidecar-body]')?.addEventListener('change', (evt) => {
+    const commonRangeWidgetId = evt.target?.dataset?.widgetHistoryCommonRangeWidgetId;
+    if (commonRangeWidgetId) {
+      const target = tab.widgets.find((w) => w.id === commonRangeWidgetId);
+      if (!target) return;
+      target.config ||= {};
+      target.config.commonHistoryStrikeRange = Boolean(evt.target.checked);
+      refreshCharts();
+      persist();
+      return;
+    }
+
+    const hideCurrentWidgetId = evt.target?.dataset?.widgetHistoryHideCurrentWidgetId;
+    if (hideCurrentWidgetId) {
+      const target = tab.widgets.find((w) => w.id === hideCurrentWidgetId);
+      if (!target) return;
+      target.config ||= {};
+      target.config.hideCurrentSnapshotSeries = Boolean(evt.target.checked);
+      refreshCharts();
+      persist();
+      return;
+    }
+
     const widgetId = evt.target?.dataset?.widgetHistoryOptionWidgetId;
     if (!widgetId) return;
-    if (!applyHistorySelection(widgetId)) return;
+    if (!applyHistorySelection(widgetId, evt.target)) return;
+    updateWidgetHistoryControls(root, tab);
     refreshCharts();
     persist();
   });
@@ -891,87 +1070,135 @@ async function refreshCharts() {
 
     if (mode === 'snapshot-series' && typeof definition.buildSnapshotSeries === 'function') {
       const widgetSnapshot = latest;
-      const series = definition.buildSnapshotSeries(widgetSnapshot, widget);
-      chart.data.labels = series?.labels || [];
+      const historicalComparisons = collectHistoricalComparisons(history, widget);
 
-      if (Array.isArray(series?.datasets) && series.datasets.length) {
-        chart.data.datasets = series.datasets.map((dataset, idx) => ({
-          label: dataset?.label || `Series ${idx + 1}`,
-          data: Array.isArray(dataset?.data) ? dataset.data : [],
-          borderWidth: 1,
-          tension: 0.2,
-          pointRadius: 0,
-          pointHitRadius: 14,
-          pointHoverRadius: 4,
-          borderColor: dataset?.borderColor || definition.color || '#7aa2ff',
-          pointMeta: Array.isArray(dataset?.pointMeta) ? dataset.pointMeta : [],
-          tooltipFormatter: typeof dataset?.tooltipFormatter === 'function' ? dataset.tooltipFormatter : null
+      const applySeriesToChart = (seriesToApply, widgetForSeries = widget) => {
+        chart.data.labels = seriesToApply?.labels || [];
+
+        if (Array.isArray(seriesToApply?.datasets) && seriesToApply.datasets.length) {
+          chart.data.datasets = seriesToApply.datasets.map((dataset, idx) => ({
+            label: dataset?.label || `Series ${idx + 1}`,
+            data: Array.isArray(dataset?.data) ? dataset.data : [],
+            borderWidth: 1,
+            tension: 0.2,
+            pointRadius: 0,
+            pointHitRadius: 14,
+            pointHoverRadius: 4,
+            borderColor: dataset?.borderColor || definition.color || '#7aa2ff',
+            pointMeta: Array.isArray(dataset?.pointMeta) ? dataset.pointMeta : [],
+            tooltipFormatter: typeof dataset?.tooltipFormatter === 'function' ? dataset.tooltipFormatter : null
+          }));
+        } else {
+          chart.data.datasets = [{
+            label: definition.defaultTitle,
+            data: seriesToApply?.values || [],
+            borderWidth: 1,
+            tension: 0.2,
+            pointRadius: 0,
+            pointHitRadius: 14,
+            pointHoverRadius: 4,
+            borderColor: definition.color || '#7aa2ff'
+          }];
+        }
+
+        const sourceLabels = Array.isArray(chart.data.labels) ? chart.data.labels.map((label) => String(label)) : [];
+        const rangeSpecs = chart.data.datasets.map((dataset) => ({
+          labels: sourceLabels,
+          data: dataset?.data
         }));
-      } else {
-        chart.data.datasets = [{
-          label: definition.defaultTitle,
-          data: series?.values || [],
-          borderWidth: 1,
-          tension: 0.2,
-          pointRadius: 0,
-          pointHitRadius: 14,
-          pointHoverRadius: 4,
-          borderColor: definition.color || '#7aa2ff'
-        }];
+        const allLabels = new Set(sourceLabels);
+        const historyDatasets = [];
+
+        for (const comparison of historicalComparisons) {
+          const historicalSeries = definition.buildSnapshotSeries(comparison.snapshot, widgetForSeries);
+          if (!Array.isArray(historicalSeries?.labels) || !Array.isArray(historicalSeries?.datasets)) {
+            const baseDataset = chart.data.datasets[0];
+            if (!baseDataset) continue;
+            const historicalLabels = (historicalSeries?.labels || []).map((label) => String(label));
+            historicalLabels.forEach((label) => allLabels.add(label));
+            rangeSpecs.push({
+              labels: historicalLabels,
+              data: Array.isArray(historicalSeries?.values) ? historicalSeries.values : []
+            });
+            historyDatasets.push({
+              label: `${baseDataset.label} • ${comparison.label}`,
+              data: Array.isArray(historicalSeries?.values) ? historicalSeries.values : [],
+              borderWidth: 1,
+              tension: 0.2,
+              pointRadius: 0,
+              pointHitRadius: 14,
+              pointHoverRadius: 4,
+              borderColor: comparison.historyColor || baseDataset.borderColor || definition.color || '#7aa2ff',
+              borderDash: [6, 4],
+              hiddenInLegend: true,
+              sourceLabels: historicalLabels,
+              pointMeta: [],
+              tooltipFormatter: typeof baseDataset?.tooltipFormatter === 'function' ? baseDataset.tooltipFormatter : null
+            });
+            continue;
+          }
+
+          const historicalLabels = (historicalSeries.labels || []).map((label) => String(label));
+          historicalLabels.forEach((label) => allLabels.add(label));
+          for (let idx = 0; idx < chart.data.datasets.length; idx += 1) {
+            const baseDataset = chart.data.datasets[idx];
+            const seriesToUse = historicalSeries.datasets[idx] || historicalSeries.datasets.find((x) => x?.label === baseDataset.label);
+            if (!seriesToUse) continue;
+            rangeSpecs.push({
+              labels: historicalLabels,
+              data: Array.isArray(seriesToUse?.data) ? seriesToUse.data : []
+            });
+            historyDatasets.push({
+              label: `${baseDataset.label} • ${comparison.label}`,
+              data: Array.isArray(seriesToUse?.data) ? seriesToUse.data : [],
+              borderWidth: 1,
+              tension: 0.2,
+              pointRadius: 0,
+              pointHitRadius: 14,
+              pointHoverRadius: 4,
+              borderColor: comparison.historyColor || baseDataset.borderColor || definition.color || '#7aa2ff',
+              borderDash: [6, 4],
+              hiddenInLegend: true,
+              baseDatasetIndex: idx,
+              sourceLabels: historicalLabels,
+              pointMeta: Array.isArray(seriesToUse?.pointMeta) ? seriesToUse.pointMeta : [],
+              tooltipFormatter: typeof baseDataset?.tooltipFormatter === 'function' ? baseDataset.tooltipFormatter : null
+            });
+          }
+        }
+
+        return { allLabels, historyDatasets, rangeSpecs, sourceLabels };
+      };
+
+      let series = definition.buildSnapshotSeries(widgetSnapshot, widget);
+      let built = applySeriesToChart(series);
+      const useCommonStrikeRange = built.historyDatasets.length && shouldUseCommonHistoryStrikeRange(widget);
+      const outerRange = useCommonStrikeRange ? outerNumericRange(built.rangeSpecs) : null;
+      const seriesWidget = outerRange
+        ? { ...widget, config: { ...(widget.config || {}), historyStrikeRangeBounds: outerRange } }
+        : widget;
+
+      if (outerRange) {
+        series = definition.buildSnapshotSeries(widgetSnapshot, seriesWidget);
+        built = applySeriesToChart(series, seriesWidget);
       }
 
       const hasMultipleBaseDatasets = chart.data.datasets.length > 1;
-      const historicalComparisons = collectHistoricalComparisons(history, widget);
-      const hasSingleSelectedSnapshot = historicalComparisons.length === 1;
-      const historyDatasets = [];
+      const historyDatasets = built.historyDatasets;
       const baseDatasetsCount = chart.data.datasets.length;
-
-      for (const comparison of historicalComparisons) {
-        const historicalSeries = definition.buildSnapshotSeries(comparison.snapshot, widget);
-        if (!Array.isArray(historicalSeries?.labels) || !Array.isArray(historicalSeries?.datasets)) {
-          const baseDataset = chart.data.datasets[0];
-          if (!baseDataset) continue;
-          const byLabel = Object.fromEntries((historicalSeries?.labels || []).map((label, i) => [String(label), historicalSeries.values?.[i] ?? null]));
-          historyDatasets.push({
-            label: `${baseDataset.label} • ${comparison.label}`,
-            data: (chart.data.labels || []).map((label) => (String(label) in byLabel ? byLabel[String(label)] : null)),
-            borderWidth: 1,
-            tension: 0.2,
-            pointRadius: 0,
-            pointHitRadius: 14,
-            pointHoverRadius: 4,
-            borderColor: baseDataset.borderColor || definition.color || '#7aa2ff',
-            borderDash: [6, 4],
-            hiddenInLegend: hasSingleSelectedSnapshot,
-            pointMeta: [],
-            tooltipFormatter: typeof baseDataset?.tooltipFormatter === 'function' ? baseDataset.tooltipFormatter : null
-          });
-          continue;
-        }
-
-        for (let idx = 0; idx < chart.data.datasets.length; idx += 1) {
-          const baseDataset = chart.data.datasets[idx];
-          const seriesToUse = historicalSeries.datasets[idx] || historicalSeries.datasets.find((x) => x?.label === baseDataset.label);
-          if (!seriesToUse) continue;
-          const byLabel = Object.fromEntries((historicalSeries.labels || []).map((label, i) => [String(label), seriesToUse.data?.[i] ?? null]));
-          const metaByLabel = Object.fromEntries((historicalSeries.labels || []).map((label, i) => [String(label), seriesToUse.pointMeta?.[i] ?? null]));
-          historyDatasets.push({
-            label: `${baseDataset.label} • ${comparison.label}`,
-            data: (chart.data.labels || []).map((label) => (String(label) in byLabel ? byLabel[String(label)] : null)),
-            borderWidth: 1,
-            tension: 0.2,
-            pointRadius: 0,
-            pointHitRadius: 14,
-            pointHoverRadius: 4,
-            borderColor: baseDataset.borderColor || definition.color || '#7aa2ff',
-            borderDash: [6, 4],
-            hiddenInLegend: hasSingleSelectedSnapshot,
-            baseDatasetIndex: idx,
-            pointMeta: (chart.data.labels || []).map((label) => (String(label) in metaByLabel ? metaByLabel[String(label)] : null)),
-            tooltipFormatter: typeof baseDataset?.tooltipFormatter === 'function' ? baseDataset.tooltipFormatter : null
-          });
-        }
-      }
+      const sourceLabels = built.sourceLabels;
+      const commonRange = outerRange;
+      const targetLabels = sortChartLabels(Array.from(built.allLabels), sourceLabels)
+        .filter((label) => labelAllowed(label, commonRange));
+      chart.data.labels = targetLabels;
+      chart.data.datasets = chart.data.datasets.map((dataset) => (
+        convertDatasetToPointData(dataset, sourceLabels, commonRange)
+      ));
+      historyDatasets.forEach((dataset) => {
+        const source = Array.isArray(dataset.sourceLabels) ? dataset.sourceLabels : [];
+        delete dataset.sourceLabels;
+        Object.assign(dataset, convertDatasetToPointData(dataset, source, commonRange));
+      });
 
       chart.data.datasets.push(...historyDatasets);
 
@@ -991,9 +1218,26 @@ async function refreshCharts() {
         return defaultGenerator(legendChart)
           .filter((item) => !legendChart.data.datasets[item.datasetIndex]?.hiddenInLegend);
       };
-      chart.options.plugins.legend.display = hasMultipleBaseDatasets || (!hasSingleSelectedSnapshot && historyDatasets.length > 0);
+      chart.options.plugins.legend.display = hasMultipleBaseDatasets;
       applyHiddenSnapshotSeriesLabels(widget, chart);
-      syncLinkedHistoryVisibility(chart);
+      const baseVisibilityBeforeHideCurrent = chart.data.datasets
+        .slice(0, baseDatasetsCount)
+        .map((_, idx) => chart.isDatasetVisible(idx));
+      if (historyDatasets.length && shouldHideCurrentSnapshotSeries(widget)) {
+        for (let idx = 0; idx < baseDatasetsCount; idx += 1) {
+          const linked = Array.isArray(chart.data.datasets[idx]?.linkedHistoryIndices)
+            ? chart.data.datasets[idx].linkedHistoryIndices
+            : [];
+          linked.forEach((linkedIdx) => {
+            if (!Number.isInteger(linkedIdx)) return;
+            if (linkedIdx < 0 || linkedIdx >= chart.data.datasets.length) return;
+            chart.setDatasetVisibility(linkedIdx, baseVisibilityBeforeHideCurrent[idx] !== false);
+          });
+          chart.setDatasetVisibility(idx, false);
+        }
+      } else {
+        syncLinkedHistoryVisibility(chart);
+      }
       chart.update();
       publishChartRuntime(entry);
       continue;

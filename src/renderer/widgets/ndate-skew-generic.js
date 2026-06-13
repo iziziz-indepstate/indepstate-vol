@@ -119,6 +119,13 @@ function pickStrikesFromChain(strikesAsc, baseStrike, direction, srConfig) {
   return selected;
 }
 
+function pickStrikesFromRange(strikesAsc, bounds) {
+  const min = Number(bounds?.min);
+  const max = Number(bounds?.max);
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min > max) return null;
+  return strikesAsc.filter((strike) => strike >= min && strike <= max);
+}
+
 function safeStrikes(snapshot, side, mapKey) {
   const key = side === 'call' ? 'callStrikesAsc' : 'putStrikesAsc';
   const fromSnapshot = snapshot?.[key];
@@ -172,7 +179,8 @@ function computeSingleSeries(snapshot, widget, mapKey, valueKey, side, direction
     defaultStrike: 500
   });
 
-  const selected = pickStrikesFromChain(strikesAsc, baseStrike, direction, widget?.config?.strikeRange);
+  const selected = pickStrikesFromRange(strikesAsc, widget?.config?.historyStrikeRangeBounds)
+    || pickStrikesFromChain(strikesAsc, baseStrike, direction, widget?.config?.strikeRange);
   const points = selected.map((strike) => ({
     strike,
     [valueKey]: Number(ivByStrike[strike])
