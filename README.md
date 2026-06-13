@@ -28,7 +28,7 @@ npm start
 - **Vol Upfront**: chart and table widget that reads Straddle ATM widgets on the same tab and calculates adjacent forward volatility segments. Details: [Vol Upfront Widget](docs/vol-upfront-widget.md).
 - **ATM Call-Put Skew**: time series for `dAtm = callATM.iv - putATM.iv`.
 - **+/-3 Strike Put-Call Skew**: time series for `dTail = put(-steps).bid_iv - call(+steps).bid_iv`.
-- **nDate Put Skew**: put `bid_iv` by a configurable strike ladder from a base strike, with `E1`, `E2`, and `SR` controls for expiry range and strike pattern. `S` accepts an exact strike or `ATM`.
+- **nDate Put Skew**: put `bid_iv` by a configurable strike ladder from a base strike, with `E1`, `E2`, and `SR` controls for expiry range and strike pattern. `S` accepts an exact strike or `ATM`. History overlay details: [nDate History Overlays](docs/ndate-history-overlays.md).
 - **nDate Call Skew**: call-side counterpart of nDate Put Skew. `S` accepts an exact strike or `ATM`.
 - **nDate Skew Bid Put / Call**: nDate skew variants that chart option bid values instead of bid IV. `S` accepts an exact strike or `ATM`.
 - **nDate Skew BidIV Ratio**: ratio widget for symmetric strikes around a reference level: `(putBid / putIV) / (callBid / callIV)`. `S` accepts an exact strike or `ATM`.
