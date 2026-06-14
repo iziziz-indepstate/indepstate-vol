@@ -1,0 +1,15 @@
+IS-VOL v1.2.2
+
+Changes
+- Added The Block options widgets for CME BTC options volume/OI, BTC DVol vol-of-vol, BTC variance premium, BTC ATM IV, and BTC option skew delta 5/25.
+- Added The Block data provider with dashboard JSON normalization and snapshot integration.
+- Added nDate history overlay controls for selecting historical snapshots, propagating history settings, deleting unselected history, common strike range mode, and hiding the current series.
+- Added stable history overlay colors and moved historical snapshot identification into the history panel instead of the chart legend.
+- Added a Straddle ATM price-history sparkline built from matching snapshots in the current tab history.
+- Documented nDate history overlays and Straddle ATM price history.
+- Extended snapshot trimming and renderer wiring for the new The Block data snapshots and widgets.
+
+Verification
+- node --check src\renderer\app.js
+- npm test: 62 tests passed
+- npm run build: built Windows NSIS installer
