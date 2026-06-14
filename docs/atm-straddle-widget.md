@@ -1,6 +1,6 @@
 # Straddle ATM Widget
 
-The `Straddle ATM` widget is a compact text-only widget for reading the current price of movement in a selected symbol expiry before analyzing skew, OTM bid premium, or wing velocity.
+The `Straddle ATM` widget is a compact widget for reading the current price of movement in a selected symbol expiry before analyzing skew, OTM bid premium, or wing velocity.
 
 ## Product Goal
 
@@ -20,6 +20,14 @@ The widget answers:
 - `Pick`: expiry selection mode: `nearest`, `at_or_after`, or `at_or_before`.
 - `Compare`: `previous_close`, `previous_snapshot`, or `none`. The app uses stored option-chain snapshots from the current tab. If comparison data is unavailable, the widget still renders the current value and shows comparison unavailable.
 - `Compact`: dashboard-card layout with headline values only.
+
+## Price History
+
+The widget renders a small straddle-price sparkline above the text output. It recalculates the same selected tenor, expiry override, ATM strike override, and reference-price mode across the current tab history.
+
+- At least two matching snapshots are required.
+- Historical snapshots that no longer contain the selected expiry or strike are skipped.
+- The sparkline uses the last 120 matching history candidates and colors the line green when the latest value is above the first plotted value, red when below, and blue when flat.
 
 ## Calculation Contract
 

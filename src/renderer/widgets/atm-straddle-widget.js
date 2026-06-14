@@ -26,6 +26,11 @@ function fmtIv(value) {
   return Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : 'n/a';
 }
 
+function fmtTime(value) {
+  const dt = new Date(value || 0);
+  return Number.isNaN(dt.getTime()) ? String(value || '') : dt.toLocaleTimeString();
+}
+
 function option(value, selected) {
   return `<option value="${esc(value)}" ${String(value) === String(selected) ? 'selected' : ''}>${esc(value)}</option>`;
 }
@@ -131,8 +136,118 @@ function renderComparison(snapshot) {
   `;
 }
 
-function renderFull(snapshot) {
+function manualReferenceParams(cfg) {
+  const manualReferenceRaw = String(cfg.manualReferencePrice ?? '').trim();
+  const manualReferenceToken = manualReferenceRaw.toUpperCase();
+  const hasManualReferencePrice = manualReferenceRaw !== ''
+    && manualReferenceToken !== 'AUTO'
+    && manualReferenceToken !== 'ATM';
+  return {
+    manualReferencePrice: hasManualReferencePrice ? cfg.manualReferencePrice : undefined,
+    referencePriceMode: hasManualReferencePrice ? 'manual' : 'spot'
+  };
+}
+
+async function buildPriceHistory(history, cfg, currentResult) {
+  if (!Array.isArray(history) || history.length < 2) return [];
+  const params = manualReferenceParams(cfg);
+  const selected = history.slice(-120);
+  const points = [];
+
+  for (const snap of selected) {
+    if (!snap) continue;
+    try {
+      const result = await calculateAtmStraddle({
+        ...cfg,
+        ...params,
+        expiryOverride: cfg.expiryOverride || undefined,
+        snapshot: snap,
+        snapshotTime: snap.time,
+        compareTo: 'none'
+      });
+      if (!Number.isFinite(result?.straddle?.mid)) continue;
+      points.push({
+        time: snap.time,
+        label: fmtTime(snap.time),
+        value: result.straddle.mid,
+        impliedMovePct: result.straddle.impliedMovePct,
+        atmIv: result.atmIv
+      });
+    } catch (_err) {
+      // Historical snapshots may not all contain the selected expiry/strike.
+    }
+  }
+
+  const currentTime = String(currentResult?.snapshotTime || '');
+  const lastTime = String(points[points.length - 1]?.time || '');
+  if (currentResult && currentTime && currentTime !== lastTime && Number.isFinite(currentResult?.straddle?.mid)) {
+    points.push({
+      time: currentResult.snapshotTime,
+      label: fmtTime(currentResult.snapshotTime),
+      value: currentResult.straddle.mid,
+      impliedMovePct: currentResult.straddle.impliedMovePct,
+      atmIv: currentResult.atmIv
+    });
+  }
+
+  return points;
+}
+
+function renderPriceSparkline(points) {
+  const valid = Array.isArray(points) ? points.filter((point) => Number.isFinite(point?.value)) : [];
+  if (valid.length < 2) {
+    return '<div class="straddle-sparkline straddle-sparkline-empty"><span>Price history needs at least 2 matching snapshots.</span></div>';
+  }
+
+  const width = 240;
+  const height = 58;
+  const padX = 5;
+  const padY = 7;
+  const min = Math.min(...valid.map((point) => point.value));
+  const max = Math.max(...valid.map((point) => point.value));
+  const span = max - min || 1;
+  const lastIdx = valid.length - 1;
+  const coords = valid.map((point, idx) => {
+    const x = padX + (idx / Math.max(1, lastIdx)) * (width - padX * 2);
+    const y = padY + ((max - point.value) / span) * (height - padY * 2);
+    return { ...point, x, y };
+  });
+  const line = coords.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
+  const first = valid[0];
+  const last = valid[valid.length - 1];
+  const delta = last.value - first.value;
+  const deltaPct = first.value ? delta / first.value : NaN;
+  const trendClass = delta > 0 ? 'is-up' : delta < 0 ? 'is-down' : 'is-flat';
+  const dots = coords.map((point, idx) => `
+    <circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="${idx === lastIdx ? '2.4' : '1.6'}">
+      <title>${esc(`${point.label}: ${fmt(point.value)} pts | ${fmtPct(point.impliedMovePct)} | ATM IV ${fmtIv(point.atmIv)}`)}</title>
+    </circle>
+  `).join('');
+
   return `
+    <div class="straddle-sparkline ${trendClass}">
+      <div class="straddle-sparkline-head">
+        <span>Straddle price</span>
+        <strong>${fmt(last.value)} pts</strong>
+        <span>${Number.isFinite(deltaPct) ? `${delta >= 0 ? '+' : ''}${fmt(delta)} pts / ${deltaPct >= 0 ? '+' : ''}${fmtPct(deltaPct, 1)}` : 'n/a'}</span>
+      </div>
+      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Straddle price history">
+        <line x1="${padX}" y1="${(height - padY).toFixed(1)}" x2="${width - padX}" y2="${(height - padY).toFixed(1)}"></line>
+        <polyline points="${line}"></polyline>
+        ${dots}
+      </svg>
+      <div class="straddle-sparkline-range">
+        <span>${esc(first.label)}</span>
+        <span>${fmt(min)}-${fmt(max)} pts</span>
+        <span>${esc(last.label)}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderFull(snapshot, priceHistory) {
+  return `
+    ${renderPriceSparkline(priceHistory)}
     <pre class="straddle-text">${esc(`STRADDLE ATM | ${snapshot.symbol} ${snapshot.tenor} -> ${snapshot.expiry} | DTE ${fmt(snapshot.dte, 1)}
 S: ${fmt(snapshot.referencePrice)} ${snapshot.referencePriceSource} | ATM K: ${fmt(snapshot.atmStrike, 0)}
 ATM selection: ${snapshot.atmSelectionMethod}
@@ -158,13 +273,14 @@ Delta ${fmt(snapshot.netGreeks?.delta, 2)} | Gamma ${fmt(snapshot.netGreeks?.gam
   `;
 }
 
-function renderCompact(snapshot) {
+function renderCompact(snapshot, priceHistory) {
   const deltaStrad = snapshot.comparison?.deltaStraddlePct;
   return `
     <div class="straddle-compact">
       <div class="straddle-compact-title">Straddle ATM | ${esc(snapshot.symbol)} ${esc(snapshot.tenor)}</div>
       <div>K ${fmt(snapshot.atmStrike, 0)} | DTE ${fmt(snapshot.dte, 1)} | S ${fmt(snapshot.referencePrice)}</div>
       <div class="straddle-compact-value">${fmt(snapshot.straddle.mid)} pts / ${fmtPct(snapshot.straddle.impliedMovePct)}</div>
+      ${renderPriceSparkline(priceHistory)}
       <div>Range ${fmt(snapshot.straddle.expectedLow, 1)} - ${fmt(snapshot.straddle.expectedHigh, 1)}</div>
       <div>ATM IV ${fmtIv(snapshot.atmIv)} | DeltaStrad ${Number.isFinite(deltaStrad) ? fmtPct(deltaStrad, 1) : 'n/a'}</div>
       <div>State: ${renderBadges(snapshot.stateLabels.filter((x) => x !== 'LOW_CONFIDENCE'))} | Quality: ${renderBadges(snapshot.qualityFlags)}</div>
@@ -233,28 +349,25 @@ export const atmStraddleWidget = {
     }
 
     try {
-      const manualReferenceRaw = String(cfg.manualReferencePrice ?? '').trim();
-      const manualReferenceToken = manualReferenceRaw.toUpperCase();
-      const hasManualReferencePrice = manualReferenceRaw !== ''
-        && manualReferenceToken !== 'AUTO'
-        && manualReferenceToken !== 'ATM';
+      const referenceParams = manualReferenceParams(cfg);
       const result = await calculateAtmStraddle({
         ...cfg,
+        ...referenceParams,
         expiryOverride: cfg.expiryOverride || undefined,
-        manualReferencePrice: hasManualReferencePrice ? cfg.manualReferencePrice : undefined,
-        referencePriceMode: hasManualReferencePrice ? 'manual' : 'spot',
         snapshot,
         snapshotTime: snapshot.time,
         comparisonSnapshot: comparisonSnapshot(history, snapshot, cfg.compareTo),
         compareTo: cfg.compareTo
       });
-      const body = cfg.compact ? renderCompact(result) : renderFull(result);
+      const priceHistory = await buildPriceHistory(history, cfg, result);
+      const body = cfg.compact ? renderCompact(result, priceHistory) : renderFull(result, priceHistory);
       widgetData?.publish?.({
         type: atmStraddleWidget.type,
         status: 'ok',
         title: widget.title || atmStraddleWidget.defaultTitle,
         config: { ...cfg },
-        snapshot: result
+        snapshot: result,
+        priceHistory
       });
       container.innerHTML = `${renderControls(cfg)}${body}`;
       bindControls(container, widget, onConfigChange, onConfigBroadcast);

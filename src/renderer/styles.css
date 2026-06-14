@@ -910,6 +910,83 @@ canvas {
   vertical-align: baseline;
 }
 
+.straddle-sparkline {
+  margin-bottom: 8px;
+  color: var(--muted);
+}
+
+.straddle-compact .straddle-sparkline {
+  margin: 2px 0 4px;
+}
+
+.straddle-sparkline-head,
+.straddle-sparkline-range {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.straddle-sparkline-head strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.straddle-sparkline svg {
+  display: block;
+  width: 100%;
+  height: 58px;
+  margin-top: 3px;
+  overflow: visible;
+}
+
+.straddle-sparkline line {
+  stroke: rgba(255,255,255,0.12);
+  stroke-width: 1;
+}
+
+.straddle-sparkline polyline {
+  fill: none;
+  stroke: #7aa2ff;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.straddle-sparkline circle {
+  fill: #7aa2ff;
+  stroke: rgba(15, 17, 22, 0.9);
+  stroke-width: 1;
+}
+
+.straddle-sparkline.is-up polyline {
+  stroke: #23c55e;
+}
+
+.straddle-sparkline.is-up circle {
+  stroke: #23c55e;
+  fill: #23c55e;
+}
+
+.straddle-sparkline.is-down polyline {
+  stroke: #fb7185;
+}
+
+.straddle-sparkline.is-down circle {
+  stroke: #fb7185;
+  fill: #fb7185;
+}
+
+.straddle-sparkline-empty {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  border: 1px dashed rgba(255,255,255,0.14);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 11px;
+}
+
 .straddle-compact {
   display: grid;
   gap: 3px;
