@@ -6,7 +6,8 @@ export const WIDGET_PARAM_NAMES = Object.freeze({
   TAIL_STEPS: 'tailSteps',
   OPTION_TYPE: 'optionType',
   TARGET_DELTA: 'targetDelta',
-  EXPIRATION: 'expiration'
+  EXPIRATION: 'expiration',
+  TIME_RANGE: 'range'
 });
 
 export const WIDGET_PARAM_DATASET = Object.freeze({
@@ -37,6 +38,9 @@ export function normalizeWidgetParamValue(paramName, rawValue, currentValue, opt
     case WIDGET_PARAM_NAMES.OPTION_TYPE:
       return str === 'call' ? 'call' : 'put';
 
+    case WIDGET_PARAM_NAMES.TIME_RANGE:
+      return ['1D', '1W', '1M', '6M'].includes(str) ? str : (currentValue || '1M');
+
     case WIDGET_PARAM_NAMES.EXPIRY_START:
     case WIDGET_PARAM_NAMES.EXPIRY_END:
     case WIDGET_PARAM_NAMES.EXPIRATION:
@@ -54,6 +58,7 @@ export function shouldRefreshOnWidgetParamChange(paramName) {
     || paramName === WIDGET_PARAM_NAMES.TAIL_STEPS
     || paramName === WIDGET_PARAM_NAMES.OPTION_TYPE
     || paramName === WIDGET_PARAM_NAMES.TARGET_DELTA
-    || paramName === WIDGET_PARAM_NAMES.EXPIRATION;
+    || paramName === WIDGET_PARAM_NAMES.EXPIRATION
+    || paramName === WIDGET_PARAM_NAMES.TIME_RANGE;
 }
 

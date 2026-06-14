@@ -118,6 +118,12 @@ app.whenReady().then(() => {
     return marketDataService.getDailyHistory(params || {});
   });
 
+  ipcMain.handle('theblock:get-snapshot', async (_evt, params) => {
+    const { TheBlockProvider } = await import('../shared/theblock-provider.js');
+    const provider = new TheBlockProvider();
+    return provider.fetchSnapshot(params || {});
+  });
+
   createWindow();
   mcpServer = startMcpServer({
     getWindow: () => mainWindow

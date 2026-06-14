@@ -441,6 +441,16 @@ function copyRootFields(snapshot, primaryExpiry, primarySnapshot, byExpiry) {
 
 export function trimSnapshotForWidgets(snapshot, tab) {
   if (!snapshot || typeof snapshot !== 'object') return snapshot;
+  if (snapshot.theBlock?.charts) {
+    return {
+      ...snapshot,
+      storage: {
+        trimmed: false,
+        trimVersion: SNAPSHOT_TRIM_VERSION,
+        reason: 'theblock-series-snapshot'
+      }
+    };
+  }
   const needs = collectNeeds(snapshot, tab);
   const primary = primaryExpiryKey(snapshot);
   if (primary && !needs.has(primary)) addNeed(needs, primary);

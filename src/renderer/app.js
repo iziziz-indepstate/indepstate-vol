@@ -1,4 +1,5 @@
 import { TradingViewProvider } from '../shared/tradingview-provider.js';
+import { TheBlockProvider } from '../shared/theblock-provider.js';
 import { getWidgetDefinition, widgetDefinitions } from './widgets/index.js';
 import { createWidgetCard, createWidgetChart } from './widgets/widget-renderers.js';
 import { skewMetrics } from './widgets/metrics.js';
@@ -15,7 +16,14 @@ import {
 import { trimSnapshotForWidgets } from '../shared/snapshot-trim.mjs';
 
 const providers = {
-  tradingview: new TradingViewProvider()
+  tradingview: new TradingViewProvider(),
+  theblock: {
+    fetchSnapshot: (config) => (
+      typeof window.appBridge?.getTheBlockSnapshot === 'function'
+        ? window.appBridge.getTheBlockSnapshot(config)
+        : new TheBlockProvider().fetchSnapshot(config)
+    )
+  }
 };
 
 const state = {
@@ -145,6 +153,15 @@ function shouldCompactHistorySnapshots(tab) {
   return tab?.providerConfig?.compactHistorySnapshots !== false;
 }
 
+function updateProviderConfigVisibility(providerKey) {
+  document.querySelectorAll('[data-provider-setting]').forEach((node) => {
+    const allowed = String(node.dataset.providerSetting || '')
+      .split(/\s+/)
+      .filter(Boolean);
+    node.hidden = !allowed.includes(providerKey);
+  });
+}
+
 function trimHistoryForTab(tab) {
   if (!tab?.id || !Array.isArray(state.historyByTab[tab.id])) return;
   if (!shouldCompactHistorySnapshots(tab)) return;
@@ -154,6 +171,7 @@ function trimHistoryForTab(tab) {
 function applyTabToForm(tab) {
   tab.providerConfig = normalizeProviderConfig(tab.providerConfig || {});
   $('providerKey').value = tab.providerKey;
+  updateProviderConfigVisibility(tab.providerKey);
   $('apiBase').value = tab.providerConfig.apiBase || '';
   $('ticker').value = tab.providerConfig.ticker || '';
   $('root').value = tab.providerConfig.root || '';
@@ -167,19 +185,27 @@ function applyTabToForm(tab) {
 }
 
 function readFormToTab(tab) {
-  tab.providerKey = $('providerKey').value;
-  tab.providerConfig = {
-    apiBase: $('apiBase').value.trim(),
-    ticker: $('ticker').value.trim(),
-    root: $('root').value.trim(),
-    expiryStart: $('expiryStart').value.trim(),
-    expiryEnd: $('expiryEnd').value.trim(),
-    yahooSymbol: $('yahooSymbol').value.trim(),
-    pollSec: Number($('pollSec').value) || 5,
-    keepPoints: Number($('keepPoints').value) || 200,
+  const providerKey = $('providerKey').value;
+  tab.providerKey = providerKey;
+  const nextConfig = {
+    ...(tab.providerConfig || {}),
     saveRawSnapshots: $('saveRawSnapshots').checked,
     compactHistorySnapshots: $('compactHistorySnapshots').checked
   };
+  if (providerKey === 'tradingview') {
+    Object.assign(nextConfig, {
+      apiBase: $('apiBase').value.trim(),
+      ticker: $('ticker').value.trim(),
+      root: $('root').value.trim(),
+      expiryStart: $('expiryStart').value.trim(),
+      expiryEnd: $('expiryEnd').value.trim(),
+      yahooSymbol: $('yahooSymbol').value.trim(),
+      pollSec: Number($('pollSec').value) || 5,
+      keepPoints: Number($('keepPoints').value) || 200
+    });
+  }
+  tab.providerConfig = normalizeProviderConfig(nextConfig);
+  updateProviderConfigVisibility(providerKey);
 }
 
 function renderTabs() {
@@ -659,6 +685,18 @@ function convertDatasetToPointData(dataset, sourceLabels, range = null, allowedL
     data: points,
     pointMeta: Array.isArray(dataset?.pointMeta) ? meta : dataset?.pointMeta
   };
+}
+
+function mergeChartOptions(target, source) {
+  if (!target || !source || typeof source !== 'object') return;
+  for (const [key, value] of Object.entries(source)) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      target[key] ||= {};
+      mergeChartOptions(target[key], value);
+    } else {
+      target[key] = value;
+    }
+  }
 }
 
 function renderWidgets() {
@@ -1247,6 +1285,9 @@ async function refreshCharts() {
       const series = definition.buildTimeSeries(history, widget);
       chart.data.labels = Array.isArray(series?.labels) ? series.labels : [];
       chart.data.datasets = (Array.isArray(series?.datasets) ? series.datasets : []).map((dataset, idx) => ({
+        ...dataset,
+        type: dataset?.type,
+        yAxisID: dataset?.yAxisID,
         label: dataset?.label || `Series ${idx + 1}`,
         data: Array.isArray(dataset?.data) ? dataset.data : [],
         borderWidth: dataset?.borderWidth ?? 1,
@@ -1255,9 +1296,12 @@ async function refreshCharts() {
         pointHitRadius: dataset?.pointHitRadius ?? 14,
         pointHoverRadius: dataset?.pointHoverRadius ?? 4,
         borderColor: dataset?.borderColor || definition.color || '#7aa2ff',
+        backgroundColor: dataset?.backgroundColor,
+        borderDash: dataset?.borderDash,
         pointMeta: Array.isArray(dataset?.pointMeta) ? dataset.pointMeta : [],
         tooltipFormatter: typeof dataset?.tooltipFormatter === 'function' ? dataset.tooltipFormatter : null
       }));
+      if (series?.chartOptions) mergeChartOptions(chart.options, series.chartOptions);
       chart.options.plugins.legend.display = chart.data.datasets.length > 1;
       chart.options.plugins.title ||= {};
       chart.options.plugins.title.display = Boolean(series?.title);
@@ -1505,10 +1549,15 @@ async function tickTab(tabId) {
     }
 
     tickTabIfActive(tabId);
-    setTabStatus(
-      tabId,
-      `ok • ${tab.title} • px=${point.px?.toFixed(3) ?? 'n/a'} • lower=${point.lower ?? 'n/a'} upper=${point.upper ?? 'n/a'}`
-    );
+    if (point.theBlock?.latestDate) {
+      const chartCount = Object.keys(point.theBlock?.charts || {}).length;
+      setTabStatus(tabId, `ok • ${tab.title} • The Block charts=${chartCount} • latest=${point.theBlock.latestDate}`);
+    } else {
+      setTabStatus(
+        tabId,
+        `ok • ${tab.title} • px=${point.px?.toFixed(3) ?? 'n/a'} • lower=${point.lower ?? 'n/a'} upper=${point.upper ?? 'n/a'}`
+      );
+    }
     persist();
   } catch (err) {
     setTabStatus(tabId, `error • ${tab.title}: ${err?.message || err}`);
@@ -1626,6 +1675,7 @@ function bindEvents() {
       const tab = activeTab();
       if (!tab) return;
       readFormToTab(tab);
+      if (id === 'providerKey') updateProviderConfigVisibility(tab.providerKey);
       persist();
       if (tabTimers.has(tab.id)) startTabPolling(tab.id);
     });

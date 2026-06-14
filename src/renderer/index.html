@@ -37,30 +37,31 @@
           <label>Provider
             <select id="providerKey">
               <option value="tradingview">TradingView</option>
+              <option value="theblock">The Block</option>
             </select>
           </label>
-          <label>API Base
+          <label data-provider-setting="tradingview">API Base
             <input id="apiBase" />
           </label>
-          <label>Ticker
+          <label data-provider-setting="tradingview">Ticker
             <input id="ticker" />
           </label>
-          <label>Root
+          <label data-provider-setting="tradingview">Root
             <input id="root" />
           </label>
-          <label>Expiry start (YYYYMMDD)
+          <label data-provider-setting="tradingview">Expiry start (YYYYMMDD)
             <input id="expiryStart" />
           </label>
-          <label>Expiry end (YYYYMMDD)
+          <label data-provider-setting="tradingview">Expiry end (YYYYMMDD)
             <input id="expiryEnd" />
           </label>
-          <label>Yahoo Symbol
+          <label data-provider-setting="tradingview">Yahoo Symbol
             <input id="yahooSymbol" />
           </label>
-          <label>Poll sec
+          <label data-provider-setting="tradingview">Poll sec
             <input id="pollSec" type="number" min="1" />
           </label>
-          <label>Keep points
+          <label data-provider-setting="tradingview">Keep points
             <input id="keepPoints" type="number" min="20" />
           </label>
           <label class="checkbox-field">

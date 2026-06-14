@@ -223,6 +223,10 @@ body {
   color: var(--muted);
 }
 
+.config-grid [hidden] {
+  display: none !important;
+}
+
 .config-grid .checkbox-field {
   min-height: 58px;
   flex-direction: row;

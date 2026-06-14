@@ -28,6 +28,7 @@ export function createWidgetCard(widget, definition) {
   const optionTypeValue = String(widget?.config?.optionType ?? definition?.defaultConfig?.optionType ?? 'put');
   const targetDeltaValue = Number(widget?.config?.targetDelta ?? definition?.defaultConfig?.targetDelta ?? 0.25);
   const expirationValue = String(widget?.config?.expiration ?? definition?.defaultConfig?.expiration ?? '');
+  const timeRangeValue = String(widget?.config?.range ?? definition?.defaultConfig?.range ?? '1M');
   const isNDateSkewWidget = String(widget?.type || '').startsWith('ndate-skew-');
   const controls = Object.keys(controlsConfig).length
     ? `<div class="widget-controls widget-controls-inline">
@@ -57,6 +58,11 @@ export function createWidgetCard(widget, definition) {
         </label>` : ''}
         ${controlsConfig.expiration ? `<label class="widget-control">Exp
           <input type="text" class="widget-expiration-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.EXPIRATION}" value="${expirationValue}" placeholder="20260612" />
+        </label>` : ''}
+        ${controlsConfig.timeRange ? `<label class="widget-control">R
+          <select class="widget-range-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.TIME_RANGE}">
+            ${['1D', '1W', '1M', '6M'].map((range) => `<option value="${range}" ${timeRangeValue === range ? 'selected' : ''}>${range}</option>`).join('')}
+          </select>
         </label>` : ''}
         ${isNDateSkewWidget ? `<div class="widget-control widget-history-control">
           <button type="button" class="widget-history-toggle" data-widget-history-toggle-widget-id="${widget.id}" title="History">H</button>
@@ -117,7 +123,9 @@ function applyAltTooltipState(chart, isPressed) {
 
 function handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange) {
   const chart = legend?.chart;
-  const datasetIndex = legendItem?.datasetIndex;
+  const datasetIndex = Number.isInteger(legendItem?.datasetIndex)
+    ? legendItem.datasetIndex
+    : legendItem?.index;
   if (!chart || !Number.isInteger(datasetIndex)) return;
   const clickedDataset = chart.data.datasets?.[datasetIndex];
   const linkedHistoryIndices = Array.isArray(clickedDataset?.linkedHistoryIndices)
@@ -148,6 +156,25 @@ function handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange) {
   clickGroup.forEach((idx) => chart.setDatasetVisibility(idx, !currentlyVisible));
   chart.update();
   if (typeof onLegendVisibilityChange === 'function') onLegendVisibilityChange(chart);
+}
+
+function generateDatasetLegendLabels(chart) {
+  const datasets = Array.isArray(chart?.data?.datasets) ? chart.data.datasets : [];
+  return datasets.map((dataset, datasetIndex) => {
+    const color = dataset?.borderColor || dataset?.backgroundColor || '#7aa2ff';
+    return {
+      text: dataset?.label || `Series ${datasetIndex + 1}`,
+      fillStyle: dataset?.backgroundColor || color,
+      strokeStyle: color,
+      lineWidth: dataset?.borderWidth ?? 1,
+      fontColor: '#eaeaf0',
+      hidden: !chart.isDatasetVisible(datasetIndex),
+      datasetIndex,
+      index: datasetIndex,
+      pointStyle: dataset?.pointStyle || 'circle',
+      lineDash: Array.isArray(dataset?.borderDash) ? dataset.borderDash : []
+    };
+  }).filter((item) => !datasets[item.datasetIndex]?.hiddenInLegend);
 }
 
 export function createWidgetChart(ctx, definition, options = {}) {
@@ -208,6 +235,8 @@ export function createWidgetChart(ctx, definition, options = {}) {
           display: false,
           onClick: (evt, legendItem, legend) => handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange),
           labels: {
+            generateLabels: generateDatasetLegendLabels,
+            color: '#eaeaf0',
             boxWidth: 8,
             boxHeight: 8,
             padding: 8,

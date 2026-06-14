@@ -17,6 +17,7 @@ import { ivRvWidget } from './iv-rv-widget.js';
 import { atmStraddleWidget } from './atm-straddle-widget.js';
 import { volUpfrontWidget } from './vol-upfront-widget.js';
 import { nDeltaIVWidget } from './n-delta-iv-widget.js';
+import { theBlockWidgets } from './theblock-widgets.js';
 
 export const widgetDefinitions = [
   atmStraddleWidget,
@@ -33,7 +34,8 @@ export const widgetDefinitions = [
   nDateSkewBidCallWidget,
   nDateSkewBidIVRatioWidget,
   spreadOptimizerWidget,
-  ivRvWidget
+  ivRvWidget,
+  ...theBlockWidgets
 ];
 
 export const widgetRegistry = Object.fromEntries(widgetDefinitions.map((d) => [d.type, d]));
