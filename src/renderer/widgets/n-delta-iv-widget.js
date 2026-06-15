@@ -80,8 +80,8 @@ export const nDeltaIVWidget = {
       borderWidth: 1,
       tension: 0.2,
       pointRadius: 0,
-      pointHitRadius: 14,
-      pointHoverRadius: 4,
+      pointHitRadius: 0,
+      pointHoverRadius: 0,
       pointMeta: points,
       tooltipFormatter: pointTooltip
     };

@@ -45,7 +45,8 @@ function lineDataset(label, data, color) {
     borderColor: color,
     borderWidth: 1.5,
     pointRadius: 0,
-    pointHitRadius: 12,
+    pointHitRadius: 0,
+    pointHoverRadius: 0,
     tension: 0.15
   };
 }
@@ -54,9 +55,13 @@ function createCharts(container, result) {
   const labels = result.series.map((row) => row.date);
   const commonOptions = {
     responsive: true,
+    events: [],
     animation: false,
     interaction: { mode: 'index', intersect: false },
-    plugins: { legend: { display: true, labels: { color: '#eaeaf0', boxWidth: 10 } } },
+    plugins: {
+      legend: { display: true, labels: { color: '#eaeaf0', boxWidth: 10 } },
+      tooltip: { enabled: false }
+    },
     scales: {
       x: { ticks: { color: 'rgba(234,234,240,0.65)', maxTicksLimit: 8 } },
       y: { ticks: { color: 'rgba(234,234,240,0.65)' } }

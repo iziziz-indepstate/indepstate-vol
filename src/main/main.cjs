@@ -11,6 +11,7 @@ app.setName('IS-VOL');
 
 let mainWindow = null;
 let mcpServer = null;
+let persistedState = null;
 
 const DEFAULT_STATE = {
   activeTabId: 'tab-1',
@@ -98,11 +99,24 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('state:load', async () => {
-    return loadState(app.getPath('userData'), DEFAULT_STATE);
+    persistedState = loadState(app.getPath('userData'), DEFAULT_STATE);
+    return persistedState;
   });
 
   ipcMain.handle('state:save', async (_evt, state) => {
-    saveState(app.getPath('userData'), state);
+    persistedState = state;
+    saveState(app.getPath('userData'), persistedState);
+    return { ok: true };
+  });
+
+  ipcMain.handle('state:save-ui', async (_evt, uiState) => {
+    const current = persistedState || loadState(app.getPath('userData'), DEFAULT_STATE);
+    persistedState = {
+      ...current,
+      activeTabId: uiState?.activeTabId || current.activeTabId,
+      tabs: Array.isArray(uiState?.tabs) ? uiState.tabs : current.tabs
+    };
+    saveState(app.getPath('userData'), persistedState);
     return { ok: true };
   });
 

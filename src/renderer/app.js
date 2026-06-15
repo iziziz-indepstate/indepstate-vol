@@ -43,6 +43,7 @@ let tabContextTargetId = null;
 let renameTargetTabId = null;
 let draggedTabId = null;
 let historySidecarWidgetId = null;
+let persistUiTimer = null;
 
 const $ = (id) => document.getElementById(id);
 const HISTORY_SNAPSHOT_PALETTE = ['#7dffb3', '#7aa2ff', '#f97316', '#eab308', '#d946ef', '#06b6d4', '#ef4444', '#f472b6'];
@@ -129,6 +130,25 @@ function persist() {
     tabs: state.tabs,
     historyByTab: state.historyByTab
   });
+}
+
+function persistUiState() {
+  if (typeof window.appBridge.saveUiState === 'function') {
+    window.appBridge.saveUiState({
+      activeTabId: state.activeTabId,
+      tabs: state.tabs
+    });
+    return;
+  }
+  persist();
+}
+
+function schedulePersistUiState(delayMs = 250) {
+  if (persistUiTimer) clearTimeout(persistUiTimer);
+  persistUiTimer = setTimeout(() => {
+    persistUiTimer = null;
+    persistUiState();
+  }, delayMs);
 }
 
 function tabSupportsHistorySnapshots(tab) {
@@ -238,7 +258,7 @@ function renderTabs() {
       renderWidgets();
       setStatus(tabStatus[tab.id] || 'ready');
       updatePollingControlsForActiveTab();
-      persist();
+      persistUiState();
     };
     item.addEventListener('contextmenu', (evt) => {
       evt.preventDefault();
@@ -280,7 +300,7 @@ function renderTabs() {
       const insertAt = fromIdx < toIdx ? toIdx - 1 : toIdx;
       state.tabs.splice(insertAt, 0, moved);
       renderTabs();
-      persist();
+      persistUiState();
     });
 
     item.appendChild(btn);
@@ -335,7 +355,7 @@ function renameTabById(tabId, nextTitleRaw) {
   if (!trimmed) return;
   tab.title = trimmed;
   renderTabs();
-  persist();
+  persistUiState();
 }
 
 function openRenameTabModal(tabId) {
@@ -399,11 +419,33 @@ function publishMcpWidgetRuntimeData(tabId, widgetId, data) {
   mcpRuntimeStore.set(tabId, widgetId, data);
 }
 
+function chartRuntimeDataForWidget(tabId, widgetId) {
+  const tab = activeTab();
+  if (!tab || tab.id !== tabId || !widgetId) return null;
+  const entry = chartInstances.get(widgetId);
+  if (!entry?.chart || entry.mode === 'table') return null;
+  const history = state.historyByTab[tab.id] || [];
+  const latest = history[history.length - 1] || null;
+  return createChartRuntimeData({
+    widget: entry.widget,
+    definition: entry.definition,
+    labels: entry.chart?.data?.labels || [],
+    datasets: entry.chart?.data?.datasets || [],
+    title: entry.chart?.options?.plugins?.title?.text || '',
+    historyLength: history.length,
+    sourceSnapshotTime: latest?.time || null
+  });
+}
+
+function runtimeDataForWidget(tabId, widgetId) {
+  return mcpRuntimeStore.get(tabId, widgetId) || chartRuntimeDataForWidget(tabId, widgetId);
+}
+
 function dashboardRuntimeSnapshot() {
   return createDashboardRuntimeSnapshot({
     state,
     widgetDefinitions,
-    getRuntimeData: (tabId, widgetId) => mcpRuntimeStore.get(tabId, widgetId)
+    getRuntimeData: runtimeDataForWidget
   });
 }
 
@@ -709,6 +751,50 @@ function mergeChartOptions(target, source) {
   }
 }
 
+function ensureWidgetChartEntry(widget) {
+  const definition = getWidgetDefinition(widget?.type);
+  if (!widget?.id || !definition || widget.collapsed) return null;
+  if ((definition.mode || 'timeseries') === 'table') return chartInstances.get(widget.id) || null;
+  const existing = chartInstances.get(widget.id);
+  if (existing?.chart) return existing;
+
+  const ctx = document.getElementById(`canvas-${widget.id}`)?.getContext('2d');
+  if (!ctx) return null;
+
+  const chart = createWidgetChart(ctx, definition, {
+    onLegendVisibilityChange: () => {
+      if (!['snapshot-series', 'timeseries-custom'].includes(definition.mode || 'timeseries')) return;
+      syncHiddenSnapshotSeriesLabels(widget, chart);
+      persistUiState();
+    }
+  });
+  const entry = {
+    chart,
+    mode: definition.mode || 'timeseries',
+    metric: definition.metric,
+    definition,
+    widget
+  };
+  chartInstances.set(widget.id, entry);
+  return entry;
+}
+
+function destroyWidgetChartEntry(widgetId) {
+  const entry = chartInstances.get(widgetId);
+  if (!entry || entry.mode === 'table') return;
+  if (entry.chart && typeof entry.chart.destroy === 'function') entry.chart.destroy();
+  chartInstances.delete(widgetId);
+}
+
+function updateWidgetCollapsedCard(card, widget) {
+  card.classList.toggle('widget-card-collapsed', Boolean(widget.collapsed));
+  const handle = card.querySelector('[data-widget-collapse-handle]');
+  if (handle) {
+    handle.setAttribute('aria-expanded', widget.collapsed ? 'false' : 'true');
+    handle.setAttribute('title', `Double-click to ${widget.collapsed ? 'expand' : 'collapse'}`);
+  }
+}
+
 function renderWidgets() {
   destroyCharts();
   const tab = activeTab();
@@ -768,25 +854,7 @@ function renderWidgets() {
       continue;
     }
 
-    if (widget.collapsed) continue;
-
-    const ctx = document.getElementById(`canvas-${widget.id}`)?.getContext('2d');
-    if (!ctx) continue;
-
-    const chart = createWidgetChart(ctx, definition, {
-      onLegendVisibilityChange: () => {
-        if (!['snapshot-series', 'timeseries-custom'].includes(definition.mode || 'timeseries')) return;
-        syncHiddenSnapshotSeriesLabels(widget, chart);
-        persist();
-      }
-    });
-    chartInstances.set(widget.id, {
-      chart,
-      mode: definition.mode || 'timeseries',
-      metric: definition.metric,
-      definition,
-      widget
-    });
+    ensureWidgetChartEntry(widget);
   }
 
   root.querySelectorAll('[data-widget-id]').forEach((btn) => {
@@ -850,8 +918,15 @@ function renderWidgets() {
 
       evt.preventDefault();
       target.collapsed = !target.collapsed;
-      renderWidgets();
-      persist();
+      updateWidgetCollapsedCard(card, target);
+      if (target.collapsed) {
+        destroyWidgetChartEntry(target.id);
+      } else {
+        ensureWidgetChartEntry(target);
+        refreshWidget(target.id, { refreshDependents: false })
+          .catch((err) => console.error('Failed to refresh expanded widget', err));
+      }
+      persistUiState();
     });
 
     card.addEventListener('dragstart', (evt) => {
@@ -900,7 +975,7 @@ function renderWidgets() {
       tab.widgets.splice(insertAt, 0, moved);
 
       renderWidgets();
-      persist();
+      persistUiState();
     });
   });
 
@@ -925,16 +1000,20 @@ function renderWidgets() {
       const wid = evt.target.dataset[WIDGET_PARAM_DATASET.WIDGET_ID];
       const paramName = evt.target.dataset[WIDGET_PARAM_DATASET.PARAM_NAME];
       if (!setWidgetParamValue(wid, paramName, evt.target.value)) return;
-      if (shouldRefreshOnWidgetParamChange(paramName)) refreshCharts();
-      persist();
+      if (shouldRefreshOnWidgetParamChange(paramName)) {
+        refreshWidget(wid).catch((err) => console.error('Failed to refresh widget param input', err));
+      }
+      schedulePersistUiState();
     });
 
     input.addEventListener('change', (evt) => {
       const wid = evt.target.dataset[WIDGET_PARAM_DATASET.WIDGET_ID];
       const paramName = evt.target.dataset[WIDGET_PARAM_DATASET.PARAM_NAME];
       if (!setWidgetParamValue(wid, paramName, evt.target.value)) return;
-      if (shouldRefreshOnWidgetParamChange(paramName)) refreshCharts();
-      persist();
+      if (shouldRefreshOnWidgetParamChange(paramName)) {
+        refreshWidget(wid).catch((err) => console.error('Failed to refresh widget param change', err));
+      }
+      persistUiState();
     });
 
     input.addEventListener('click', (evt) => {
@@ -956,8 +1035,14 @@ function renderWidgets() {
         otherInput.value = rawValue;
       });
 
-      if (shouldRefreshOnWidgetParamChange(paramName)) refreshCharts();
-      persist();
+      if (shouldRefreshOnWidgetParamChange(paramName)) {
+        Promise.all(
+          tab.widgets
+            .filter((widget) => widget.id !== sourceWidgetId)
+            .map((widget) => refreshWidget(widget.id))
+        ).catch((err) => console.error('Failed to refresh broadcast widget params', err));
+      }
+      persistUiState();
     });
   });
 
@@ -1017,8 +1102,8 @@ function renderWidgets() {
         }
         if (hasChanges) {
           updateWidgetHistoryControls(root, tab);
-          refreshCharts();
-          persist();
+          refreshNDateWidgets().catch((err) => console.error('Failed to refresh nDate history broadcast', err));
+          persistUiState();
         }
         return;
       }
@@ -1036,8 +1121,8 @@ function renderWidgets() {
       if (!target) return;
       target.config ||= {};
       target.config.commonHistoryStrikeRange = Boolean(evt.target.checked);
-      refreshCharts();
-      persist();
+      refreshWidget(commonRangeWidgetId).catch((err) => console.error('Failed to refresh history common range', err));
+      persistUiState();
       return;
     }
 
@@ -1047,8 +1132,8 @@ function renderWidgets() {
       if (!target) return;
       target.config ||= {};
       target.config.hideCurrentSnapshotSeries = Boolean(evt.target.checked);
-      refreshCharts();
-      persist();
+      refreshWidget(hideCurrentWidgetId).catch((err) => console.error('Failed to refresh history hide current', err));
+      persistUiState();
       return;
     }
 
@@ -1056,8 +1141,8 @@ function renderWidgets() {
     if (!widgetId) return;
     if (!applyHistorySelection(widgetId, evt.target)) return;
     updateWidgetHistoryControls(root, tab);
-    refreshCharts();
-    persist();
+    refreshWidget(widgetId).catch((err) => console.error('Failed to refresh history selection', err));
+    persistUiState();
   });
 
   root.querySelector('[data-history-sidecar-close]')?.addEventListener('click', closeHistorySidecar);
@@ -1086,23 +1171,255 @@ function renderWidgets() {
   refreshCharts();
 }
 
+function createWidgetRefreshContext(tab = activeTab()) {
+  if (!tab) return null;
+  const history = state.historyByTab[tab.id] || [];
+  const latest = history[history.length - 1] || null;
+  return {
+    tab,
+    history,
+    latest,
+    publishChartRuntime: () => {}
+  };
+}
+
+async function refreshChartEntry(entry, context = createWidgetRefreshContext()) {
+  if (!entry || !context) return;
+  const { chart, mode, metric, definition, widget } = entry;
+  const { history, latest, publishChartRuntime } = context;
+  if (widget?.collapsed || mode === 'table' || !chart) return;
+
+  if (mode === 'snapshot-series' && typeof definition.buildSnapshotSeries === 'function') {
+    const historicalComparisons = collectHistoricalComparisons(history, widget);
+
+    const applySeriesToChart = (seriesToApply, widgetForSeries = widget) => {
+      chart.data.labels = seriesToApply?.labels || [];
+
+      if (Array.isArray(seriesToApply?.datasets) && seriesToApply.datasets.length) {
+        chart.data.datasets = seriesToApply.datasets.map((dataset, idx) => ({
+          label: dataset?.label || `Series ${idx + 1}`,
+          data: Array.isArray(dataset?.data) ? dataset.data : [],
+          borderWidth: 1,
+          tension: 0.2,
+          pointRadius: 0,
+          pointHitRadius: 0,
+          pointHoverRadius: 0,
+          borderColor: dataset?.borderColor || definition.color || '#7aa2ff',
+          pointMeta: Array.isArray(dataset?.pointMeta) ? dataset.pointMeta : [],
+          tooltipFormatter: typeof dataset?.tooltipFormatter === 'function' ? dataset.tooltipFormatter : null
+        }));
+      } else {
+        chart.data.datasets = [{
+          label: definition.defaultTitle,
+          data: seriesToApply?.values || [],
+          borderWidth: 1,
+          tension: 0.2,
+          pointRadius: 0,
+          pointHitRadius: 0,
+          pointHoverRadius: 0,
+          borderColor: definition.color || '#7aa2ff'
+        }];
+      }
+
+      const sourceLabels = Array.isArray(chart.data.labels) ? chart.data.labels.map((label) => String(label)) : [];
+      const rangeSpecs = chart.data.datasets.map((dataset) => ({
+        labels: sourceLabels,
+        data: dataset?.data
+      }));
+      const allLabels = new Set(sourceLabels);
+      const historyDatasets = [];
+
+      for (const comparison of historicalComparisons) {
+        const historicalSeries = definition.buildSnapshotSeries(comparison.snapshot, widgetForSeries);
+        if (!Array.isArray(historicalSeries?.labels) || !Array.isArray(historicalSeries?.datasets)) {
+          const baseDataset = chart.data.datasets[0];
+          if (!baseDataset) continue;
+          const historicalLabels = (historicalSeries?.labels || []).map((label) => String(label));
+          historicalLabels.forEach((label) => allLabels.add(label));
+          rangeSpecs.push({
+            labels: historicalLabels,
+            data: Array.isArray(historicalSeries?.values) ? historicalSeries.values : []
+          });
+          historyDatasets.push({
+            label: `${baseDataset.label} â€¢ ${comparison.label}`,
+            data: Array.isArray(historicalSeries?.values) ? historicalSeries.values : [],
+            borderWidth: 1,
+            tension: 0.2,
+            pointRadius: 0,
+            pointHitRadius: 0,
+            pointHoverRadius: 0,
+            borderColor: comparison.historyColor || baseDataset.borderColor || definition.color || '#7aa2ff',
+            borderDash: [6, 4],
+            hiddenInLegend: true,
+            sourceLabels: historicalLabels,
+            pointMeta: [],
+            tooltipFormatter: typeof baseDataset?.tooltipFormatter === 'function' ? baseDataset.tooltipFormatter : null
+          });
+          continue;
+        }
+
+        const historicalLabels = (historicalSeries.labels || []).map((label) => String(label));
+        historicalLabels.forEach((label) => allLabels.add(label));
+        for (let idx = 0; idx < chart.data.datasets.length; idx += 1) {
+          const baseDataset = chart.data.datasets[idx];
+          const seriesToUse = historicalSeries.datasets[idx] || historicalSeries.datasets.find((x) => x?.label === baseDataset.label);
+          if (!seriesToUse) continue;
+          rangeSpecs.push({
+            labels: historicalLabels,
+            data: Array.isArray(seriesToUse?.data) ? seriesToUse.data : []
+          });
+          historyDatasets.push({
+            label: `${baseDataset.label} â€¢ ${comparison.label}`,
+            data: Array.isArray(seriesToUse?.data) ? seriesToUse.data : [],
+            borderWidth: 1,
+            tension: 0.2,
+            pointRadius: 0,
+            pointHitRadius: 0,
+            pointHoverRadius: 0,
+            borderColor: comparison.historyColor || baseDataset.borderColor || definition.color || '#7aa2ff',
+            borderDash: [6, 4],
+            hiddenInLegend: true,
+            baseDatasetIndex: idx,
+            sourceLabels: historicalLabels,
+            pointMeta: Array.isArray(seriesToUse?.pointMeta) ? seriesToUse.pointMeta : [],
+            tooltipFormatter: typeof baseDataset?.tooltipFormatter === 'function' ? baseDataset.tooltipFormatter : null
+          });
+        }
+      }
+
+      return { allLabels, historyDatasets, rangeSpecs, sourceLabels };
+    };
+
+    let series = definition.buildSnapshotSeries(latest, widget);
+    let built = applySeriesToChart(series);
+    const useCommonStrikeRange = built.historyDatasets.length && shouldUseCommonHistoryStrikeRange(widget);
+    const outerRange = useCommonStrikeRange ? outerNumericRange(built.rangeSpecs) : null;
+    const seriesWidget = outerRange
+      ? { ...widget, config: { ...(widget.config || {}), historyStrikeRangeBounds: outerRange } }
+      : widget;
+
+    if (outerRange) {
+      series = definition.buildSnapshotSeries(latest, seriesWidget);
+      built = applySeriesToChart(series, seriesWidget);
+    }
+
+    const hasMultipleBaseDatasets = chart.data.datasets.length > 1;
+    const historyDatasets = built.historyDatasets;
+    const baseDatasetsCount = chart.data.datasets.length;
+    const sourceLabels = built.sourceLabels;
+    const commonRange = outerRange;
+    const targetLabels = sortChartLabels(Array.from(built.allLabels), sourceLabels)
+      .filter((label) => labelAllowed(label, commonRange));
+    chart.data.labels = targetLabels;
+    chart.data.datasets = chart.data.datasets.map((dataset) => (
+      convertDatasetToPointData(dataset, sourceLabels, commonRange)
+    ));
+    historyDatasets.forEach((dataset) => {
+      const source = Array.isArray(dataset.sourceLabels) ? dataset.sourceLabels : [];
+      delete dataset.sourceLabels;
+      Object.assign(dataset, convertDatasetToPointData(dataset, source, commonRange));
+    });
+
+    chart.data.datasets.push(...historyDatasets);
+
+    if (historyDatasets.length) {
+      for (let idx = 0; idx < baseDatasetsCount; idx += 1) {
+        const linked = [];
+        for (let histIdx = baseDatasetsCount; histIdx < chart.data.datasets.length; histIdx += 1) {
+          const dataset = chart.data.datasets[histIdx];
+          if (dataset?.baseDatasetIndex === idx) linked.push(histIdx);
+        }
+        chart.data.datasets[idx].linkedHistoryIndices = linked;
+      }
+    }
+
+    chart.options.plugins.legend.labels.generateLabels = (legendChart) => {
+      const defaultGenerator = Chart.defaults.plugins.legend.labels.generateLabels;
+      return defaultGenerator(legendChart)
+        .filter((item) => !legendChart.data.datasets[item.datasetIndex]?.hiddenInLegend);
+    };
+    chart.options.plugins.legend.display = hasMultipleBaseDatasets;
+    applyHiddenSnapshotSeriesLabels(widget, chart);
+    const baseVisibilityBeforeHideCurrent = chart.data.datasets
+      .slice(0, baseDatasetsCount)
+      .map((_, idx) => chart.isDatasetVisible(idx));
+    if (historyDatasets.length && shouldHideCurrentSnapshotSeries(widget)) {
+      for (let idx = 0; idx < baseDatasetsCount; idx += 1) {
+        const linked = Array.isArray(chart.data.datasets[idx]?.linkedHistoryIndices)
+          ? chart.data.datasets[idx].linkedHistoryIndices
+          : [];
+        linked.forEach((linkedIdx) => {
+          if (!Number.isInteger(linkedIdx)) return;
+          if (linkedIdx < 0 || linkedIdx >= chart.data.datasets.length) return;
+          chart.setDatasetVisibility(linkedIdx, baseVisibilityBeforeHideCurrent[idx] !== false);
+        });
+        chart.setDatasetVisibility(idx, false);
+      }
+    } else {
+      syncLinkedHistoryVisibility(chart);
+    }
+    chart.update('none');
+    publishChartRuntime(entry);
+    return;
+  }
+
+  if (mode === 'timeseries-custom' && typeof definition.buildTimeSeries === 'function') {
+    const series = definition.buildTimeSeries(history, widget);
+    chart.data.labels = Array.isArray(series?.labels) ? series.labels : [];
+    chart.data.datasets = (Array.isArray(series?.datasets) ? series.datasets : []).map((dataset, idx) => ({
+      ...dataset,
+      type: dataset?.type,
+      yAxisID: dataset?.yAxisID,
+      label: dataset?.label || `Series ${idx + 1}`,
+      data: Array.isArray(dataset?.data) ? dataset.data : [],
+      borderWidth: dataset?.borderWidth ?? 1,
+      tension: dataset?.tension ?? 0.2,
+      pointRadius: dataset?.pointRadius ?? 0,
+      pointHitRadius: 0,
+      pointHoverRadius: 0,
+      borderColor: dataset?.borderColor || definition.color || '#7aa2ff',
+      backgroundColor: dataset?.backgroundColor,
+      borderDash: dataset?.borderDash,
+      pointMeta: Array.isArray(dataset?.pointMeta) ? dataset.pointMeta : [],
+      tooltipFormatter: typeof dataset?.tooltipFormatter === 'function' ? dataset.tooltipFormatter : null
+    }));
+    if (series?.chartOptions) mergeChartOptions(chart.options, series.chartOptions);
+    chart.options.plugins.legend.display = chart.data.datasets.length > 1;
+    chart.options.plugins.title ||= {};
+    chart.options.plugins.title.display = Boolean(series?.title);
+    chart.options.plugins.title.text = series?.title || '';
+    applyHiddenSnapshotSeriesLabels(widget, chart);
+    chart.update('none');
+    publishChartRuntime(entry, series?.title || '');
+    return;
+  }
+
+  if (mode === 'timeseries-custom' && typeof definition.extractTimeSeriesValue === 'function') {
+    chart.data.labels = history.map((x) => new Date(x.time).toLocaleTimeString());
+    chart.data.datasets[0].data = history.map((x) => {
+      const widgetSnapshot = x;
+      return definition.extractTimeSeriesValue(widgetSnapshot, widget);
+    });
+    chart.options.plugins.legend.display = false;
+    chart.update('none');
+    publishChartRuntime(entry);
+    return;
+  }
+
+  chart.data.labels = history.map((x) => new Date(x.time).toLocaleTimeString());
+  chart.data.datasets[0].data = history.map((x) => x[metric]);
+  chart.options.plugins.legend.display = false;
+  chart.update('none');
+  publishChartRuntime(entry);
+}
+
 async function refreshCharts() {
   const tab = activeTab();
   if (!tab) return;
 
   const history = state.historyByTab[tab.id] || [];
   const latest = history[history.length - 1] || null;
-  const publishChartRuntime = (entry, title = '') => {
-    publishMcpWidgetRuntimeData(tab.id, entry.widget.id, createChartRuntimeData({
-      widget: entry.widget,
-      definition: entry.definition,
-      labels: entry.chart?.data?.labels || [],
-      datasets: entry.chart?.data?.datasets || [],
-      title,
-      historyLength: history.length,
-      sourceSnapshotTime: latest?.time || null
-    }));
-  };
+  const publishChartRuntime = () => {};
 
   const entries = Array.from(chartInstances.values());
   const producerRenderTasks = [];
@@ -1130,8 +1447,8 @@ async function refreshCharts() {
             borderWidth: 1,
             tension: 0.2,
             pointRadius: 0,
-            pointHitRadius: 14,
-            pointHoverRadius: 4,
+            pointHitRadius: 0,
+            pointHoverRadius: 0,
             borderColor: dataset?.borderColor || definition.color || '#7aa2ff',
             pointMeta: Array.isArray(dataset?.pointMeta) ? dataset.pointMeta : [],
             tooltipFormatter: typeof dataset?.tooltipFormatter === 'function' ? dataset.tooltipFormatter : null
@@ -1143,8 +1460,8 @@ async function refreshCharts() {
             borderWidth: 1,
             tension: 0.2,
             pointRadius: 0,
-            pointHitRadius: 14,
-            pointHoverRadius: 4,
+            pointHitRadius: 0,
+            pointHoverRadius: 0,
             borderColor: definition.color || '#7aa2ff'
           }];
         }
@@ -1174,8 +1491,8 @@ async function refreshCharts() {
               borderWidth: 1,
               tension: 0.2,
               pointRadius: 0,
-              pointHitRadius: 14,
-              pointHoverRadius: 4,
+              pointHitRadius: 0,
+              pointHoverRadius: 0,
               borderColor: comparison.historyColor || baseDataset.borderColor || definition.color || '#7aa2ff',
               borderDash: [6, 4],
               hiddenInLegend: true,
@@ -1202,8 +1519,8 @@ async function refreshCharts() {
               borderWidth: 1,
               tension: 0.2,
               pointRadius: 0,
-              pointHitRadius: 14,
-              pointHoverRadius: 4,
+              pointHitRadius: 0,
+              pointHoverRadius: 0,
               borderColor: comparison.historyColor || baseDataset.borderColor || definition.color || '#7aa2ff',
               borderDash: [6, 4],
               hiddenInLegend: true,
@@ -1286,7 +1603,7 @@ async function refreshCharts() {
       } else {
         syncLinkedHistoryVisibility(chart);
       }
-      chart.update();
+      chart.update('none');
       publishChartRuntime(entry);
       continue;
     }
@@ -1303,8 +1620,8 @@ async function refreshCharts() {
         borderWidth: dataset?.borderWidth ?? 1,
         tension: dataset?.tension ?? 0.2,
         pointRadius: dataset?.pointRadius ?? 0,
-        pointHitRadius: dataset?.pointHitRadius ?? 14,
-        pointHoverRadius: dataset?.pointHoverRadius ?? 4,
+        pointHitRadius: 0,
+        pointHoverRadius: 0,
         borderColor: dataset?.borderColor || definition.color || '#7aa2ff',
         backgroundColor: dataset?.backgroundColor,
         borderDash: dataset?.borderDash,
@@ -1317,7 +1634,7 @@ async function refreshCharts() {
       chart.options.plugins.title.display = Boolean(series?.title);
       chart.options.plugins.title.text = series?.title || '';
       applyHiddenSnapshotSeriesLabels(widget, chart);
-      chart.update();
+      chart.update('none');
       publishChartRuntime(entry, series?.title || '');
       continue;
     }
@@ -1329,7 +1646,7 @@ async function refreshCharts() {
         return definition.extractTimeSeriesValue(widgetSnapshot, widget);
       });
       chart.options.plugins.legend.display = false;
-      chart.update();
+      chart.update('none');
       publishChartRuntime(entry);
       continue;
     }
@@ -1337,7 +1654,7 @@ async function refreshCharts() {
     chart.data.labels = history.map((x) => new Date(x.time).toLocaleTimeString());
     chart.data.datasets[0].data = history.map((x) => x[metric]);
     chart.options.plugins.legend.display = false;
-    chart.update();
+    chart.update('none');
     publishChartRuntime(entry);
   }
 
@@ -1377,7 +1694,7 @@ async function renderTableWidgetEntry(entry, latest, history) {
     },
     widget,
     onConfigChange: () => {
-      persist();
+      persistUiState();
       refreshSingleTableWidget(widget.id)
         .then(() => {
           if (widget.type === 'atm-straddle') return refreshVolUpfrontWidgets();
@@ -1416,6 +1733,41 @@ async function refreshSingleTableWidget(widgetId) {
   await renderTableWidgetEntry(entry, latest, history);
 }
 
+async function refreshWidget(widgetId, options = {}) {
+  const tab = activeTab();
+  if (!tab || !widgetId) return;
+
+  const entry = chartInstances.get(widgetId);
+  if (!entry) return;
+
+  const context = createWidgetRefreshContext(tab);
+  if (!context) return;
+
+  if (entry.mode === 'table') {
+    await renderTableWidgetEntry(entry, context.latest, context.history);
+  } else {
+    await refreshChartEntry(entry, context);
+  }
+
+  if (options.refreshDependents === false) return;
+  if (entry.widget?.type === 'atm-straddle') {
+    await refreshVolUpfrontWidgets();
+  }
+}
+
+async function refreshNDateWidgets() {
+  const tab = activeTab();
+  if (!tab) return;
+
+  const context = createWidgetRefreshContext(tab);
+  if (!context) return;
+
+  const tasks = Array.from(chartInstances.values())
+    .filter((entry) => String(entry?.widget?.type || '').startsWith('ndate-skew-'))
+    .map((entry) => refreshChartEntry(entry, context));
+  await Promise.all(tasks);
+}
+
 function broadcastTableWidgetConfig(sourceWidgetId, paramName, value) {
   const tab = activeTab();
   if (!tab || !sourceWidgetId || !paramName) return;
@@ -1432,7 +1784,7 @@ function broadcastTableWidgetConfig(sourceWidgetId, paramName, value) {
   }
 
   if (!updatedWidgetIds.length) return;
-  persist();
+  persistUiState();
   Promise.all(updatedWidgetIds.map((widgetId) => refreshSingleTableWidget(widgetId)))
     .then(() => {
       if (sourceWidget.type === 'atm-straddle') return refreshVolUpfrontWidgets();
@@ -1474,7 +1826,7 @@ function addWidget(type) {
     config: { ...(definition.defaultConfig || {}) }
   });
   renderWidgets();
-  persist();
+  persistUiState();
 }
 
 function addTab() {
@@ -1505,7 +1857,7 @@ function addTab() {
   renderTabs();
   renderWidgets();
   updatePollingControlsForActiveTab();
-  persist();
+  persistUiState();
 }
 
 async function tickTab(tabId) {
@@ -1687,7 +2039,7 @@ function bindEvents() {
       if (!tab) return;
       readFormToTab(tab);
       if (id === 'providerKey') updateProviderConfigVisibility(tab.providerKey);
-      persist();
+      persistUiState();
       if (tabTimers.has(tab.id)) startTabPolling(tab.id);
     });
   });

@@ -39,22 +39,20 @@ function createChart(container, segments) {
         borderColor: '#38bdf8',
         backgroundColor: 'rgba(56, 189, 248, 0.16)',
         borderWidth: 1.5,
-        pointRadius: 3,
-        pointHitRadius: 12,
+        pointRadius: 0,
+        pointHitRadius: 0,
+        pointHoverRadius: 0,
         tension: 0.15,
         spanGaps: false
       }]
     },
     options: {
       responsive: true,
+      events: [],
       animation: false,
       plugins: {
         legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: (context) => `Forward vol: ${fmt(context.parsed.y, 1)}%`
-          }
-        }
+        tooltip: { enabled: false }
       },
       scales: {
         x: { ticks: { color: 'rgba(234,234,240,0.65)' } },

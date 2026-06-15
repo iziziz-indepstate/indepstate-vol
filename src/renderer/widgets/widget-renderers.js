@@ -86,41 +86,6 @@ export function createWidgetCard(widget, definition) {
 }
 
 
-function defaultTooltipLabel(context) {
-  const datasetLabel = context?.dataset?.label ? `${context.dataset.label}: ` : '';
-  const y = context?.parsed?.y;
-  return `${datasetLabel}${Number.isFinite(y) ? y : 'n/a'}`;
-}
-
-function tooltipLabelCallback(context) {
-  const formatter = context?.dataset?.tooltipFormatter;
-  if (typeof formatter === 'function') {
-    const formatted = formatter(context);
-    if (Array.isArray(formatted)) return formatted;
-    if (formatted == null) return '';
-    return String(formatted);
-  }
-
-  return defaultTooltipLabel(context);
-}
-
-
-function hideTooltip(chart) {
-  if (!chart?.tooltip) return;
-  chart.tooltip.setActiveElements([], { x: 0, y: 0 });
-  chart.update('none');
-}
-
-function applyAltTooltipState(chart, isPressed) {
-  if (!chart) return;
-  chart.$altTooltipPressed = Boolean(isPressed);
-  if (!chart.$altTooltipPressed) {
-    hideTooltip(chart);
-    return;
-  }
-  if (chart.$pointerInside) chart.update('none');
-}
-
 function handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange) {
   const chart = legend?.chart;
   const datasetIndex = Number.isInteger(legendItem?.datasetIndex)
@@ -147,14 +112,14 @@ function handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange) {
     chart.data.datasets.forEach((_, idx) => {
       chart.setDatasetVisibility(idx, isAlreadyIsolated ? true : clickGroup.includes(idx));
     });
-    chart.update();
+    chart.update('none');
     if (typeof onLegendVisibilityChange === 'function') onLegendVisibilityChange(chart);
     return;
   }
 
   const currentlyVisible = chart.isDatasetVisible(datasetIndex);
   clickGroup.forEach((idx) => chart.setDatasetVisibility(idx, !currentlyVisible));
-  chart.update();
+  chart.update('none');
   if (typeof onLegendVisibilityChange === 'function') onLegendVisibilityChange(chart);
 }
 
@@ -189,22 +154,14 @@ export function createWidgetChart(ctx, definition, options = {}) {
         borderWidth: 1,
         tension: 0.2,
         pointRadius: 0,
-        pointHitRadius: 14,
-        pointHoverRadius: 4,
+        pointHitRadius: 0,
+        pointHoverRadius: 0,
         borderColor: definition.color || '#7aa2ff'
       }]
     },
     options: {
       responsive: true,
-      onHover: (evt, _active, chart) => {
-        chart.$pointerInside = true;
-        const altPressed = Boolean(evt?.native?.altKey || evt?.altKey);
-        applyAltTooltipState(chart, altPressed);
-      },
-      onLeave: (_evt, _active, chart) => {
-        chart.$pointerInside = false;
-        hideTooltip(chart);
-      },
+      events: [],
       animation: false,
       scales: {
         x: {
@@ -225,11 +182,7 @@ export function createWidgetChart(ctx, definition, options = {}) {
           padding: { top: 0, bottom: 6 }
         },
         tooltip: {
-          intersect: true,
-          filter: (tooltipItem) => Boolean(tooltipItem?.chart?.$altTooltipPressed),
-          callbacks: {
-            label: tooltipLabelCallback
-          }
+          enabled: false
         },
         legend: {
           display: false,
@@ -246,28 +199,6 @@ export function createWidgetChart(ctx, definition, options = {}) {
       }
     }
   });
-
-  chart.$pointerInside = false;
-  chart.$altTooltipPressed = false;
-
-  const handleKeyDown = (evt) => {
-    if (evt?.key !== 'Alt') return;
-    applyAltTooltipState(chart, true);
-  };
-  const handleKeyUp = (evt) => {
-    if (evt?.key !== 'Alt') return;
-    applyAltTooltipState(chart, false);
-  };
-
-  window.addEventListener('keydown', handleKeyDown);
-  window.addEventListener('keyup', handleKeyUp);
-
-  const originalDestroy = chart.destroy.bind(chart);
-  chart.destroy = (...args) => {
-    window.removeEventListener('keydown', handleKeyDown);
-    window.removeEventListener('keyup', handleKeyUp);
-    return originalDestroy(...args);
-  };
 
   return chart;
 }

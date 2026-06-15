@@ -80,8 +80,8 @@ function makeDataset(chart, labelEntries, seriesName, options = {}) {
     backgroundColor: options.backgroundColor || options.color,
     borderWidth: options.borderWidth ?? 1.7,
     pointRadius: 0,
-    pointHitRadius: 14,
-    pointHoverRadius: 4,
+    pointHitRadius: 0,
+    pointHoverRadius: 0,
     tension: options.tension ?? 0.12,
     borderDash: options.borderDash,
     tooltipFormatter: tooltipFormatter(options.format, options.digits)
