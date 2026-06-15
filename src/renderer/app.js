@@ -93,6 +93,16 @@ function setTabStatus(tabId, text) {
   if (state.activeTabId === tabId) setStatus(text);
 }
 
+function formatStatusUpdateTime(value) {
+  const dt = value ? new Date(value) : new Date();
+  if (Number.isNaN(dt.getTime())) return 'n/a';
+  return dt.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+}
+
 function setPollState(isRunning) {
   const dot = $('pollStateDot');
   dot.classList.toggle('is-running', isRunning);
@@ -1549,13 +1559,14 @@ async function tickTab(tabId) {
     }
 
     tickTabIfActive(tabId);
+    const updatedAt = formatStatusUpdateTime(point.time);
     if (point.theBlock?.latestDate) {
       const chartCount = Object.keys(point.theBlock?.charts || {}).length;
-      setTabStatus(tabId, `ok • ${tab.title} • The Block charts=${chartCount} • latest=${point.theBlock.latestDate}`);
+      setTabStatus(tabId, `ok • ${tab.title} • updated=${updatedAt} • The Block charts=${chartCount} • latest=${point.theBlock.latestDate}`);
     } else {
       setTabStatus(
         tabId,
-        `ok • ${tab.title} • px=${point.px?.toFixed(3) ?? 'n/a'} • lower=${point.lower ?? 'n/a'} upper=${point.upper ?? 'n/a'}`
+        `ok • ${tab.title} • updated=${updatedAt} • px=${point.px?.toFixed(3) ?? 'n/a'} • lower=${point.lower ?? 'n/a'} upper=${point.upper ?? 'n/a'}`
       );
     }
     persist();
