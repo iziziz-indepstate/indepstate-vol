@@ -249,6 +249,29 @@ function expandExpiryRange(startValue, endValue) {
   return out;
 }
 
+export function buildExpiryList(startValue, endValue) {
+  const expiryStart = String(startValue || '').trim();
+  if (expiryStart.includes(',')) {
+    const seen = new Set();
+    const expiries = [];
+    for (const raw of expiryStart.split(',')) {
+      const expiry = raw.trim();
+      if (!expiry) continue;
+      if (!parseExpiryDate(expiry)) {
+        throw new Error(`Invalid expiry in comma-separated list: ${expiry}`);
+      }
+      if (seen.has(expiry)) continue;
+      seen.add(expiry);
+      expiries.push(expiry);
+    }
+    return expiries;
+  }
+
+  const expiryEnd = String(endValue || '').trim();
+  const expiries = expandExpiryRange(expiryStart, expiryEnd || expiryStart);
+  return expiries.length ? expiries : [expiryStart].filter(Boolean);
+}
+
 function buildBasePoint(px, byTypeStrike, nowIso) {
   const optionQuotes = [];
   for (const row of byTypeStrike.values()) {
@@ -312,8 +335,7 @@ export class TradingViewProvider {
     const nowIso = new Date().toISOString();
     const expiryStart = String(config.expiryStart || config.expiry || '').trim();
     const expiryEnd = String(config.expiryEnd || '').trim();
-    const expiries = expandExpiryRange(expiryStart, expiryEnd || expiryStart);
-    const expiryList = expiries.length ? expiries : [expiryStart].filter(Boolean);
+    const expiryList = buildExpiryList(expiryStart, expiryEnd);
     if (!expiryList.length) throw new Error('Expiry start is required');
 
     const byExpiry = {};
