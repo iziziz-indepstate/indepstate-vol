@@ -1,0 +1,11 @@
+IS-VOL v1.2.3
+
+Changes
+- Added datasource update time display in the status area.
+- Added support for explicit TradingView expiry lists.
+- Documented the release checklist and GitHub release asset naming requirements.
+
+Verification
+- node --check src\renderer\app.js
+- npm test: 65 tests passed
+- npm run build: built Windows NSIS installer
