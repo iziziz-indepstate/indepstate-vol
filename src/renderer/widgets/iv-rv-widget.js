@@ -55,7 +55,7 @@ function createCharts(container, result) {
   const labels = result.series.map((row) => row.date);
   const commonOptions = {
     responsive: true,
-    events: [],
+    events: ['click'],
     animation: false,
     interaction: { mode: 'index', intersect: false },
     plugins: {

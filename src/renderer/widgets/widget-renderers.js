@@ -161,7 +161,7 @@ export function createWidgetChart(ctx, definition, options = {}) {
     },
     options: {
       responsive: true,
-      events: [],
+      events: ['click'],
       animation: false,
       scales: {
         x: {

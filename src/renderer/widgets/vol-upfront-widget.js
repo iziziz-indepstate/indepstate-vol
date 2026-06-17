@@ -48,7 +48,7 @@ function createChart(container, segments) {
     },
     options: {
       responsive: true,
-      events: [],
+      events: ['click'],
       animation: false,
       plugins: {
         legend: { display: false },
