@@ -1,9 +1,0 @@
-IS-VOL v1.2.4
-
-Changes
-- Optimized dashboard widget refresh performance.
-
-Verification
-- node --check src\renderer\app.js
-- npm test: 65 tests passed
-- npm run build: built Windows NSIS installer
