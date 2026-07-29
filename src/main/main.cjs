@@ -6,12 +6,15 @@ const { createMarketDataService } = require('./market-data-providers.cjs');
 const { startAutoUpdater } = require('./auto-updater.cjs');
 const { startMcpServer } = require('./mcp-server.cjs');
 const { defaultRawSnapshotDir, saveRawSnapshotAsync } = require('./raw-snapshot-store.cjs');
+const profiler = require('./profiler.cjs');
 
 app.setName('IS-VOL');
 
 let mainWindow = null;
 let mcpServer = null;
 let persistedState = null;
+let scheduledStateSaveTimer = null;
+let scheduledStateSavePromise = Promise.resolve();
 
 const DEFAULT_STATE = {
   activeTabId: 'tab-1',
@@ -78,6 +81,45 @@ const SKEW_METRICS = [
   }
 ];
 
+function profilerEnabledFromLaunch() {
+  const argv = process.argv.map((arg) => String(arg).toLowerCase());
+  const env = String(process.env.IS_VOL_PROFILER || '').toLowerCase();
+  return argv.includes('--profile')
+    || argv.includes('--profiler')
+    || argv.includes('--is-vol-profiler')
+    || ['1', 'true', 'yes', 'on'].includes(env);
+}
+
+function savePersistedStateNow(detail = {}) {
+  if (!persistedState) return Promise.resolve();
+  return profiler.measure('state:save-scheduled', detail, () => saveState(app.getPath('userData'), persistedState));
+}
+
+function cancelScheduledStateSave() {
+  if (!scheduledStateSaveTimer) return;
+  clearTimeout(scheduledStateSaveTimer);
+  scheduledStateSaveTimer = null;
+}
+
+function schedulePersistedStateSave(detail = {}, delayMs = 2500) {
+  const effectiveDelayMs = Math.max(60000, Number(delayMs) || 0);
+  if (scheduledStateSaveTimer) return;
+  scheduledStateSaveTimer = setTimeout(() => {
+    scheduledStateSaveTimer = null;
+    scheduledStateSavePromise = savePersistedStateNow(detail)
+      .catch((err) => console.warn('Failed to save scheduled state', err));
+  }, effectiveDelayMs);
+}
+
+async function flushScheduledStateSave() {
+  if (scheduledStateSaveTimer) {
+    clearTimeout(scheduledStateSaveTimer);
+    scheduledStateSaveTimer = null;
+    await savePersistedStateNow({ reason: 'flush' });
+  }
+  await scheduledStateSavePromise;
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     title: 'IS-VOL',
@@ -102,6 +144,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  profiler.setEnabled(profilerEnabledFromLaunch());
   startAutoUpdater();
   Menu.setApplicationMenu(null);
   const marketDataService = createMarketDataService({
@@ -115,7 +158,11 @@ app.whenReady().then(() => {
 
   ipcMain.handle('state:save', async (_evt, state) => {
     persistedState = state;
-    await saveState(app.getPath('userData'), persistedState);
+    cancelScheduledStateSave();
+    await profiler.measure('state:save', {
+      tabs: Array.isArray(state?.tabs) ? state.tabs.length : 0,
+      historyPoints: Object.values(state?.historyByTab || {}).reduce((acc, rows) => acc + (Array.isArray(rows) ? rows.length : 0), 0)
+    }, () => saveState(app.getPath('userData'), persistedState));
     return { ok: true };
   });
 
@@ -126,12 +173,51 @@ app.whenReady().then(() => {
       activeTabId: uiState?.activeTabId || current.activeTabId,
       tabs: Array.isArray(uiState?.tabs) ? uiState.tabs : current.tabs
     };
-    await saveState(app.getPath('userData'), persistedState);
+    cancelScheduledStateSave();
+    await profiler.measure('state:save-ui', {
+      tabs: Array.isArray(persistedState?.tabs) ? persistedState.tabs.length : 0
+    }, () => saveState(app.getPath('userData'), persistedState));
     return { ok: true };
   });
 
+  ipcMain.handle('state:append-history-point', async (_evt, payload) => {
+    const tabId = payload?.tabId;
+    if (!tabId) return { ok: false, error: 'tabId is required' };
+    const current = persistedState || loadState(app.getPath('userData'), DEFAULT_STATE);
+    const historyByTab = {
+      ...(current.historyByTab || {})
+    };
+    const rows = Array.isArray(historyByTab[tabId]) ? [...historyByTab[tabId]] : [];
+    rows.push(payload.point);
+    const keep = Math.max(20, Number(payload.keep) || 200);
+    while (rows.length > keep) rows.shift();
+    historyByTab[tabId] = rows;
+    persistedState = {
+      ...current,
+      historyByTab
+    };
+    profiler.push({
+      name: 'state:append-history-point',
+      detail: {
+        tabId,
+        keep,
+        history: rows.length
+      },
+      durationMs: 0
+    });
+    schedulePersistedStateSave({
+      tabId,
+      historyPoints: Object.values(historyByTab).reduce((acc, rowsForTab) => acc + (Array.isArray(rowsForTab) ? rowsForTab.length : 0), 0),
+      reason: 'append-history'
+    });
+    return { ok: true, history: rows.length };
+  });
+
   ipcMain.handle('raw-snapshot:save', async (_evt, payload) => {
-    return saveRawSnapshotAsync(defaultRawSnapshotDir(app), payload || {});
+    return profiler.measure('raw-snapshot:save', {
+      tabId: payload?.tab?.id,
+      providerKey: payload?.tab?.providerKey
+    }, () => saveRawSnapshotAsync(defaultRawSnapshotDir(app), payload || {}));
   });
 
   ipcMain.handle('market-data:load-local-series', async (_evt, source) => {
@@ -139,20 +225,37 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('market-data:get-daily-history', async (_evt, params) => {
-    return marketDataService.getDailyHistory(params || {});
+    return profiler.measure('market-data:get-daily-history', {
+      symbol: params?.symbol,
+      provider: params?.provider,
+      dataMode: params?.dataMode
+    }, () => marketDataService.getDailyHistory(params || {}));
   });
 
   ipcMain.handle('tradingview:get-snapshot', async (_evt, params) => {
     const { TradingViewProvider } = await import('../shared/tradingview-provider.js');
     const provider = new TradingViewProvider();
-    return provider.fetchSnapshot(params || {}, SKEW_METRICS);
+    return profiler.measure('tradingview:get-snapshot', {
+      ticker: params?.ticker,
+      root: params?.root,
+      expiryStart: params?.expiryStart || params?.expiry,
+      expiryEnd: params?.expiryEnd
+    }, () => provider.fetchSnapshot(params || {}, SKEW_METRICS));
   });
 
   ipcMain.handle('theblock:get-snapshot', async (_evt, params) => {
     const { TheBlockProvider } = await import('../shared/theblock-provider.js');
     const provider = new TheBlockProvider();
-    return provider.fetchSnapshot(params || {});
+    return profiler.measure('theblock:get-snapshot', {
+      chartIds: Array.isArray(params?.chartIds) ? params.chartIds.length : null
+    }, () => provider.fetchSnapshot(params || {}));
   });
+
+  ipcMain.handle('profiler:export', async (_evt, rendererEvents) => {
+    return profiler.exportEvents(app.getPath('userData'), rendererEvents || []);
+  });
+
+  ipcMain.handle('profiler:is-enabled', async () => profiler.isEnabled());
 
   createWindow();
   mcpServer = startMcpServer({
@@ -164,7 +267,13 @@ app.whenReady().then(() => {
   });
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', (event) => {
+  if (scheduledStateSaveTimer) {
+    event.preventDefault();
+    flushScheduledStateSave()
+      .finally(() => app.quit());
+    return;
+  }
   if (mcpServer) {
     mcpServer.close().catch(() => {});
     mcpServer = null;
