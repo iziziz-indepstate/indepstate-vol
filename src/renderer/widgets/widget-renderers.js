@@ -1,5 +1,37 @@
 import { WIDGET_PARAM_NAMES } from './widget-params.js';
 
+let chartJsLoadPromise = null;
+let uPlotLoadPromise = null;
+
+export function chartRuntimeForDefinition(definition) {
+  return definition?.chartRuntime || 'chartjs';
+}
+
+export async function ensureChartJsRuntime() {
+  if (window.Chart) return window.Chart;
+  chartJsLoadPromise ||= new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = '../../node_modules/chart.js/dist/chart.umd.js';
+    script.onload = () => (window.Chart ? resolve(window.Chart) : reject(new Error('Chart.js did not initialize')));
+    script.onerror = () => reject(new Error('Unable to load Chart.js runtime'));
+    document.head.appendChild(script);
+  });
+  return chartJsLoadPromise;
+}
+
+export async function ensureUPlotRuntime() {
+  if (!document.querySelector('link[data-chart-runtime="uplot"]')) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = '../../node_modules/uplot/dist/uPlot.min.css';
+    link.dataset.chartRuntime = 'uplot';
+    document.head.appendChild(link);
+  }
+  uPlotLoadPromise ||= import('../../../node_modules/uplot/dist/uPlot.esm.js');
+  const mod = await uPlotLoadPromise;
+  return mod.default || mod.uPlot || mod;
+}
+
 export function createWidgetCard(widget, definition) {
   const card = document.createElement('article');
   card.className = 'widget-card';
@@ -78,7 +110,7 @@ export function createWidgetCard(widget, definition) {
     </div>
     ${definition?.mode === 'table'
       ? `<div id="widget-body-${widget.id}" class="widget-body"></div>`
-      : `<canvas id="canvas-${widget.id}"></canvas>`
+      : `<div id="chart-${widget.id}" class="widget-chart-host" data-chart-runtime="${chartRuntimeForDefinition(definition)}"><canvas id="canvas-${widget.id}"></canvas></div>`
     }
   `;
 
@@ -143,6 +175,10 @@ function generateDatasetLegendLabels(chart) {
 }
 
 export function createWidgetChart(ctx, definition, options = {}) {
+  return createChartJsWidgetChart(ctx, definition, options);
+}
+
+function createChartJsWidgetChart(ctx, definition, options = {}) {
   const onLegendVisibilityChange = options?.onLegendVisibilityChange;
   const hideXAxisValues = Boolean(definition?.hideXAxisValues);
   const chart = new Chart(ctx, {
@@ -201,4 +237,215 @@ export function createWidgetChart(ctx, definition, options = {}) {
   });
 
   return chart;
+}
+
+function dataValueAt(dataset, idx, label) {
+  const data = Array.isArray(dataset?.data) ? dataset.data : [];
+  const direct = data[idx];
+  if (direct && typeof direct === 'object' && String(direct.x) === String(label)) {
+    return Number.isFinite(Number(direct.y)) ? Number(direct.y) : null;
+  }
+  if (Number.isFinite(Number(direct))) return Number(direct);
+  const point = data.find((item) => item && typeof item === 'object' && String(item.x) === String(label));
+  return Number.isFinite(Number(point?.y)) ? Number(point.y) : null;
+}
+
+function axisValues(labels) {
+  return (labels || []).map((_, idx) => idx);
+}
+
+function cssPx(node, fallback) {
+  const value = Number.parseFloat(getComputedStyle(node).height);
+  return Number.isFinite(value) && value > 0 ? Math.round(value) : fallback;
+}
+
+function seriesColor(dataset, fallback) {
+  const color = dataset?.borderColor || dataset?.backgroundColor || fallback || '#7aa2ff';
+  return Array.isArray(color) ? color[0] || fallback || '#7aa2ff' : color;
+}
+
+function seriesDash(dataset) {
+  return Array.isArray(dataset?.borderDash) ? dataset.borderDash : [];
+}
+
+class UPlotWidgetChart {
+  constructor(UPlot, host, definition, options = {}) {
+    this.UPlot = UPlot;
+    this.host = host;
+    this.definition = definition || {};
+    this.onLegendVisibilityChange = options?.onLegendVisibilityChange;
+    this.data = {
+      labels: [],
+      datasets: [{
+        data: [],
+        borderWidth: 1,
+        tension: 0.2,
+        pointRadius: 0,
+        pointHitRadius: 0,
+        pointHoverRadius: 0,
+        borderColor: this.definition.color || '#7aa2ff'
+      }]
+    };
+    this.options = {
+      plugins: {
+        title: { display: false, text: '' },
+        legend: { display: false, labels: {} }
+      }
+    };
+    this._visible = [];
+    this._plot = null;
+    this._seriesSignature = '';
+    this._legend = document.createElement('div');
+    this._legend.className = 'widget-chart-legend';
+    this._plotHost = document.createElement('div');
+    this._plotHost.className = 'widget-uplot-host';
+    this.host.replaceChildren(this._legend, this._plotHost);
+  }
+
+  isDatasetVisible(idx) {
+    return this._visible[idx] !== false;
+  }
+
+  setDatasetVisibility(idx, visible) {
+    this._visible[idx] = Boolean(visible);
+  }
+
+  _legendDisplay() {
+    return Boolean(this.options?.plugins?.legend?.display);
+  }
+
+  _visibleDatasets() {
+    return (Array.isArray(this.data.datasets) ? this.data.datasets : [])
+      .map((dataset, idx) => ({ dataset, idx }))
+      .filter(({ dataset, idx }) => this.isDatasetVisible(idx) && !dataset?.hidden);
+  }
+
+  _buildData() {
+    const labels = Array.isArray(this.data.labels) ? this.data.labels.map(String) : [];
+    const xs = axisValues(labels);
+    const columns = [xs];
+    const visible = this._visibleDatasets();
+    visible.forEach(({ dataset }) => {
+      columns.push(labels.map((label, idx) => dataValueAt(dataset, idx, label)));
+    });
+    return { labels, columns, visible };
+  }
+
+  _buildOptions(labels, visible) {
+    const height = cssPx(this.host, 240);
+    const width = Math.max(100, Math.round(this.host.clientWidth || this.host.getBoundingClientRect().width || 300));
+    const hideXAxisValues = Boolean(this.definition?.hideXAxisValues);
+    return {
+      width,
+      height,
+      cursor: { show: false },
+      legend: { show: false },
+      scales: { x: { time: false } },
+      axes: [
+        {
+          show: !hideXAxisValues,
+          values: (_, vals) => vals.map((x) => labels[x] ?? ''),
+          stroke: 'rgba(234,234,240,0.66)',
+          grid: { show: false },
+          ticks: { show: false },
+          size: hideXAxisValues ? 0 : 24
+        },
+        {
+          stroke: 'rgba(234,234,240,0.66)',
+          grid: { stroke: 'rgba(234,234,240,0.10)', width: 1 },
+          size: 46
+        }
+      ],
+      series: [
+        {},
+        ...visible.map(({ dataset }) => ({
+          label: dataset?.label || 'Series',
+          stroke: seriesColor(dataset, this.definition.color),
+          width: dataset?.borderWidth ?? 1,
+          dash: seriesDash(dataset)
+        }))
+      ]
+    };
+  }
+
+  _signatureFor(visible) {
+    return visible.map(({ dataset, idx }) => JSON.stringify({
+      idx,
+      label: dataset?.label || `Series ${idx + 1}`,
+      color: seriesColor(dataset, this.definition.color),
+      width: dataset?.borderWidth ?? 1,
+      dash: seriesDash(dataset)
+    })).join('|');
+  }
+
+  _renderLegend() {
+    const datasets = Array.isArray(this.data.datasets) ? this.data.datasets : [];
+    const visibleItems = datasets
+      .map((dataset, datasetIndex) => ({ dataset, datasetIndex }))
+      .filter(({ dataset }) => !dataset?.hiddenInLegend);
+    if (!this._legendDisplay() || !visibleItems.length) {
+      this._legend.replaceChildren();
+      this._legend.hidden = true;
+      return;
+    }
+
+    this._legend.hidden = false;
+    this._legend.replaceChildren(...visibleItems.map(({ dataset, datasetIndex }) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'widget-chart-legend-item';
+      if (!this.isDatasetVisible(datasetIndex)) btn.classList.add('is-hidden');
+      btn.dataset.datasetIndex = String(datasetIndex);
+      const swatch = document.createElement('span');
+      swatch.className = 'widget-chart-legend-swatch';
+      swatch.style.background = seriesColor(dataset, this.definition.color);
+      const label = document.createElement('span');
+      label.textContent = dataset?.label || `Series ${datasetIndex + 1}`;
+      btn.append(swatch, label);
+      btn.addEventListener('click', (evt) => {
+        handleLegendClick(evt, { datasetIndex, index: datasetIndex }, { chart: this }, this.onLegendVisibilityChange);
+      });
+      return btn;
+    }));
+  }
+
+  update() {
+    const { labels, columns, visible } = this._buildData();
+    const opts = this._buildOptions(labels, visible);
+    const seriesSignature = this._signatureFor(visible);
+    const shouldRecreate = this._plot && this._seriesSignature !== seriesSignature;
+    if (shouldRecreate) {
+      this._plot.destroy();
+      this._plot = null;
+      this._plotHost.replaceChildren();
+    }
+
+    if (!this._plot) {
+      this._plot = new this.UPlot(opts, columns, this._plotHost);
+      this._seriesSignature = seriesSignature;
+    } else {
+      this._plot.setData(columns);
+      this._plot.setSize({ width: opts.width, height: opts.height });
+    }
+    this._renderLegend();
+  }
+
+  destroy() {
+    this._plot?.destroy();
+    this._plot = null;
+    this.host.replaceChildren();
+  }
+}
+
+export async function createWidgetChartForDefinition(host, definition, options = {}) {
+  const runtime = chartRuntimeForDefinition(definition);
+  if (runtime === 'uplot') {
+    const UPlot = await ensureUPlotRuntime();
+    return new UPlotWidgetChart(UPlot, host, definition, options);
+  }
+
+  await ensureChartJsRuntime();
+  const canvas = host.querySelector('canvas');
+  const ctx = canvas?.getContext('2d');
+  return ctx ? createChartJsWidgetChart(ctx, definition, options) : null;
 }

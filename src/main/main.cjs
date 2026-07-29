@@ -5,7 +5,7 @@ const { loadLocalMarketSeries } = require('./local-market-data.cjs');
 const { createMarketDataService } = require('./market-data-providers.cjs');
 const { startAutoUpdater } = require('./auto-updater.cjs');
 const { startMcpServer } = require('./mcp-server.cjs');
-const { defaultRawSnapshotDir, saveRawSnapshot } = require('./raw-snapshot-store.cjs');
+const { defaultRawSnapshotDir, saveRawSnapshotAsync } = require('./raw-snapshot-store.cjs');
 
 app.setName('IS-VOL');
 
@@ -68,6 +68,16 @@ const DEFAULT_STATE = {
   historyByTab: {}
 };
 
+const SKEW_METRICS = [
+  {
+    key: 'dAtm',
+    compute: ({ atmPutIv, atmCallIv }) => {
+      if (atmPutIv == null || atmCallIv == null) return null;
+      return atmCallIv - atmPutIv;
+    }
+  }
+];
+
 function createWindow() {
   const win = new BrowserWindow({
     title: 'IS-VOL',
@@ -105,7 +115,7 @@ app.whenReady().then(() => {
 
   ipcMain.handle('state:save', async (_evt, state) => {
     persistedState = state;
-    saveState(app.getPath('userData'), persistedState);
+    await saveState(app.getPath('userData'), persistedState);
     return { ok: true };
   });
 
@@ -116,12 +126,12 @@ app.whenReady().then(() => {
       activeTabId: uiState?.activeTabId || current.activeTabId,
       tabs: Array.isArray(uiState?.tabs) ? uiState.tabs : current.tabs
     };
-    saveState(app.getPath('userData'), persistedState);
+    await saveState(app.getPath('userData'), persistedState);
     return { ok: true };
   });
 
   ipcMain.handle('raw-snapshot:save', async (_evt, payload) => {
-    return saveRawSnapshot(defaultRawSnapshotDir(app), payload || {});
+    return saveRawSnapshotAsync(defaultRawSnapshotDir(app), payload || {});
   });
 
   ipcMain.handle('market-data:load-local-series', async (_evt, source) => {
@@ -130,6 +140,12 @@ app.whenReady().then(() => {
 
   ipcMain.handle('market-data:get-daily-history', async (_evt, params) => {
     return marketDataService.getDailyHistory(params || {});
+  });
+
+  ipcMain.handle('tradingview:get-snapshot', async (_evt, params) => {
+    const { TradingViewProvider } = await import('../shared/tradingview-provider.js');
+    const provider = new TradingViewProvider();
+    return provider.fetchSnapshot(params || {}, SKEW_METRICS);
   });
 
   ipcMain.handle('theblock:get-snapshot', async (_evt, params) => {

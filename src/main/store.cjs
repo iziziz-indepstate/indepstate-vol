@@ -34,7 +34,7 @@ function loadState(userDataPath, defaults) {
 
 function saveState(userDataPath, state) {
   const file = statePath(userDataPath);
-  fs.writeFileSync(file, JSON.stringify(state, null, 2), 'utf-8');
+  return fs.promises.writeFile(file, JSON.stringify(state), 'utf-8');
 }
 
 module.exports = {

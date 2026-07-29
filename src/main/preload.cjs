@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('appBridge', {
   saveRawSnapshot: (payload) => ipcRenderer.invoke('raw-snapshot:save', payload),
   loadLocalMarketSeries: (source) => ipcRenderer.invoke('market-data:load-local-series', source),
   getDailyMarketHistory: (params) => ipcRenderer.invoke('market-data:get-daily-history', params),
+  getTradingViewSnapshot: (params) => ipcRenderer.invoke('tradingview:get-snapshot', params),
   getTheBlockSnapshot: (params) => ipcRenderer.invoke('theblock:get-snapshot', params),
   onMcpRuntimeStateRequest: (callback) => {
     const listener = (_evt, message) => callback(message);

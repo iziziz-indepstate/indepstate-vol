@@ -1,7 +1,7 @@
 import { TradingViewProvider } from '../shared/tradingview-provider.js';
 import { TheBlockProvider } from '../shared/theblock-provider.js';
 import { getWidgetDefinition, widgetDefinitions } from './widgets/index.js';
-import { createWidgetCard, createWidgetChart } from './widgets/widget-renderers.js';
+import { createWidgetCard, createWidgetChartForDefinition } from './widgets/widget-renderers.js';
 import { skewMetrics } from './widgets/metrics.js';
 import {
   normalizeWidgetParamValue,
@@ -16,7 +16,13 @@ import {
 import { trimSnapshotForWidgets } from '../shared/snapshot-trim.mjs';
 
 const providers = {
-  tradingview: new TradingViewProvider(),
+  tradingview: {
+    fetchSnapshot: (config, metrics) => (
+      typeof window.appBridge?.getTradingViewSnapshot === 'function'
+        ? window.appBridge.getTradingViewSnapshot(config)
+        : new TradingViewProvider().fetchSnapshot(config, metrics)
+    )
+  },
   theblock: {
     fetchSnapshot: (config) => (
       typeof window.appBridge?.getTheBlockSnapshot === 'function'
@@ -44,6 +50,10 @@ let renameTargetTabId = null;
 let draggedTabId = null;
 let historySidecarWidgetId = null;
 let persistUiTimer = null;
+let persistTimer = null;
+let persistInFlight = false;
+let persistQueued = false;
+let lastPersistStartedAt = 0;
 
 const $ = (id) => document.getElementById(id);
 const HISTORY_SNAPSHOT_PALETTE = ['#7dffb3', '#7aa2ff', '#f97316', '#eab308', '#d946ef', '#06b6d4', '#ef4444', '#f472b6'];
@@ -54,6 +64,10 @@ function historySnapshotColor(idx) {
 
 function activeTab() {
   return state.tabs.find((t) => t.id === state.activeTabId);
+}
+
+function isActiveTabId(tabId) {
+  return Boolean(tabId) && state.activeTabId === tabId;
 }
 
 function defaultExpiry() {
@@ -125,11 +139,46 @@ function updatePollingControlsForActiveTab() {
 }
 
 function persist() {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+  if (persistInFlight) {
+    persistQueued = true;
+    return;
+  }
+
+  persistInFlight = true;
+  persistQueued = false;
+  lastPersistStartedAt = Date.now();
   window.appBridge.saveState({
     activeTabId: state.activeTabId,
     tabs: state.tabs,
     historyByTab: state.historyByTab
+  }).catch((err) => {
+    console.warn('Failed to persist dashboard state', err);
+  }).finally(() => {
+    persistInFlight = false;
+    if (persistQueued) schedulePersist(500);
   });
+}
+
+function schedulePersist(delayMs = 1500) {
+  const elapsed = Date.now() - lastPersistStartedAt;
+  const effectiveDelay = elapsed > 30000 ? 0 : delayMs;
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    persist();
+  }, effectiveDelay);
+}
+
+function saveRawSnapshotDeferred(payload) {
+  if (typeof window.appBridge.saveRawSnapshot !== 'function') return;
+  setTimeout(() => {
+    window.appBridge.saveRawSnapshot(payload)
+      .catch((err) => console.warn('Failed to save raw snapshot', err));
+  }, 750);
 }
 
 function persistUiState() {
@@ -751,23 +800,24 @@ function mergeChartOptions(target, source) {
   }
 }
 
-function ensureWidgetChartEntry(widget) {
+async function ensureWidgetChartEntry(widget) {
   const definition = getWidgetDefinition(widget?.type);
   if (!widget?.id || !definition || widget.collapsed) return null;
   if ((definition.mode || 'timeseries') === 'table') return chartInstances.get(widget.id) || null;
   const existing = chartInstances.get(widget.id);
   if (existing?.chart) return existing;
 
-  const ctx = document.getElementById(`canvas-${widget.id}`)?.getContext('2d');
-  if (!ctx) return null;
+  const host = document.getElementById(`chart-${widget.id}`);
+  if (!host) return null;
 
-  const chart = createWidgetChart(ctx, definition, {
+  const chart = await createWidgetChartForDefinition(host, definition, {
     onLegendVisibilityChange: () => {
       if (!['snapshot-series', 'timeseries-custom'].includes(definition.mode || 'timeseries')) return;
       syncHiddenSnapshotSeriesLabels(widget, chart);
       persistUiState();
     }
   });
+  if (!chart) return null;
   const entry = {
     chart,
     mode: definition.mode || 'timeseries',
@@ -795,9 +845,10 @@ function updateWidgetCollapsedCard(card, widget) {
   }
 }
 
-function renderWidgets() {
+async function renderWidgets() {
   destroyCharts();
   const tab = activeTab();
+  const renderTabId = tab?.id || null;
   const root = $('widgetsRoot');
 
   if (!tab) {
@@ -854,7 +905,8 @@ function renderWidgets() {
       continue;
     }
 
-    ensureWidgetChartEntry(widget);
+    await ensureWidgetChartEntry(widget);
+    if (!isActiveTabId(renderTabId)) return;
   }
 
   root.querySelectorAll('[data-widget-id]').forEach((btn) => {
@@ -922,9 +974,9 @@ function renderWidgets() {
       if (target.collapsed) {
         destroyWidgetChartEntry(target.id);
       } else {
-        ensureWidgetChartEntry(target);
-        refreshWidget(target.id, { refreshDependents: false })
-          .catch((err) => console.error('Failed to refresh expanded widget', err));
+        ensureWidgetChartEntry(target)
+          .then(() => refreshWidget(target.id, { refreshDependents: false }))
+          .catch((err) => console.error('Failed to expand widget chart', err));
       }
       persistUiState();
     });
@@ -1168,7 +1220,7 @@ function renderWidgets() {
   });
 
   updateWidgetHistoryControls(root, tab);
-  refreshCharts();
+  if (isActiveTabId(renderTabId)) refreshCharts();
 }
 
 function createWidgetRefreshContext(tab = activeTab()) {
@@ -1333,11 +1385,17 @@ async function refreshChartEntry(entry, context = createWidgetRefreshContext()) 
       }
     }
 
-    chart.options.plugins.legend.labels.generateLabels = (legendChart) => {
-      const defaultGenerator = Chart.defaults.plugins.legend.labels.generateLabels;
-      return defaultGenerator(legendChart)
-        .filter((item) => !legendChart.data.datasets[item.datasetIndex]?.hiddenInLegend);
-    };
+    chart.options.plugins.legend.labels.generateLabels = (legendChart) => (
+      (legendChart.data.datasets || []).map((dataset, datasetIndex) => ({
+        text: dataset?.label || `Series ${datasetIndex + 1}`,
+        datasetIndex,
+        index: datasetIndex,
+        hidden: !legendChart.isDatasetVisible(datasetIndex),
+        strokeStyle: dataset?.borderColor || dataset?.backgroundColor || '#7aa2ff',
+        fillStyle: dataset?.backgroundColor || dataset?.borderColor || '#7aa2ff',
+        lineDash: Array.isArray(dataset?.borderDash) ? dataset.borderDash : []
+      })).filter((item) => !legendChart.data.datasets[item.datasetIndex]?.hiddenInLegend)
+    );
     chart.options.plugins.legend.display = hasMultipleBaseDatasets;
     applyHiddenSnapshotSeriesLabels(widget, chart);
     const baseVisibilityBeforeHideCurrent = chart.data.datasets
@@ -1416,12 +1474,17 @@ async function refreshChartEntry(entry, context = createWidgetRefreshContext()) 
 async function refreshCharts() {
   const tab = activeTab();
   if (!tab) return;
+  const tabId = tab.id;
+  await Promise.all(tab.widgets.map((widget) => ensureWidgetChartEntry(widget)));
+  if (!isActiveTabId(tabId)) return;
 
+  const activeWidgetIds = new Set((tab.widgets || []).map((widget) => widget.id));
   const history = state.historyByTab[tab.id] || [];
   const latest = history[history.length - 1] || null;
   const publishChartRuntime = () => {};
 
-  const entries = Array.from(chartInstances.values());
+  const entries = Array.from(chartInstances.values())
+    .filter((entry) => activeWidgetIds.has(entry?.widget?.id));
   const producerRenderTasks = [];
   for (const entry of entries) {
     const { chart, mode, metric, definition, widget } = entry;
@@ -1578,11 +1641,17 @@ async function refreshCharts() {
         }
       }
 
-      chart.options.plugins.legend.labels.generateLabels = (legendChart) => {
-        const defaultGenerator = Chart.defaults.plugins.legend.labels.generateLabels;
-        return defaultGenerator(legendChart)
-          .filter((item) => !legendChart.data.datasets[item.datasetIndex]?.hiddenInLegend);
-      };
+      chart.options.plugins.legend.labels.generateLabels = (legendChart) => (
+        (legendChart.data.datasets || []).map((dataset, datasetIndex) => ({
+          text: dataset?.label || `Series ${datasetIndex + 1}`,
+          datasetIndex,
+          index: datasetIndex,
+          hidden: !legendChart.isDatasetVisible(datasetIndex),
+          strokeStyle: dataset?.borderColor || dataset?.backgroundColor || '#7aa2ff',
+          fillStyle: dataset?.backgroundColor || dataset?.borderColor || '#7aa2ff',
+          lineDash: Array.isArray(dataset?.borderDash) ? dataset.borderDash : []
+        })).filter((item) => !legendChart.data.datasets[item.datasetIndex]?.hiddenInLegend)
+      );
       chart.options.plugins.legend.display = hasMultipleBaseDatasets;
       applyHiddenSnapshotSeriesLabels(widget, chart);
       const baseVisibilityBeforeHideCurrent = chart.data.datasets
@@ -1659,6 +1728,7 @@ async function refreshCharts() {
   }
 
   await Promise.all(producerRenderTasks);
+  if (!isActiveTabId(tabId)) return;
 
   const consumerRenderTasks = [];
   for (const entry of entries) {
@@ -1724,24 +1794,28 @@ async function renderTableWidgetEntry(entry, latest, history) {
 async function refreshSingleTableWidget(widgetId) {
   const tab = activeTab();
   if (!tab || !widgetId) return;
+  const tabId = tab.id;
 
   const entry = chartInstances.get(widgetId);
   if (!entry || entry.mode !== 'table') return;
 
   const history = state.historyByTab[tab.id] || [];
   const latest = history[history.length - 1] || null;
+  if (!isActiveTabId(tabId)) return;
   await renderTableWidgetEntry(entry, latest, history);
 }
 
 async function refreshWidget(widgetId, options = {}) {
   const tab = activeTab();
   if (!tab || !widgetId) return;
+  const tabId = tab.id;
 
   const entry = chartInstances.get(widgetId);
   if (!entry) return;
 
   const context = createWidgetRefreshContext(tab);
   if (!context) return;
+  if (!isActiveTabId(tabId)) return;
 
   if (entry.mode === 'table') {
     await renderTableWidgetEntry(entry, context.latest, context.history);
@@ -1758,9 +1832,11 @@ async function refreshWidget(widgetId, options = {}) {
 async function refreshNDateWidgets() {
   const tab = activeTab();
   if (!tab) return;
+  const tabId = tab.id;
 
   const context = createWidgetRefreshContext(tab);
   if (!context) return;
+  if (!isActiveTabId(tabId)) return;
 
   const tasks = Array.from(chartInstances.values())
     .filter((entry) => String(entry?.widget?.type || '').startsWith('ndate-skew-'))
@@ -1796,6 +1872,8 @@ function broadcastTableWidgetConfig(sourceWidgetId, paramName, value) {
 async function refreshVolUpfrontWidgets() {
   const tab = activeTab();
   if (!tab) return;
+  const tabId = tab.id;
+  if (!isActiveTabId(tabId)) return;
 
   const tasks = [];
   for (const widget of tab.widgets || []) {
@@ -1805,7 +1883,7 @@ async function refreshVolUpfrontWidgets() {
 }
 
 function tickTabIfActive(tabId) {
-  if (state.activeTabId !== tabId) return;
+  if (!isActiveTabId(tabId)) return;
   const tab = activeTab();
   const root = $('widgetsRoot');
   if (tab && root) updateWidgetHistoryControls(root, tab);
@@ -1877,26 +1955,22 @@ async function tickTab(tabId) {
     setTabStatus(tabId, `Loading snapshot (${tab.title})...`);
     const point = await provider.fetchSnapshot(tab.providerConfig, skewMetrics);
     if (shouldSaveRawSnapshots(tab)) {
-      try {
-        await window.appBridge.saveRawSnapshot?.({
-          tab: {
-            id: tab.id,
-            title: tab.title,
-            providerKey: tab.providerKey,
-            providerConfig: tab.providerConfig
-          },
-          snapshot: point
-        });
-      } catch (err) {
-        console.warn('Failed to save raw snapshot', err);
-      }
+      saveRawSnapshotDeferred({
+        tab: {
+          id: tab.id,
+          title: tab.title,
+          providerKey: tab.providerKey,
+          providerConfig: tab.providerConfig
+        },
+        snapshot: point
+      });
     }
 
     ensureTabHistoryPolicy(tab);
     if (!tabSupportsHistorySnapshots(tab)) {
       tickTabIfActive(tabId);
       setTabStatus(tabId, `ok • ${tab.title} • history disabled (no history-input chart)`);
-      persist();
+      schedulePersist();
       return;
     }
 
@@ -1921,7 +1995,7 @@ async function tickTab(tabId) {
         `ok • ${tab.title} • updated=${updatedAt} • px=${point.px?.toFixed(3) ?? 'n/a'} • lower=${point.lower ?? 'n/a'} upper=${point.upper ?? 'n/a'}`
       );
     }
-    persist();
+    schedulePersist();
   } catch (err) {
     setTabStatus(tabId, `error • ${tab.title}: ${err?.message || err}`);
   } finally {
