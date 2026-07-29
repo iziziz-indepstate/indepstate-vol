@@ -212,11 +212,13 @@ export function createNDateSkewWidget({
   computePointValue
 }) {
   const mapKey = valueMapKey || (side === 'call' ? 'callBidIvByStrike' : 'putBidIvByStrike');
+  const clipboardChainPrefix = side === 'put' ? 'sps' : side === 'call' ? 'lcs' : null;
 
   return {
     type,
     mode: 'snapshot-series',
     chartRuntime: 'uplot',
+    clipboardChainPrefix,
     gridSpan: 3,
     defaultTitle: title,
     color,

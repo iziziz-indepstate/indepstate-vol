@@ -1,7 +1,9 @@
 import { WIDGET_PARAM_NAMES } from './widget-params.js';
+import { createStrikeClipboardChain } from './strike-clipboard-chain.js';
 
 let chartJsLoadPromise = null;
 let uPlotLoadPromise = null;
+const strikeClipboardChain = createStrikeClipboardChain();
 
 export function chartRuntimeForDefinition(definition) {
   return definition?.chartRuntime || 'chartjs';
@@ -250,6 +252,15 @@ function dataValueAt(dataset, idx, label) {
   return Number.isFinite(Number(point?.y)) ? Number(point.y) : null;
 }
 
+function pointStrikeAt(dataset, idx, label) {
+  const data = Array.isArray(dataset?.data) ? dataset.data : [];
+  const direct = data[idx];
+  if (direct && typeof direct === 'object' && String(direct.x) === String(label)) return direct.x;
+  const point = data.find((item) => item && typeof item === 'object' && String(item.x) === String(label));
+  if (point?.x != null) return point.x;
+  return label;
+}
+
 function axisValues(labels) {
   return (labels || []).map((_, idx) => idx);
 }
@@ -273,6 +284,8 @@ class UPlotWidgetChart {
     this.UPlot = UPlot;
     this.host = host;
     this.definition = definition || {};
+    this.widgetId = options?.widgetId || null;
+    this.onStatus = options?.onStatus;
     this.onLegendVisibilityChange = options?.onLegendVisibilityChange;
     this.data = {
       labels: [],
@@ -294,7 +307,9 @@ class UPlotWidgetChart {
     };
     this._visible = [];
     this._plot = null;
+    this._plotClickHandler = null;
     this._seriesSignature = '';
+    this._lastBuild = { labels: [], visible: [] };
     this._legend = document.createElement('div');
     this._legend.className = 'widget-chart-legend';
     this._plotHost = document.createElement('div');
@@ -368,6 +383,83 @@ class UPlotWidgetChart {
     };
   }
 
+  _nearestPointFromClick(evt) {
+    if (!this._plot || !evt) return null;
+    const rect = this._plot.over?.getBoundingClientRect?.();
+    if (!rect) return null;
+    const left = evt.clientX - rect.left;
+    const top = evt.clientY - rect.top;
+    if (left < 0 || top < 0 || left > rect.width || top > rect.height) return null;
+
+    const labels = this._lastBuild.labels || [];
+    const idx = this._plot.posToIdx(left);
+    const label = labels[idx];
+    if (label == null) return null;
+
+    const candidates = (this._lastBuild.visible || [])
+      .filter(({ dataset }) => !dataset?.hiddenInLegend)
+      .map(({ dataset, idx: datasetIndex }) => {
+        const y = dataValueAt(dataset, idx, label);
+        if (!Number.isFinite(y)) return null;
+        const xPos = this._plot.valToPos(idx, 'x');
+        const yPos = this._plot.valToPos(y, 'y');
+        const distance = Math.hypot(left - xPos, top - yPos);
+        return {
+          dataset,
+          datasetIndex,
+          strike: pointStrikeAt(dataset, idx, label),
+          distance
+        };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.distance - b.distance);
+
+    const nearest = candidates[0];
+    return nearest && nearest.distance <= 10 ? nearest : null;
+  }
+
+  async _handlePlotClick(evt) {
+    const prefix = this.definition?.clipboardChainPrefix;
+    if (!prefix) return;
+    const point = this._nearestPointFromClick(evt);
+    if (!point) return;
+
+    const result = strikeClipboardChain.click({
+      widgetId: this.widgetId,
+      prefix,
+      strike: point.strike
+    });
+    if (!result.text) {
+      if (typeof this.onStatus === 'function') this.onStatus(`strike selected: ${prefix} ${result.strike}`);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(result.text);
+      if (typeof this.onStatus === 'function') this.onStatus(`copied: ${result.text}`);
+    } catch (err) {
+      console.warn('Failed to copy strike chain to clipboard', err);
+      if (typeof this.onStatus === 'function') {
+        this.onStatus(`clipboard copy failed: ${err?.message || String(err)}`);
+      }
+    }
+  }
+
+  _bindPlotClick() {
+    const over = this._plot?.over;
+    if (!over || this._plotClickHandler) return;
+    this._plotClickHandler = (evt) => {
+      this._handlePlotClick(evt);
+    };
+    over.addEventListener('click', this._plotClickHandler);
+  }
+
+  _unbindPlotClick() {
+    const over = this._plot?.over;
+    if (over && this._plotClickHandler) over.removeEventListener('click', this._plotClickHandler);
+    this._plotClickHandler = null;
+  }
+
   _signatureFor(visible) {
     return visible.map(({ dataset, idx }) => JSON.stringify({
       idx,
@@ -411,10 +503,12 @@ class UPlotWidgetChart {
 
   update() {
     const { labels, columns, visible } = this._buildData();
+    this._lastBuild = { labels, visible };
     const opts = this._buildOptions(labels, visible);
     const seriesSignature = this._signatureFor(visible);
     const shouldRecreate = this._plot && this._seriesSignature !== seriesSignature;
     if (shouldRecreate) {
+      this._unbindPlotClick();
       this._plot.destroy();
       this._plot = null;
       this._plotHost.replaceChildren();
@@ -423,6 +517,7 @@ class UPlotWidgetChart {
     if (!this._plot) {
       this._plot = new this.UPlot(opts, columns, this._plotHost);
       this._seriesSignature = seriesSignature;
+      this._bindPlotClick();
     } else {
       this._plot.setData(columns);
       this._plot.setSize({ width: opts.width, height: opts.height });
@@ -431,6 +526,7 @@ class UPlotWidgetChart {
   }
 
   destroy() {
+    this._unbindPlotClick();
     this._plot?.destroy();
     this._plot = null;
     this.host.replaceChildren();

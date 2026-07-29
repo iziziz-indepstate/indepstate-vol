@@ -927,6 +927,8 @@ async function ensureWidgetChartEntry(widget) {
   if (!host) return null;
 
   const chart = await createWidgetChartForDefinition(host, definition, {
+    widgetId: widget.id,
+    onStatus: setStatus,
     onLegendVisibilityChange: () => {
       if (!['snapshot-series', 'timeseries-custom'].includes(definition.mode || 'timeseries')) return;
       syncHiddenSnapshotSeriesLabels(widget, chart);
