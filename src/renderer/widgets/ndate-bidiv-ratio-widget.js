@@ -323,6 +323,7 @@ function formatRatioTooltip(context) {
 export const nDateSkewBidIVRatioWidget = {
   type: 'ndate-skew-bidiv-ratio-line',
   mode: 'snapshot-series',
+  chartRuntime: 'uplot',
   defaultTitle: 'nDate-Skew-BidIV-Ratio',
   color: '#f59e0b',
   defaultConfig: {

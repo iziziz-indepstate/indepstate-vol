@@ -1,4 +1,5 @@
 import { calculateIvRvSeries, resolveHorizon } from '../../shared/iv-rv-calculations.mjs';
+import { ensureChartJsRuntime } from './widget-renderers.js';
 
 const chartPairs = new WeakMap();
 const renderVersions = new WeakMap();
@@ -51,7 +52,8 @@ function lineDataset(label, data, color) {
   };
 }
 
-function createCharts(container, result) {
+async function createCharts(container, result) {
+  await ensureChartJsRuntime();
   const labels = result.series.map((row) => row.date);
   const commonOptions = {
     responsive: true,
@@ -303,7 +305,7 @@ export const ivRvWidget = {
         </div>
       `;
       bindControls(container, widget, onConfigChange);
-      createCharts(container, result);
+      await createCharts(container, result);
     } catch (error) {
       if (renderVersions.get(container) !== renderVersion) return;
       const currentStatus = container.querySelector('.ivrv-status') || status;

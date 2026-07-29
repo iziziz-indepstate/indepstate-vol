@@ -1,8 +1,11 @@
 import { calculateAtmStraddle } from '../../shared/atm-straddle-calculations.mjs';
+import { ensureUPlotRuntime } from './widget-renderers.js';
 
 const TENORS = ['0DTE', '1D', '1W', '2W', '1M', '2M', '3M', '6M'];
 const COMPARE_TO = ['previous_close', 'previous_snapshot', 'none'];
 const EXPIRY_SELECTION = ['nearest', 'at_or_after', 'at_or_before'];
+const sparklineCharts = new WeakMap();
+const renderVersions = new WeakMap();
 
 function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
@@ -199,30 +202,13 @@ function renderPriceSparkline(points) {
     return '<div class="straddle-sparkline straddle-sparkline-empty"><span>Price history needs at least 2 matching snapshots.</span></div>';
   }
 
-  const width = 240;
-  const height = 58;
-  const padX = 5;
-  const padY = 7;
   const min = Math.min(...valid.map((point) => point.value));
   const max = Math.max(...valid.map((point) => point.value));
-  const span = max - min || 1;
-  const lastIdx = valid.length - 1;
-  const coords = valid.map((point, idx) => {
-    const x = padX + (idx / Math.max(1, lastIdx)) * (width - padX * 2);
-    const y = padY + ((max - point.value) / span) * (height - padY * 2);
-    return { ...point, x, y };
-  });
-  const line = coords.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
   const first = valid[0];
   const last = valid[valid.length - 1];
   const delta = last.value - first.value;
   const deltaPct = first.value ? delta / first.value : NaN;
   const trendClass = delta > 0 ? 'is-up' : delta < 0 ? 'is-down' : 'is-flat';
-  const dots = coords.map((point, idx) => `
-    <circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="${idx === lastIdx ? '2.4' : '1.6'}">
-      <title>${esc(`${point.label}: ${fmt(point.value)} pts | ${fmtPct(point.impliedMovePct)} | ATM IV ${fmtIv(point.atmIv)}`)}</title>
-    </circle>
-  `).join('');
 
   return `
     <div class="straddle-sparkline ${trendClass}">
@@ -231,11 +217,7 @@ function renderPriceSparkline(points) {
         <strong>${fmt(last.value)} pts</strong>
         <span>${Number.isFinite(deltaPct) ? `${delta >= 0 ? '+' : ''}${fmt(delta)} pts / ${deltaPct >= 0 ? '+' : ''}${fmtPct(deltaPct, 1)}` : 'n/a'}</span>
       </div>
-      <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Straddle price history">
-        <line x1="${padX}" y1="${(height - padY).toFixed(1)}" x2="${width - padX}" y2="${(height - padY).toFixed(1)}"></line>
-        <polyline points="${line}"></polyline>
-        ${dots}
-      </svg>
+      <div class="straddle-sparkline-chart" data-straddle-price-chart role="img" aria-label="Straddle price history"></div>
       <div class="straddle-sparkline-range">
         <span>${esc(first.label)}</span>
         <span>${fmt(min)}-${fmt(max)} pts</span>
@@ -243,6 +225,49 @@ function renderPriceSparkline(points) {
       </div>
     </div>
   `;
+}
+
+function destroySparklineChart(container) {
+  sparklineCharts.get(container)?.destroy();
+  sparklineCharts.delete(container);
+}
+
+async function renderPriceSparklineChart(container, points) {
+  const host = container.querySelector('[data-straddle-price-chart]');
+  if (!host) return;
+  const valid = Array.isArray(points) ? points.filter((point) => Number.isFinite(point?.value)) : [];
+  if (valid.length < 2) return;
+
+  const UPlot = await ensureUPlotRuntime();
+  const color = host.closest('.straddle-sparkline')?.classList.contains('is-up')
+    ? '#23c55e'
+    : (host.closest('.straddle-sparkline')?.classList.contains('is-down') ? '#fb7185' : '#7aa2ff');
+  const width = Math.max(100, Math.round(host.clientWidth || host.getBoundingClientRect().width || 240));
+  const height = 58;
+  const chart = new UPlot({
+    width,
+    height,
+    cursor: { show: false },
+    legend: { show: false },
+    scales: { x: { time: false } },
+    axes: [
+      { show: false, size: 0, grid: { show: false }, ticks: { show: false } },
+      { show: false, size: 0, grid: { show: false }, ticks: { show: false } }
+    ],
+    series: [
+      {},
+      {
+        label: 'Straddle price',
+        stroke: color,
+        width: 2,
+        points: { show: false }
+      }
+    ]
+  }, [
+    valid.map((_, idx) => idx),
+    valid.map((point) => point.value)
+  ], host);
+  sparklineCharts.set(container, chart);
 }
 
 function renderFull(snapshot, priceHistory) {
@@ -334,6 +359,9 @@ export const atmStraddleWidget = {
     compact: false
   },
   render: async ({ container, snapshot, history, widget, widgetData, onConfigChange, onConfigBroadcast }) => {
+    const renderVersion = (renderVersions.get(container) || 0) + 1;
+    renderVersions.set(container, renderVersion);
+    destroySparklineChart(container);
     const cfg = { ...atmStraddleWidget.defaultConfig, ...(widget.config || {}) };
     container.innerHTML = `${renderControls(cfg)}<div class="straddle-status">Loading...</div>`;
     bindControls(container, widget, onConfigChange, onConfigBroadcast);
@@ -371,6 +399,9 @@ export const atmStraddleWidget = {
       });
       container.innerHTML = `${renderControls(cfg)}${body}`;
       bindControls(container, widget, onConfigChange, onConfigBroadcast);
+      if (renderVersions.get(container) === renderVersion) {
+        await renderPriceSparklineChart(container, priceHistory);
+      }
     } catch (err) {
       widgetData?.publish?.({
         type: atmStraddleWidget.type,

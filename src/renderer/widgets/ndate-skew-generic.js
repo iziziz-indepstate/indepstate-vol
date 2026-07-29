@@ -216,6 +216,7 @@ export function createNDateSkewWidget({
   return {
     type,
     mode: 'snapshot-series',
+    chartRuntime: 'uplot',
     gridSpan: 3,
     defaultTitle: title,
     color,

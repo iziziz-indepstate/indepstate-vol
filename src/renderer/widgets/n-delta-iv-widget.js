@@ -48,6 +48,7 @@ function pointTooltip(context) {
 export const nDeltaIVWidget = {
   type: 'n-delta-iv',
   mode: 'timeseries-custom',
+  chartRuntime: 'uplot',
   gridSpan: 3,
   defaultTitle: 'n-Delta IV',
   color: '#38bdf8',

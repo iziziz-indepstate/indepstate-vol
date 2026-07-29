@@ -48,8 +48,25 @@ function saveRawSnapshot(directory, payload = {}) {
   };
 }
 
+async function saveRawSnapshotAsync(directory, payload = {}) {
+  const snapshot = payload.snapshot;
+  if (!snapshot || typeof snapshot !== 'object') {
+    throw new Error('Raw snapshot payload is missing snapshot object.');
+  }
+
+  await fs.promises.mkdir(directory, { recursive: true });
+  const file = path.join(directory, rawSnapshotFileName(payload));
+  await fs.promises.writeFile(file, JSON.stringify(snapshot), 'utf-8');
+  return {
+    ok: true,
+    file,
+    directory
+  };
+}
+
 module.exports = {
   defaultRawSnapshotDir,
   rawSnapshotFileName,
-  saveRawSnapshot
+  saveRawSnapshot,
+  saveRawSnapshotAsync
 };

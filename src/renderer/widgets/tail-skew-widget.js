@@ -15,6 +15,7 @@ function findTailStrike(strikesSorted, anchorIdx, tailSteps, side) {
 export const tailSkewWidget = {
   type: 'tail-skew-line',
   mode: 'timeseries-custom',
+  chartRuntime: 'uplot',
   defaultTitle: 'Tail Put-Call Skew',
   color: '#ffb347',
   hideXAxisValues: true,

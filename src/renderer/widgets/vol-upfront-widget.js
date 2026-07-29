@@ -1,4 +1,5 @@
 import { calculateForwardVols } from '../../shared/forward-vol-calculations.mjs';
+import { ensureChartJsRuntime } from './widget-renderers.js';
 
 const charts = new WeakMap();
 const renderVersions = new WeakMap();
@@ -26,7 +27,8 @@ function straddleLabel(snapshot, source) {
   return String(base || snapshot.expiry);
 }
 
-function createChart(container, segments) {
+async function createChart(container, segments) {
+  await ensureChartJsRuntime();
   const labels = segments.map((segment) => `${segment.fromLabel}->${segment.toLabel}`);
   const data = segments.map((segment) => (segment.status === 'ok' ? segment.forwardVolPercent : null));
   const chart = new Chart(container.querySelector('[data-vol-upfront-chart]'), {
@@ -165,6 +167,6 @@ export const volUpfrontWidget = {
         ${errors.length ? `<div class="vol-upfront-warning">${errors.map(esc).join('<br>')}</div>` : ''}
       </div>
     `;
-    createChart(container, segments);
+    await createChart(container, segments);
   }
 };

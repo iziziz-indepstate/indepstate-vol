@@ -1,7 +1,7 @@
 import { TradingViewProvider } from '../shared/tradingview-provider.js';
 import { TheBlockProvider } from '../shared/theblock-provider.js';
 import { getWidgetDefinition, widgetDefinitions } from './widgets/index.js';
-import { createWidgetCard, createWidgetChart } from './widgets/widget-renderers.js';
+import { createWidgetCard, createWidgetChartForDefinition } from './widgets/widget-renderers.js';
 import { skewMetrics } from './widgets/metrics.js';
 import {
   normalizeWidgetParamValue,
@@ -16,7 +16,13 @@ import {
 import { trimSnapshotForWidgets } from '../shared/snapshot-trim.mjs';
 
 const providers = {
-  tradingview: new TradingViewProvider(),
+  tradingview: {
+    fetchSnapshot: (config, metrics) => (
+      typeof window.appBridge?.getTradingViewSnapshot === 'function'
+        ? window.appBridge.getTradingViewSnapshot(config)
+        : new TradingViewProvider().fetchSnapshot(config, metrics)
+    )
+  },
   theblock: {
     fetchSnapshot: (config) => (
       typeof window.appBridge?.getTheBlockSnapshot === 'function'
@@ -44,9 +50,105 @@ let renameTargetTabId = null;
 let draggedTabId = null;
 let historySidecarWidgetId = null;
 let persistUiTimer = null;
+let persistTimer = null;
+let persistInFlight = false;
+let persistQueued = false;
+let lastPersistStartedAt = 0;
 
 const $ = (id) => document.getElementById(id);
 const HISTORY_SNAPSHOT_PALETTE = ['#7dffb3', '#7aa2ff', '#f97316', '#eab308', '#d946ef', '#06b6d4', '#ef4444', '#f472b6'];
+const PROFILE_MAX_EVENTS = 1200;
+const profileEvents = [];
+let profilerEnabled = false;
+
+function pushProfileEvent(event) {
+  if (!profilerEnabled) return;
+  profileEvents.push({
+    ts: new Date().toISOString(),
+    process: 'renderer',
+    ...event
+  });
+  while (profileEvents.length > PROFILE_MAX_EVENTS) profileEvents.shift();
+}
+
+function profileDuration(name, start, detail = {}) {
+  if (!profilerEnabled) return 0;
+  const durationMs = performance.now() - start;
+  const event = {
+    name,
+    detail,
+    durationMs: Number(durationMs.toFixed(2))
+  };
+  pushProfileEvent(event);
+  if (durationMs >= 80) console.info('[IS-VOL profiler]', event);
+  return durationMs;
+}
+
+async function profileMeasure(name, detail, fn) {
+  if (!profilerEnabled) return fn();
+  const start = performance.now();
+  try {
+    return await fn();
+  } finally {
+    profileDuration(name, start, detail);
+  }
+}
+
+function summarizeProfileEvents() {
+  const groups = new Map();
+  for (const event of profileEvents) {
+    const curr = groups.get(event.name) || { name: event.name, count: 0, total: 0, max: 0 };
+    curr.count += 1;
+    curr.total += event.durationMs || 0;
+    curr.max = Math.max(curr.max, event.durationMs || 0);
+    groups.set(event.name, curr);
+  }
+  return Array.from(groups.values())
+    .map((row) => ({
+      name: row.name,
+      count: row.count,
+      avgMs: Number((row.total / row.count).toFixed(2)),
+      maxMs: Number(row.max.toFixed(2))
+    }))
+    .sort((a, b) => b.maxMs - a.maxMs);
+}
+
+window.isVolProfiler = {
+  enabled: () => profilerEnabled,
+  clear: () => {
+    profileEvents.length = 0;
+    return { ok: true };
+  },
+  events: () => [...profileEvents],
+  summary: () => summarizeProfileEvents(),
+  export: async () => {
+    if (!profilerEnabled) {
+      const result = { ok: false, error: 'Profiler is disabled. Restart with --profile or IS_VOL_PROFILER=1.' };
+      console.info('[IS-VOL profiler]', result.error);
+      return result;
+    }
+    const result = await window.appBridge.exportProfilerEvents?.([...profileEvents]);
+    console.info('[IS-VOL profiler] exported', result);
+    return result;
+  }
+};
+
+async function exportProfilerToStatus() {
+  try {
+    if (!profilerEnabled) {
+      setStatus('profiler disabled • restart with --profile or IS_VOL_PROFILER=1');
+      return { ok: false };
+    }
+    const result = await window.isVolProfiler.export();
+    setStatus(`profiler exported: ${result?.file || 'ok'}`);
+    return result;
+  } catch (err) {
+    const message = err?.message || String(err);
+    setStatus(`profiler export failed: ${message}`);
+    console.warn('Failed to export profiler events', err);
+    return null;
+  }
+}
 
 function historySnapshotColor(idx) {
   return HISTORY_SNAPSHOT_PALETTE[idx % HISTORY_SNAPSHOT_PALETTE.length];
@@ -54,6 +156,10 @@ function historySnapshotColor(idx) {
 
 function activeTab() {
   return state.tabs.find((t) => t.id === state.activeTabId);
+}
+
+function isActiveTabId(tabId) {
+  return Boolean(tabId) && state.activeTabId === tabId;
 }
 
 function defaultExpiry() {
@@ -125,11 +231,70 @@ function updatePollingControlsForActiveTab() {
 }
 
 function persist() {
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
+  if (persistInFlight) {
+    persistQueued = true;
+    return;
+  }
+
+  persistInFlight = true;
+  persistQueued = false;
+  lastPersistStartedAt = Date.now();
+  const start = performance.now();
   window.appBridge.saveState({
     activeTabId: state.activeTabId,
     tabs: state.tabs,
     historyByTab: state.historyByTab
+  }).catch((err) => {
+    console.warn('Failed to persist dashboard state', err);
+  }).finally(() => {
+    profileDuration('persist:saveState', start, {
+      tabs: state.tabs.length,
+      historyPoints: Object.values(state.historyByTab || {}).reduce((acc, rows) => acc + (Array.isArray(rows) ? rows.length : 0), 0)
+    });
+    persistInFlight = false;
+    if (persistQueued) schedulePersist(500);
   });
+}
+
+function schedulePersist(delayMs = 1500) {
+  const elapsed = Date.now() - lastPersistStartedAt;
+  const effectiveDelay = elapsed > 30000 ? 0 : delayMs;
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    persist();
+  }, effectiveDelay);
+}
+
+function saveRawSnapshotDeferred(payload) {
+  if (typeof window.appBridge.saveRawSnapshot !== 'function') return;
+  setTimeout(() => {
+    const start = performance.now();
+    window.appBridge.saveRawSnapshot(payload)
+      .then(() => profileDuration('rawSnapshot:save', start, {
+        tabId: payload?.tab?.id,
+        providerKey: payload?.tab?.providerKey
+      }))
+      .catch((err) => console.warn('Failed to save raw snapshot', err));
+  }, 750);
+}
+
+function persistHistoryPoint(tabId, point, keep) {
+  if (typeof window.appBridge.appendHistoryPoint !== 'function') {
+    schedulePersist();
+    return;
+  }
+  const start = performance.now();
+  window.appBridge.appendHistoryPoint({ tabId, point, keep })
+    .then(() => profileDuration('persist:appendHistoryPoint', start, { tabId, keep }))
+    .catch((err) => {
+      console.warn('Failed to persist history point', err);
+      schedulePersist();
+    });
 }
 
 function persistUiState() {
@@ -751,23 +916,24 @@ function mergeChartOptions(target, source) {
   }
 }
 
-function ensureWidgetChartEntry(widget) {
+async function ensureWidgetChartEntry(widget) {
   const definition = getWidgetDefinition(widget?.type);
   if (!widget?.id || !definition || widget.collapsed) return null;
   if ((definition.mode || 'timeseries') === 'table') return chartInstances.get(widget.id) || null;
   const existing = chartInstances.get(widget.id);
   if (existing?.chart) return existing;
 
-  const ctx = document.getElementById(`canvas-${widget.id}`)?.getContext('2d');
-  if (!ctx) return null;
+  const host = document.getElementById(`chart-${widget.id}`);
+  if (!host) return null;
 
-  const chart = createWidgetChart(ctx, definition, {
+  const chart = await createWidgetChartForDefinition(host, definition, {
     onLegendVisibilityChange: () => {
       if (!['snapshot-series', 'timeseries-custom'].includes(definition.mode || 'timeseries')) return;
       syncHiddenSnapshotSeriesLabels(widget, chart);
       persistUiState();
     }
   });
+  if (!chart) return null;
   const entry = {
     chart,
     mode: definition.mode || 'timeseries',
@@ -795,9 +961,11 @@ function updateWidgetCollapsedCard(card, widget) {
   }
 }
 
-function renderWidgets() {
+async function renderWidgets() {
+  const profileStart = performance.now();
   destroyCharts();
   const tab = activeTab();
+  const renderTabId = tab?.id || null;
   const root = $('widgetsRoot');
 
   if (!tab) {
@@ -854,7 +1022,8 @@ function renderWidgets() {
       continue;
     }
 
-    ensureWidgetChartEntry(widget);
+    await ensureWidgetChartEntry(widget);
+    if (!isActiveTabId(renderTabId)) return;
   }
 
   root.querySelectorAll('[data-widget-id]').forEach((btn) => {
@@ -922,9 +1091,9 @@ function renderWidgets() {
       if (target.collapsed) {
         destroyWidgetChartEntry(target.id);
       } else {
-        ensureWidgetChartEntry(target);
-        refreshWidget(target.id, { refreshDependents: false })
-          .catch((err) => console.error('Failed to refresh expanded widget', err));
+        ensureWidgetChartEntry(target)
+          .then(() => refreshWidget(target.id, { refreshDependents: false }))
+          .catch((err) => console.error('Failed to expand widget chart', err));
       }
       persistUiState();
     });
@@ -1168,7 +1337,11 @@ function renderWidgets() {
   });
 
   updateWidgetHistoryControls(root, tab);
-  refreshCharts();
+  if (isActiveTabId(renderTabId)) refreshCharts();
+  profileDuration('renderWidgets', profileStart, {
+    tabId: renderTabId,
+    widgets: tab.widgets?.length || 0
+  });
 }
 
 function createWidgetRefreshContext(tab = activeTab()) {
@@ -1184,6 +1357,7 @@ function createWidgetRefreshContext(tab = activeTab()) {
 }
 
 async function refreshChartEntry(entry, context = createWidgetRefreshContext()) {
+  const profileStart = performance.now();
   if (!entry || !context) return;
   const { chart, mode, metric, definition, widget } = entry;
   const { history, latest, publishChartRuntime } = context;
@@ -1333,11 +1507,17 @@ async function refreshChartEntry(entry, context = createWidgetRefreshContext()) 
       }
     }
 
-    chart.options.plugins.legend.labels.generateLabels = (legendChart) => {
-      const defaultGenerator = Chart.defaults.plugins.legend.labels.generateLabels;
-      return defaultGenerator(legendChart)
-        .filter((item) => !legendChart.data.datasets[item.datasetIndex]?.hiddenInLegend);
-    };
+    chart.options.plugins.legend.labels.generateLabels = (legendChart) => (
+      (legendChart.data.datasets || []).map((dataset, datasetIndex) => ({
+        text: dataset?.label || `Series ${datasetIndex + 1}`,
+        datasetIndex,
+        index: datasetIndex,
+        hidden: !legendChart.isDatasetVisible(datasetIndex),
+        strokeStyle: dataset?.borderColor || dataset?.backgroundColor || '#7aa2ff',
+        fillStyle: dataset?.backgroundColor || dataset?.borderColor || '#7aa2ff',
+        lineDash: Array.isArray(dataset?.borderDash) ? dataset.borderDash : []
+      })).filter((item) => !legendChart.data.datasets[item.datasetIndex]?.hiddenInLegend)
+    );
     chart.options.plugins.legend.display = hasMultipleBaseDatasets;
     applyHiddenSnapshotSeriesLabels(widget, chart);
     const baseVisibilityBeforeHideCurrent = chart.data.datasets
@@ -1360,6 +1540,13 @@ async function refreshChartEntry(entry, context = createWidgetRefreshContext()) 
     }
     chart.update('none');
     publishChartRuntime(entry);
+    profileDuration('refreshChartEntry', profileStart, {
+      widgetId: widget?.id,
+      type: widget?.type,
+      mode,
+      datasets: chart.data.datasets?.length || 0,
+      labels: chart.data.labels?.length || 0
+    });
     return;
   }
 
@@ -1391,6 +1578,13 @@ async function refreshChartEntry(entry, context = createWidgetRefreshContext()) 
     applyHiddenSnapshotSeriesLabels(widget, chart);
     chart.update('none');
     publishChartRuntime(entry, series?.title || '');
+    profileDuration('refreshChartEntry', profileStart, {
+      widgetId: widget?.id,
+      type: widget?.type,
+      mode,
+      datasets: chart.data.datasets?.length || 0,
+      labels: chart.data.labels?.length || 0
+    });
     return;
   }
 
@@ -1403,6 +1597,13 @@ async function refreshChartEntry(entry, context = createWidgetRefreshContext()) 
     chart.options.plugins.legend.display = false;
     chart.update('none');
     publishChartRuntime(entry);
+    profileDuration('refreshChartEntry', profileStart, {
+      widgetId: widget?.id,
+      type: widget?.type,
+      mode,
+      datasets: chart.data.datasets?.length || 0,
+      labels: chart.data.labels?.length || 0
+    });
     return;
   }
 
@@ -1411,17 +1612,30 @@ async function refreshChartEntry(entry, context = createWidgetRefreshContext()) 
   chart.options.plugins.legend.display = false;
   chart.update('none');
   publishChartRuntime(entry);
+  profileDuration('refreshChartEntry', profileStart, {
+    widgetId: widget?.id,
+    type: widget?.type,
+    mode,
+    datasets: chart.data.datasets?.length || 0,
+    labels: chart.data.labels?.length || 0
+  });
 }
 
 async function refreshCharts() {
+  const profileStart = performance.now();
   const tab = activeTab();
   if (!tab) return;
+  const tabId = tab.id;
+  await Promise.all(tab.widgets.map((widget) => ensureWidgetChartEntry(widget)));
+  if (!isActiveTabId(tabId)) return;
 
+  const activeWidgetIds = new Set((tab.widgets || []).map((widget) => widget.id));
   const history = state.historyByTab[tab.id] || [];
   const latest = history[history.length - 1] || null;
   const publishChartRuntime = () => {};
 
-  const entries = Array.from(chartInstances.values());
+  const entries = Array.from(chartInstances.values())
+    .filter((entry) => activeWidgetIds.has(entry?.widget?.id));
   const producerRenderTasks = [];
   for (const entry of entries) {
     const { chart, mode, metric, definition, widget } = entry;
@@ -1578,11 +1792,17 @@ async function refreshCharts() {
         }
       }
 
-      chart.options.plugins.legend.labels.generateLabels = (legendChart) => {
-        const defaultGenerator = Chart.defaults.plugins.legend.labels.generateLabels;
-        return defaultGenerator(legendChart)
-          .filter((item) => !legendChart.data.datasets[item.datasetIndex]?.hiddenInLegend);
-      };
+      chart.options.plugins.legend.labels.generateLabels = (legendChart) => (
+        (legendChart.data.datasets || []).map((dataset, datasetIndex) => ({
+          text: dataset?.label || `Series ${datasetIndex + 1}`,
+          datasetIndex,
+          index: datasetIndex,
+          hidden: !legendChart.isDatasetVisible(datasetIndex),
+          strokeStyle: dataset?.borderColor || dataset?.backgroundColor || '#7aa2ff',
+          fillStyle: dataset?.backgroundColor || dataset?.borderColor || '#7aa2ff',
+          lineDash: Array.isArray(dataset?.borderDash) ? dataset.borderDash : []
+        })).filter((item) => !legendChart.data.datasets[item.datasetIndex]?.hiddenInLegend)
+      );
       chart.options.plugins.legend.display = hasMultipleBaseDatasets;
       applyHiddenSnapshotSeriesLabels(widget, chart);
       const baseVisibilityBeforeHideCurrent = chart.data.datasets
@@ -1659,6 +1879,7 @@ async function refreshCharts() {
   }
 
   await Promise.all(producerRenderTasks);
+  if (!isActiveTabId(tabId)) return;
 
   const consumerRenderTasks = [];
   for (const entry of entries) {
@@ -1668,9 +1889,17 @@ async function refreshCharts() {
     }
   }
   await Promise.all(consumerRenderTasks);
+  profileDuration('refreshCharts', profileStart, {
+    tabId,
+    entries: entries.length,
+    producers: producerRenderTasks.length,
+    consumers: consumerRenderTasks.length,
+    history: history.length
+  });
 }
 
 async function renderTableWidgetEntry(entry, latest, history) {
+  const profileStart = performance.now();
   const { mode, definition, widget } = entry || {};
   if (mode !== 'table' || typeof definition?.render !== 'function' || !widget?.id) return;
 
@@ -1719,29 +1948,38 @@ async function renderTableWidgetEntry(entry, latest, history) {
     });
   }
   entry.hasRendered = true;
+  profileDuration('renderTableWidgetEntry', profileStart, {
+    widgetId: widget?.id,
+    type: widget?.type,
+    history: Array.isArray(history) ? history.length : 0
+  });
 }
 
 async function refreshSingleTableWidget(widgetId) {
   const tab = activeTab();
   if (!tab || !widgetId) return;
+  const tabId = tab.id;
 
   const entry = chartInstances.get(widgetId);
   if (!entry || entry.mode !== 'table') return;
 
   const history = state.historyByTab[tab.id] || [];
   const latest = history[history.length - 1] || null;
+  if (!isActiveTabId(tabId)) return;
   await renderTableWidgetEntry(entry, latest, history);
 }
 
 async function refreshWidget(widgetId, options = {}) {
   const tab = activeTab();
   if (!tab || !widgetId) return;
+  const tabId = tab.id;
 
   const entry = chartInstances.get(widgetId);
   if (!entry) return;
 
   const context = createWidgetRefreshContext(tab);
   if (!context) return;
+  if (!isActiveTabId(tabId)) return;
 
   if (entry.mode === 'table') {
     await renderTableWidgetEntry(entry, context.latest, context.history);
@@ -1758,9 +1996,11 @@ async function refreshWidget(widgetId, options = {}) {
 async function refreshNDateWidgets() {
   const tab = activeTab();
   if (!tab) return;
+  const tabId = tab.id;
 
   const context = createWidgetRefreshContext(tab);
   if (!context) return;
+  if (!isActiveTabId(tabId)) return;
 
   const tasks = Array.from(chartInstances.values())
     .filter((entry) => String(entry?.widget?.type || '').startsWith('ndate-skew-'))
@@ -1796,6 +2036,8 @@ function broadcastTableWidgetConfig(sourceWidgetId, paramName, value) {
 async function refreshVolUpfrontWidgets() {
   const tab = activeTab();
   if (!tab) return;
+  const tabId = tab.id;
+  if (!isActiveTabId(tabId)) return;
 
   const tasks = [];
   for (const widget of tab.widgets || []) {
@@ -1805,7 +2047,7 @@ async function refreshVolUpfrontWidgets() {
 }
 
 function tickTabIfActive(tabId) {
-  if (state.activeTabId !== tabId) return;
+  if (!isActiveTabId(tabId)) return;
   const tab = activeTab();
   const root = $('widgetsRoot');
   if (tab && root) updateWidgetHistoryControls(root, tab);
@@ -1861,6 +2103,7 @@ function addTab() {
 }
 
 async function tickTab(tabId) {
+  const tickStart = performance.now();
   const tab = state.tabs.find((x) => x.id === tabId);
   if (!tab) return;
   if (tabTickInFlight.has(tabId)) return;
@@ -1875,42 +2118,59 @@ async function tickTab(tabId) {
 
   try {
     setTabStatus(tabId, `Loading snapshot (${tab.title})...`);
-    const point = await provider.fetchSnapshot(tab.providerConfig, skewMetrics);
+    const point = await profileMeasure('tick:fetchSnapshot', {
+      tabId,
+      providerKey: tab.providerKey,
+      title: tab.title
+    }, () => provider.fetchSnapshot(tab.providerConfig, skewMetrics));
     if (shouldSaveRawSnapshots(tab)) {
-      try {
-        await window.appBridge.saveRawSnapshot?.({
-          tab: {
-            id: tab.id,
-            title: tab.title,
-            providerKey: tab.providerKey,
-            providerConfig: tab.providerConfig
-          },
-          snapshot: point
-        });
-      } catch (err) {
-        console.warn('Failed to save raw snapshot', err);
-      }
+      const rawStart = performance.now();
+      saveRawSnapshotDeferred({
+        tab: {
+          id: tab.id,
+          title: tab.title,
+          providerKey: tab.providerKey,
+          providerConfig: tab.providerConfig
+        },
+        snapshot: point
+      });
+      profileDuration('tick:rawSnapshotEnqueue', rawStart, { tabId, providerKey: tab.providerKey });
     }
 
+    const policyStart = performance.now();
     ensureTabHistoryPolicy(tab);
     if (!tabSupportsHistorySnapshots(tab)) {
+      profileDuration('tick:historyPolicy', policyStart, { tabId, supportsHistory: false });
+      const renderStart = performance.now();
       tickTabIfActive(tabId);
+      profileDuration('tick:activeRenderTrigger', renderStart, { tabId, active: isActiveTabId(tabId) });
       setTabStatus(tabId, `ok • ${tab.title} • history disabled (no history-input chart)`);
-      persist();
+      profileDuration('tick:total', tickStart, { tabId, providerKey: tab.providerKey, historyDisabled: true });
       return;
     }
+    profileDuration('tick:historyPolicy', policyStart, { tabId, supportsHistory: true });
 
+    const trimStart = performance.now();
     const storedPoint = shouldCompactHistorySnapshots(tab)
       ? trimSnapshotForWidgets(point, tab)
       : point;
+    profileDuration('tick:trimSnapshot', trimStart, {
+      tabId,
+      compact: shouldCompactHistorySnapshots(tab),
+      expiries: storedPoint?.byExpiry ? Object.keys(storedPoint.byExpiry).length : 0
+    });
     state.historyByTab[tab.id].push(storedPoint);
 
+    const keepStart = performance.now();
     const keep = Math.max(20, Number(tab.providerConfig.keepPoints) || 200);
     while (state.historyByTab[tab.id].length > keep) {
       state.historyByTab[tab.id].shift();
     }
+    profileDuration('tick:historyKeep', keepStart, { tabId, keep, history: state.historyByTab[tab.id].length });
 
+    const renderStart = performance.now();
     tickTabIfActive(tabId);
+    profileDuration('tick:activeRenderTrigger', renderStart, { tabId, active: isActiveTabId(tabId) });
     const updatedAt = formatStatusUpdateTime(point.time);
     if (point.theBlock?.latestDate) {
       const chartCount = Object.keys(point.theBlock?.charts || {}).length;
@@ -1921,9 +2181,13 @@ async function tickTab(tabId) {
         `ok • ${tab.title} • updated=${updatedAt} • px=${point.px?.toFixed(3) ?? 'n/a'} • lower=${point.lower ?? 'n/a'} upper=${point.upper ?? 'n/a'}`
       );
     }
-    persist();
+    const persistStart = performance.now();
+    persistHistoryPoint(tab.id, storedPoint, keep);
+    profileDuration('tick:persistHistoryPointEnqueue', persistStart, { tabId });
+    profileDuration('tick:total', tickStart, { tabId, providerKey: tab.providerKey, history: state.historyByTab[tab.id]?.length || 0 });
   } catch (err) {
     setTabStatus(tabId, `error • ${tab.title}: ${err?.message || err}`);
+    profileDuration('tick:error', tickStart, { tabId, providerKey: tab.providerKey, message: err?.message || String(err) });
   } finally {
     tabTickInFlight.delete(tabId);
   }
@@ -1986,6 +2250,12 @@ function clearActiveTabSnapshot() {
 }
 
 function bindEvents() {
+  window.addEventListener('keydown', (evt) => {
+    if (!evt.ctrlKey || !evt.shiftKey || String(evt.key).toLowerCase() !== 'p') return;
+    evt.preventDefault();
+    exportProfilerToStatus();
+  });
+
   $('startBtn').addEventListener('click', start);
   $('stopBtn').addEventListener('click', stop);
   $('refreshBtn').addEventListener('click', refreshActiveTabOnce);
@@ -2046,6 +2316,7 @@ function bindEvents() {
 }
 
 async function init() {
+  profilerEnabled = Boolean(await window.appBridge.isProfilerEnabled?.());
   bindMcpRuntimeBridge();
   populateWidgetTypeSelect();
   bindEvents();
@@ -2085,6 +2356,9 @@ async function init() {
   updatePollingControlsForActiveTab();
   setTabStatus(state.activeTabId, 'ready');
   if (compactedLoadedHistory) persist();
+  if (profilerEnabled) {
+    console.info('[IS-VOL profiler] enabled: window.isVolProfiler.summary(), window.isVolProfiler.export(), window.isVolProfiler.clear()');
+  }
 }
 
 init();

@@ -21,6 +21,7 @@ npm start
 - **Dashboard tabs**: each tab stores its own provider config and widget list.
 - **State persistence**: tab layout and config are saved to Electron `userData/dashboard-state.json` and restored on the next launch.
 - **Open UI MCP proxy**: while the app is running, agents can inspect loaded dashboard tabs, widgets, and widget datasets through the local MCP endpoint. Details: [MCP Server](docs/mcp-server.md).
+- **Profiling**: optional tick/render/I/O profiler for diagnosing live-session stalls. Details: [Profiling](docs/profiling.md).
 
 ## Included Widgets
 

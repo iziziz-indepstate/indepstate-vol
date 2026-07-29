@@ -14,6 +14,7 @@ function toNumberOrNull(x) {
 export const ivCurrentWidget = {
   type: 'iv-current-line',
   mode: 'timeseries-custom',
+  chartRuntime: 'uplot',
   defaultTitle: 'IV-Current',
   color: '#7dffb3',
   hideXAxisValues: true,
