@@ -52,6 +52,7 @@ export function serializeWidgetDefinition(definition) {
     requiresHistory: Boolean(definition.requiresHistory),
     consumesWidgetData: Boolean(definition.consumesWidgetData),
     refreshOnDashboardRefresh: definition.refreshOnDashboardRefresh,
+    eventContracts: definition.eventContracts || null,
     controls: definition.controls || null,
     defaultConfig: definition.defaultConfig || null
   };

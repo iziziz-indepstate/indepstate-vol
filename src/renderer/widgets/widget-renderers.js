@@ -1,9 +1,8 @@
 import { WIDGET_PARAM_NAMES } from './widget-params.js';
-import { createStrikeClipboardChain } from './strike-clipboard-chain.js';
 
 let chartJsLoadPromise = null;
 let uPlotLoadPromise = null;
-const strikeClipboardChain = createStrikeClipboardChain();
+const POINT_CLICK_EVENT = 'chart.pointClick';
 
 export function chartRuntimeForDefinition(definition) {
   return definition?.chartRuntime || 'chartjs';
@@ -261,6 +260,17 @@ function pointStrikeAt(dataset, idx, label) {
   return label;
 }
 
+function pointMetaAt(dataset, idx, label) {
+  if (!Array.isArray(dataset?.pointMeta)) return null;
+  const data = Array.isArray(dataset?.data) ? dataset.data : [];
+  const direct = data[idx];
+  if (direct && typeof direct === 'object' && String(direct.x) === String(label)) {
+    return dataset.pointMeta[idx] ?? null;
+  }
+  const pointIdx = data.findIndex((item) => item && typeof item === 'object' && String(item.x) === String(label));
+  return pointIdx >= 0 ? dataset.pointMeta[pointIdx] ?? null : null;
+}
+
 function axisValues(labels) {
   return (labels || []).map((_, idx) => idx);
 }
@@ -279,13 +289,17 @@ function seriesDash(dataset) {
   return Array.isArray(dataset?.borderDash) ? dataset.borderDash : [];
 }
 
+function supportsEvent(definition, eventType) {
+  return (Array.isArray(definition?.eventContracts) ? definition.eventContracts : [])
+    .some((contract) => contract?.type === eventType);
+}
+
 class UPlotWidgetChart {
   constructor(UPlot, host, definition, options = {}) {
     this.UPlot = UPlot;
     this.host = host;
     this.definition = definition || {};
-    this.widgetId = options?.widgetId || null;
-    this.onStatus = options?.onStatus;
+    this.eventPort = options?.eventPort || null;
     this.onLegendVisibilityChange = options?.onLegendVisibilityChange;
     this.data = {
       labels: [],
@@ -308,6 +322,8 @@ class UPlotWidgetChart {
     this._visible = [];
     this._plot = null;
     this._plotClickHandler = null;
+    this._interestUnsubscribe = null;
+    this._pointClickEnabled = false;
     this._seriesSignature = '';
     this._lastBuild = { labels: [], visible: [] };
     this._legend = document.createElement('div');
@@ -315,6 +331,7 @@ class UPlotWidgetChart {
     this._plotHost = document.createElement('div');
     this._plotHost.className = 'widget-uplot-host';
     this.host.replaceChildren(this._legend, this._plotHost);
+    this._bindEventInterest();
   }
 
   isDatasetVisible(idx) {
@@ -383,6 +400,19 @@ class UPlotWidgetChart {
     };
   }
 
+  _updatePointClickEnabled() {
+    this._pointClickEnabled = supportsEvent(this.definition, POINT_CLICK_EVENT)
+      && Boolean(this.eventPort?.hasInterest?.(POINT_CLICK_EVENT));
+  }
+
+  _bindEventInterest() {
+    this._updatePointClickEnabled();
+    if (typeof this.eventPort?.onInterestChange !== 'function') return;
+    this._interestUnsubscribe = this.eventPort.onInterestChange((type) => {
+      if (type === POINT_CLICK_EVENT) this._updatePointClickEnabled();
+    });
+  }
+
   _nearestPointFromClick(evt) {
     if (!this._plot || !evt) return null;
     const rect = this._plot.over?.getBoundingClientRect?.();
@@ -408,6 +438,9 @@ class UPlotWidgetChart {
           dataset,
           datasetIndex,
           strike: pointStrikeAt(dataset, idx, label),
+          label,
+          value: y,
+          pointMeta: pointMetaAt(dataset, idx, label),
           distance
         };
       })
@@ -418,31 +451,19 @@ class UPlotWidgetChart {
     return nearest && nearest.distance <= 10 ? nearest : null;
   }
 
-  async _handlePlotClick(evt) {
-    const prefix = this.definition?.clipboardChainPrefix;
-    if (!prefix) return;
+  _handlePlotClick(evt) {
+    if (!this._pointClickEnabled) return;
     const point = this._nearestPointFromClick(evt);
     if (!point) return;
 
-    const result = strikeClipboardChain.click({
-      widgetId: this.widgetId,
-      prefix,
-      strike: point.strike
+    this.eventPort?.emit?.(POINT_CLICK_EVENT, {
+      strike: point.strike,
+      label: String(point.label),
+      value: point.value,
+      datasetLabel: point.dataset?.label || `Series ${point.datasetIndex + 1}`,
+      datasetIndex: point.datasetIndex,
+      pointMeta: point.pointMeta
     });
-    if (!result.text) {
-      if (typeof this.onStatus === 'function') this.onStatus(`strike selected: ${prefix} ${result.strike}`);
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(result.text);
-      if (typeof this.onStatus === 'function') this.onStatus(`copied: ${result.text}`);
-    } catch (err) {
-      console.warn('Failed to copy strike chain to clipboard', err);
-      if (typeof this.onStatus === 'function') {
-        this.onStatus(`clipboard copy failed: ${err?.message || String(err)}`);
-      }
-    }
   }
 
   _bindPlotClick() {
@@ -527,6 +548,9 @@ class UPlotWidgetChart {
 
   destroy() {
     this._unbindPlotClick();
+    this._interestUnsubscribe?.();
+    this._interestUnsubscribe = null;
+    this.eventPort?.destroy?.();
     this._plot?.destroy();
     this._plot = null;
     this.host.replaceChildren();

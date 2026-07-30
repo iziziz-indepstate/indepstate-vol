@@ -16,6 +16,7 @@ npm start
 - **Provider abstraction**: the renderer keeps a `providers[providerKey]` map. The current live option-chain provider is `TradingViewProvider`.
 - **Widget abstraction**: each widget lives in `src/renderer/widgets/` and is composed through the central widget registry.
 - **Widget data outputs**: widgets can publish structured outputs for other widgets to consume. This makes derived widgets depend on widget contracts instead of recalculating upstream logic. Details: [Widget Data Contracts](docs/widget-data-contracts.md).
+- **Widget events and plugins**: widgets declare interaction event contracts and publish demand-driven events through scoped event ports. App plugins subscribe to those events for side effects such as clipboard commands. Details: [Widget Event Contracts](docs/widget-event-contracts.md).
 - **nDate generic engine**: put/call nDate widgets are created from one generic parameterized implementation.
 - **Metric abstraction**: metric definitions (`key` + `compute`) live in `src/renderer/widgets/metrics.js` and are passed into providers for calculation.
 - **Dashboard tabs**: each tab stores its own provider config and widget list.

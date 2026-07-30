@@ -2,6 +2,8 @@
 
 Widgets can act as derived data sources inside the dashboard.
 
+For interaction events, use the parallel event contract architecture described in [Widget Event Contracts](widget-event-contracts.md).
+
 The primary market-data provider still owns raw snapshots. A widget may then transform that snapshot into a structured output and publish it through the renderer's local widget data store. Other widgets should consume that published output instead of re-running the producer widget's calculation.
 
 ## Why

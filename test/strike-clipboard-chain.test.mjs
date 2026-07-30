@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createStrikeClipboardChain } from '../src/renderer/widgets/strike-clipboard-chain.js';
+import { createStrikeClipboardChain } from '../src/plugins/ndate-strike-clipboard/chain.js';
+import nDateStrikeClipboardPlugin from '../src/plugins/ndate-strike-clipboard/manifest.js';
+import { subscribeNDateStrikeClipboard } from '../src/plugins/ndate-strike-clipboard/listener.js';
 import { nDateSkewPutWidget } from '../src/renderer/widgets/ndate-put-skew-widget.js';
 import { nDateSkewCallWidget } from '../src/renderer/widgets/ndate-call-skew-widget.js';
 import { nDateSkewBidIVRatioWidget } from '../src/renderer/widgets/ndate-bidiv-ratio-widget.js';
+import { createWidgetEventBus } from '../src/renderer/widget-event-bus.js';
 
 test('first strike click starts a pending chain without clipboard text', () => {
   const chain = createStrikeClipboardChain();
@@ -87,7 +90,81 @@ test('click after timeout starts a fresh chain', () => {
 });
 
 test('clipboard chain is enabled only for side-specific nDate skew widgets', () => {
-  assert.equal(nDateSkewPutWidget.clipboardChainPrefix, 'sps');
-  assert.equal(nDateSkewCallWidget.clipboardChainPrefix, 'lcs');
-  assert.equal(nDateSkewBidIVRatioWidget.clipboardChainPrefix, undefined);
+  assert.equal(nDateSkewPutWidget.eventStrategies.strikeClipboard.prefix, 'sps');
+  assert.equal(nDateSkewCallWidget.eventStrategies.strikeClipboard.prefix, 'lcs');
+  assert.equal(nDateSkewBidIVRatioWidget.eventStrategies, undefined);
+});
+
+test('nDate strike clipboard subscriber writes on second point-click event', async () => {
+  const bus = createWidgetEventBus({ now: () => 1000 });
+  const writes = [];
+  const statuses = [];
+  subscribeNDateStrikeClipboard({
+    eventBus: bus,
+    getWidgetDefinition: (type) => ({
+      'ndate-skew-put-line': nDateSkewPutWidget,
+      'ndate-skew-bidiv-ratio-line': nDateSkewBidIVRatioWidget
+    }[type]),
+    writeText: async (text) => writes.push(text),
+    setStatus: (text) => statuses.push(text),
+    chain: createStrikeClipboardChain()
+  });
+  const putPort = bus.registerSource({
+    widgetId: 'put-1',
+    widgetType: 'ndate-skew-put-line',
+    contracts: nDateSkewPutWidget.eventContracts
+  });
+
+  putPort.emit('chart.pointClick', { strike: 7100 });
+  putPort.emit('chart.pointClick', { strike: 7200 });
+  await Promise.resolve();
+
+  assert.deepEqual(writes, ['sps 7100 7200']);
+  assert.deepEqual(statuses, ['strike selected: sps 7100', 'copied: sps 7100 7200']);
+});
+
+test('nDate strike clipboard subscriber ignores unsupported widgets', async () => {
+  const bus = createWidgetEventBus();
+  const writes = [];
+  subscribeNDateStrikeClipboard({
+    eventBus: bus,
+    getWidgetDefinition: () => nDateSkewBidIVRatioWidget,
+    writeText: async (text) => writes.push(text),
+    chain: createStrikeClipboardChain()
+  });
+  const ratioPort = bus.registerSource({
+    widgetId: 'ratio-1',
+    widgetType: 'ndate-skew-bidiv-ratio-line',
+    contracts: [{ type: 'chart.pointClick' }]
+  });
+
+  ratioPort.emit('chart.pointClick', { strike: 7100 });
+  ratioPort.emit('chart.pointClick', { strike: 7200 });
+  await Promise.resolve();
+
+  assert.deepEqual(writes, []);
+});
+
+test('nDate strike clipboard plugin manifest activates the event subscriber', async () => {
+  const bus = createWidgetEventBus();
+  const writes = [];
+  nDateStrikeClipboardPlugin.activate({
+    eventBus: bus,
+    getWidgetDefinition: () => nDateSkewCallWidget,
+    clipboard: {
+      writeText: async (text) => writes.push(text)
+    },
+    setStatus: () => {}
+  });
+  const callPort = bus.registerSource({
+    widgetId: 'call-1',
+    widgetType: 'ndate-skew-call-line',
+    contracts: nDateSkewCallWidget.eventContracts
+  });
+
+  callPort.emit('chart.pointClick', { strike: 7100 });
+  callPort.emit('chart.pointClick', { strike: 7200 });
+  await Promise.resolve();
+
+  assert.deepEqual(writes, ['lcs 7100 7200']);
 });

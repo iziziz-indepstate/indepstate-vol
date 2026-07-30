@@ -3,6 +3,8 @@ import { TheBlockProvider } from '../shared/theblock-provider.js';
 import { getWidgetDefinition, widgetDefinitions } from './widgets/index.js';
 import { createWidgetCard, createWidgetChartForDefinition } from './widgets/widget-renderers.js';
 import { skewMetrics } from './widgets/metrics.js';
+import { createWidgetEventBus } from './widget-event-bus.js';
+import { activateAppPlugins, appPluginManifests } from '../plugins/index.js';
 import {
   normalizeWidgetParamValue,
   shouldRefreshOnWidgetParamChange,
@@ -45,6 +47,7 @@ const tabStatus = {};
 const chartInstances = new Map();
 const widgetDataStore = new Map();
 const mcpRuntimeStore = createMcpRuntimeStore();
+const widgetEventBus = createWidgetEventBus();
 let tabContextTargetId = null;
 let renameTargetTabId = null;
 let draggedTabId = null;
@@ -539,8 +542,9 @@ function closeRenameTabModal() {
 }
 
 function destroyCharts() {
-  for (const { chart, definition, widget } of chartInstances.values()) {
+  for (const { chart, definition, widget, eventPort } of chartInstances.values()) {
     if (chart && typeof chart.destroy === 'function') chart.destroy();
+    eventPort?.destroy?.();
     if (typeof definition?.destroy === 'function') {
       const target = document.getElementById(`widget-body-${widget.id}`);
       if (target) definition.destroy(target);
@@ -630,6 +634,17 @@ function bindMcpRuntimeBridge() {
         error: err?.message || String(err)
       });
     }
+  });
+}
+
+function bindWidgetEventSubscribers() {
+  activateAppPlugins(appPluginManifests, {
+    eventBus: widgetEventBus,
+    getWidgetDefinition,
+    clipboard: {
+      writeText: (text) => navigator.clipboard.writeText(text)
+    },
+    setStatus
   });
 }
 
@@ -926,22 +941,33 @@ async function ensureWidgetChartEntry(widget) {
   const host = document.getElementById(`chart-${widget.id}`);
   if (!host) return null;
 
+  const eventPort = Array.isArray(definition.eventContracts) && definition.eventContracts.length
+    ? widgetEventBus.registerSource({
+      tabId: activeTab()?.id || null,
+      widgetId: widget.id,
+      widgetType: widget.type,
+      contracts: definition.eventContracts
+    })
+    : null;
   const chart = await createWidgetChartForDefinition(host, definition, {
-    widgetId: widget.id,
-    onStatus: setStatus,
+    eventPort,
     onLegendVisibilityChange: () => {
       if (!['snapshot-series', 'timeseries-custom'].includes(definition.mode || 'timeseries')) return;
       syncHiddenSnapshotSeriesLabels(widget, chart);
       persistUiState();
     }
   });
-  if (!chart) return null;
+  if (!chart) {
+    eventPort?.destroy();
+    return null;
+  }
   const entry = {
     chart,
     mode: definition.mode || 'timeseries',
     metric: definition.metric,
     definition,
-    widget
+    widget,
+    eventPort
   };
   chartInstances.set(widget.id, entry);
   return entry;
@@ -951,6 +977,7 @@ function destroyWidgetChartEntry(widgetId) {
   const entry = chartInstances.get(widgetId);
   if (!entry || entry.mode === 'table') return;
   if (entry.chart && typeof entry.chart.destroy === 'function') entry.chart.destroy();
+  entry.eventPort?.destroy?.();
   chartInstances.delete(widgetId);
 }
 
@@ -2320,6 +2347,7 @@ function bindEvents() {
 async function init() {
   profilerEnabled = Boolean(await window.appBridge.isProfilerEnabled?.());
   bindMcpRuntimeBridge();
+  bindWidgetEventSubscribers();
   populateWidgetTypeSelect();
   bindEvents();
   const loaded = await window.appBridge.loadState();

@@ -55,7 +55,12 @@ test('dashboard runtime snapshot marks loaded and not-loaded widgets', () => {
       ]
     },
     widgetDefinitions: [
-      { type: 'atm-skew-line', mode: 'timeseries', defaultTitle: 'ATM Call-Put Skew' },
+      {
+        type: 'atm-skew-line',
+        mode: 'timeseries',
+        defaultTitle: 'ATM Call-Put Skew',
+        eventContracts: [{ type: 'chart.pointClick' }]
+      },
       { type: 'tail-skew-line', mode: 'timeseries-custom', defaultTitle: 'Tail Put-Call Skew' }
     ],
     getRuntimeData: (tabId, widgetId) => store.get(tabId, widgetId)
@@ -64,6 +69,7 @@ test('dashboard runtime snapshot marks loaded and not-loaded widgets', () => {
   assert.equal(snapshot.tabs[0].widgets[0].runtimeDataStatus.status, 'loaded');
   assert.equal(snapshot.tabs[0].widgets[1].runtimeDataStatus.status, 'not_loaded');
   assert.equal(snapshot.tabs[0].widgets[0].definition.mode, 'timeseries');
+  assert.deepEqual(snapshot.tabs[0].widgets[0].definition.eventContracts, [{ type: 'chart.pointClick' }]);
 });
 
 test('chart runtime data serializes labels, datasets, and point metadata', () => {
