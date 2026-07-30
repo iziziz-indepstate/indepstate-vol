@@ -62,6 +62,7 @@ export function createWidgetCard(widget, definition) {
   const targetDeltaValue = Number(widget?.config?.targetDelta ?? definition?.defaultConfig?.targetDelta ?? 0.25);
   const expirationValue = String(widget?.config?.expiration ?? definition?.defaultConfig?.expiration ?? '');
   const timeRangeValue = String(widget?.config?.range ?? definition?.defaultConfig?.range ?? '1M');
+  const mirrorXChecked = Boolean(widget?.config?.mirrorX ?? definition?.defaultConfig?.mirrorX);
   const isNDateSkewWidget = String(widget?.type || '').startsWith('ndate-skew-');
   const controls = Object.keys(controlsConfig).length
     ? `<div class="widget-controls widget-controls-inline">
@@ -96,6 +97,10 @@ export function createWidgetCard(widget, definition) {
           <select class="widget-range-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.TIME_RANGE}">
             ${['1D', '1W', '1M', '6M'].map((range) => `<option value="${range}" ${timeRangeValue === range ? 'selected' : ''}>${range}</option>`).join('')}
           </select>
+        </label>` : ''}
+        ${controlsConfig.mirrorX ? `<label class="widget-control widget-control-checkbox" title="Mirror X">
+          <input type="checkbox" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.MIRROR_X}" ${mirrorXChecked ? 'checked' : ''} />
+          <span>mirror x</span>
         </label>` : ''}
         ${isNDateSkewWidget ? `<div class="widget-control widget-history-control">
           <button type="button" class="widget-history-toggle" data-widget-history-toggle-widget-id="${widget.id}" title="History">H</button>

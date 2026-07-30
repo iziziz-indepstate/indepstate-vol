@@ -115,6 +115,42 @@ test('renderer series changes when n-delta base strike changes', () => {
   assert.equal(highAnchor.title, undefined);
 });
 
+test('renderer mirrors n-delta x-axis when configured', () => {
+  const history = [
+    {
+      time: '2026-06-07T14:00:00.000Z',
+      byExpiry: {
+        20260612: expirySnap(100, [
+          quote('put', 90, -0.25, 0.30),
+          quote('call', 100, 0.50, 0.20),
+          quote('put', 100, -0.50, 0.22)
+        ])
+      }
+    },
+    {
+      time: '2026-06-07T14:01:00.000Z',
+      byExpiry: {
+        20260612: expirySnap(100, [
+          quote('put', 90, -0.25, 0.35),
+          quote('call', 100, 0.50, 0.20),
+          quote('put', 100, -0.50, 0.22)
+        ])
+      }
+    }
+  ];
+
+  const normal = nDeltaIVWidget.buildTimeSeries(history, {
+    config: { optionType: 'put', targetDelta: 0.25, expiration: '20260612' }
+  });
+  const mirrored = nDeltaIVWidget.buildTimeSeries(history, {
+    config: { optionType: 'put', targetDelta: 0.25, expiration: '20260612', mirrorX: true }
+  });
+
+  assert.deepEqual(normal.datasets[0].data, [0.30, 0.35]);
+  assert.deepEqual(mirrored.datasets[0].data, [0.35, 0.30]);
+  assert.equal(mirrored.datasets[0].pointMeta[0].timestamp, '2026-06-07T14:01:00.000Z');
+});
+
 test('calculates ATM IV from strike nearest underlying reference price', () => {
   const snap = expirySnap(103, [
     quote('call', 100, 0.60, 0.21),

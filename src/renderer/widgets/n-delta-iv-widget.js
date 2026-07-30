@@ -60,19 +60,22 @@ export const nDeltaIVWidget = {
     optionType: 'put',
     targetDelta: 0.25,
     expiration: '',
-    showPremiumSpread: true
+    showPremiumSpread: true,
+    mirrorX: false
   },
   controls: {
     strike: true,
     strikeInputType: 'text',
     optionType: true,
     targetDelta: true,
-    expiration: true
+    expiration: true,
+    mirrorX: true
   },
   buildTimeSeries: (history, widget) => {
     const cfg = { ...nDeltaIVWidget.defaultConfig, ...(widget?.config || {}) };
     const points = buildNDeltaIVSeries(history, cfg);
-    const labels = points.map((point) => {
+    const chartPoints = cfg.mirrorX ? [...points].reverse() : points;
+    const labels = chartPoints.map((point) => {
       const dt = new Date(point.timestamp || 0);
       return Number.isNaN(dt.getTime()) ? String(point.timestamp || '') : dt.toLocaleTimeString();
     });
@@ -83,7 +86,7 @@ export const nDeltaIVWidget = {
       pointRadius: 0,
       pointHitRadius: 0,
       pointHoverRadius: 0,
-      pointMeta: points,
+      pointMeta: chartPoints,
       tooltipFormatter: pointTooltip
     };
 
@@ -91,13 +94,13 @@ export const nDeltaIVWidget = {
       {
         ...baseDataset,
         label: `${optionLabel} ${deltaLabel(cfg.targetDelta)} IV`,
-        data: points.map((point) => point.deltaIV),
+        data: chartPoints.map((point) => point.deltaIV),
         borderColor: '#38bdf8'
       },
       {
         ...baseDataset,
         label: 'ATM IV',
-        data: points.map((point) => point.atmIV),
+        data: chartPoints.map((point) => point.atmIV),
         borderColor: '#facc15'
       }
     ];
@@ -106,7 +109,7 @@ export const nDeltaIVWidget = {
       datasets.push({
         ...baseDataset,
         label: `${optionLabel} ${deltaLabel(cfg.targetDelta)} IV - ATM IV`,
-        data: points.map((point) => point.deltaIVPremium),
+        data: chartPoints.map((point) => point.deltaIVPremium),
         borderColor: '#fb7185'
       });
     }

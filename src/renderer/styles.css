@@ -558,6 +558,10 @@ select option {
   width: 60px;
 }
 
+.widget-control-checkbox input[type="checkbox"] {
+  width: auto;
+}
+
 .widget-ticker-input {
   width: 98px !important;
 }

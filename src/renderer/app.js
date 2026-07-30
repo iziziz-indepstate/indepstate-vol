@@ -1197,7 +1197,8 @@ async function renderWidgets() {
     input.addEventListener('input', (evt) => {
       const wid = evt.target.dataset[WIDGET_PARAM_DATASET.WIDGET_ID];
       const paramName = evt.target.dataset[WIDGET_PARAM_DATASET.PARAM_NAME];
-      if (!setWidgetParamValue(wid, paramName, evt.target.value)) return;
+      const rawValue = evt.target.type === 'checkbox' ? evt.target.checked : evt.target.value;
+      if (!setWidgetParamValue(wid, paramName, rawValue)) return;
       if (shouldRefreshOnWidgetParamChange(paramName)) {
         refreshWidget(wid).catch((err) => console.error('Failed to refresh widget param input', err));
       }
@@ -1207,7 +1208,8 @@ async function renderWidgets() {
     input.addEventListener('change', (evt) => {
       const wid = evt.target.dataset[WIDGET_PARAM_DATASET.WIDGET_ID];
       const paramName = evt.target.dataset[WIDGET_PARAM_DATASET.PARAM_NAME];
-      if (!setWidgetParamValue(wid, paramName, evt.target.value)) return;
+      const rawValue = evt.target.type === 'checkbox' ? evt.target.checked : evt.target.value;
+      if (!setWidgetParamValue(wid, paramName, rawValue)) return;
       if (shouldRefreshOnWidgetParamChange(paramName)) {
         refreshWidget(wid).catch((err) => console.error('Failed to refresh widget param change', err));
       }
@@ -1219,7 +1221,7 @@ async function renderWidgets() {
 
       const sourceWidgetId = evt.target.dataset[WIDGET_PARAM_DATASET.WIDGET_ID];
       const paramName = evt.target.dataset[WIDGET_PARAM_DATASET.PARAM_NAME];
-      const rawValue = evt.target.value;
+      const rawValue = evt.target.type === 'checkbox' ? evt.target.checked : evt.target.value;
       if (!sourceWidgetId || !paramName) return;
 
       let hasAnyUpdates = false;
@@ -1230,7 +1232,11 @@ async function renderWidgets() {
       if (!hasAnyUpdates) return;
 
       root.querySelectorAll(`${widgetParamSelector}[data-widget-param-name="${paramName}"]`).forEach((otherInput) => {
-        otherInput.value = rawValue;
+        if (otherInput.type === 'checkbox') {
+          otherInput.checked = Boolean(rawValue);
+        } else {
+          otherInput.value = rawValue;
+        }
       });
 
       if (shouldRefreshOnWidgetParamChange(paramName)) {
