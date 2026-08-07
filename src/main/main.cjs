@@ -1,6 +1,6 @@
 const path = require('path');
 const { app, BrowserWindow, ipcMain, Menu } = require('electron');
-const { loadState, saveState } = require('./store.cjs');
+const { loadState, saveUiState } = require('./store.cjs');
 const { loadLocalMarketSeries } = require('./local-market-data.cjs');
 const { createMarketDataService } = require('./market-data-providers.cjs');
 const { startAutoUpdater } = require('./auto-updater.cjs');
@@ -92,7 +92,7 @@ function profilerEnabledFromLaunch() {
 
 function savePersistedStateNow(detail = {}) {
   if (!persistedState) return Promise.resolve();
-  return profiler.measure('state:save-scheduled', detail, () => saveState(app.getPath('userData'), persistedState));
+  return profiler.measure('state:save-scheduled', detail, () => saveUiState(app.getPath('userData'), persistedState));
 }
 
 function cancelScheduledStateSave() {
@@ -157,12 +157,19 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('state:save', async (_evt, state) => {
-    persistedState = state;
+    const current = persistedState || loadState(app.getPath('userData'), DEFAULT_STATE);
+    persistedState = {
+      ...current,
+      activeTabId: state?.activeTabId || current.activeTabId,
+      tabs: Array.isArray(state?.tabs) ? state.tabs : current.tabs,
+      historyByTab: state?.historyByTab && typeof state.historyByTab === 'object'
+        ? state.historyByTab
+        : (current.historyByTab || {})
+    };
     cancelScheduledStateSave();
     await profiler.measure('state:save', {
-      tabs: Array.isArray(state?.tabs) ? state.tabs.length : 0,
-      historyPoints: Object.values(state?.historyByTab || {}).reduce((acc, rows) => acc + (Array.isArray(rows) ? rows.length : 0), 0)
-    }, () => saveState(app.getPath('userData'), persistedState));
+      tabs: Array.isArray(persistedState?.tabs) ? persistedState.tabs.length : 0
+    }, () => saveUiState(app.getPath('userData'), persistedState));
     return { ok: true };
   });
 
@@ -176,7 +183,7 @@ app.whenReady().then(() => {
     cancelScheduledStateSave();
     await profiler.measure('state:save-ui', {
       tabs: Array.isArray(persistedState?.tabs) ? persistedState.tabs.length : 0
-    }, () => saveState(app.getPath('userData'), persistedState));
+    }, () => saveUiState(app.getPath('userData'), persistedState));
     return { ok: true };
   });
 
@@ -204,11 +211,6 @@ app.whenReady().then(() => {
         history: rows.length
       },
       durationMs: 0
-    });
-    schedulePersistedStateSave({
-      tabId,
-      historyPoints: Object.values(historyByTab).reduce((acc, rowsForTab) => acc + (Array.isArray(rowsForTab) ? rowsForTab.length : 0), 0),
-      reason: 'append-history'
     });
     return { ok: true, history: rows.length };
   });

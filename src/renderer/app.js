@@ -513,7 +513,7 @@ function deleteTabById(tabId) {
   renderWidgets();
   setStatus(tabStatus[state.activeTabId] || 'ready');
   updatePollingControlsForActiveTab();
-  persist();
+  persistUiState();
 }
 
 function renameTabById(tabId, nextTitleRaw) {
@@ -1062,7 +1062,7 @@ async function renderWidgets() {
       clearWidgetData(tab.id, wid);
       ensureTabHistoryPolicy(tab);
       renderWidgets();
-      persist();
+      persistUiState();
     });
   });
 
@@ -1368,7 +1368,6 @@ async function renderWidgets() {
 
     updateWidgetHistoryControls(root, tab);
     refreshCharts();
-    persist();
   });
 
   updateWidgetHistoryControls(root, tab);
@@ -2281,7 +2280,6 @@ function clearActiveTabSnapshot() {
   state.historyByTab[tab.id] = [];
   refreshCharts();
   setTabStatus(tab.id, `snapshot cleared • ${tab.title}`);
-  persist();
 }
 
 function bindEvents() {
@@ -2365,7 +2363,6 @@ async function init() {
 
   if (!state.tabs.length) addTab();
 
-  let compactedLoadedHistory = false;
   for (const tab of state.tabs) {
     tab.providerConfig = normalizeProviderConfig(tab.providerConfig || {});
     ensureTabHistoryPolicy(tab);
@@ -2381,7 +2378,6 @@ async function init() {
       }
     }
     trimHistoryForTab(tab);
-    compactedLoadedHistory = compactedLoadedHistory || Boolean(state.historyByTab[tab.id]?.length);
   }
 
   if (!state.activeTabId) state.activeTabId = state.tabs[0].id;
@@ -2391,7 +2387,6 @@ async function init() {
   renderWidgets();
   updatePollingControlsForActiveTab();
   setTabStatus(state.activeTabId, 'ready');
-  if (compactedLoadedHistory) persist();
   if (profilerEnabled) {
     console.info('[IS-VOL profiler] enabled: window.isVolProfiler.summary(), window.isVolProfiler.export(), window.isVolProfiler.clear()');
   }
