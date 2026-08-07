@@ -33,6 +33,33 @@ function subtractCalendarBuffer(startDate, horizonDays) {
   return date.toISOString().slice(0, 10);
 }
 
+function compactSource(result, symbol) {
+  return {
+    symbol,
+    provider: result?.provider || null,
+    cached: Boolean(result?.cached),
+    fallback: Boolean(result?.fallback),
+    updatedAt: result?.updatedAt || null,
+    warning: result?.warning || null
+  };
+}
+
+function compactWarnings(...values) {
+  return values
+    .flat()
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+}
+
+function publishIvRvData(widgetData, widget, config, payload) {
+  widgetData?.publish?.({
+    type: ivRvWidget.type,
+    title: widget?.title || ivRvWidget.defaultTitle,
+    config: { ...config },
+    ...payload
+  });
+}
+
 function destroyCharts(container) {
   const pair = chartPairs.get(container);
   pair?.forEach((chart) => chart.destroy());
@@ -203,7 +230,7 @@ export const ivRvWidget = {
     ivSource: ''
   },
   destroy: destroyCharts,
-  render: async ({ container, widget, onConfigChange }) => {
+  render: async ({ container, widget, widgetData, onConfigChange }) => {
     const renderVersion = (renderVersions.get(container) || 0) + 1;
     renderVersions.set(container, renderVersion);
     destroyCharts(container);
@@ -231,7 +258,17 @@ export const ivRvWidget = {
 
     container.innerHTML = `${configMarkup(config)}<div class="ivrv-status">Configure providers and load data.</div>`;
     bindControls(container, widget, onConfigChange);
-    if (config.dataMode === 'local' && (!config.spxSource || !config.ivSource)) return;
+    if (config.dataMode === 'local' && (!config.spxSource || !config.ivSource)) {
+      publishIvRvData(widgetData, widget, config, {
+        status: 'waiting_for_local_sources',
+        error: 'Local data mode requires both SPX and IV CSV/JSON sources.',
+        missingSources: {
+          spxSource: !config.spxSource,
+          ivSource: !config.ivSource
+        }
+      });
+      return;
+    }
 
     const status = container.querySelector('.ivrv-status');
     status.textContent = 'Loading market data...';
@@ -276,6 +313,24 @@ export const ivRvWidget = {
       const spxLagWarning = latestIvDate && result.latestSpxDate && latestIvDate > result.latestSpxDate
         ? `SPX close for ${latestIvDate} is not available yet. RV calculated using latest available SPX close: ${result.latestSpxDate}.`
         : '';
+      const warnings = compactWarnings(
+        spxResult.warning,
+        ivResult.warning,
+        spxLagWarning,
+        latest.ratio_warning
+      );
+      publishIvRvData(widgetData, widget, config, {
+        status: 'ok',
+        horizon: result.horizon,
+        sources: {
+          spx: compactSource(spxResult, 'SPX'),
+          iv: compactSource(ivResult, ivSymbol)
+        },
+        latest,
+        latestSpxDate: result.latestSpxDate,
+        series: result.series,
+        warnings
+      });
       container.innerHTML = `
         ${configMarkup(config)}
         <div class="ivrv-summary">
@@ -308,6 +363,10 @@ export const ivRvWidget = {
       await createCharts(container, result);
     } catch (error) {
       if (renderVersions.get(container) !== renderVersion) return;
+      publishIvRvData(widgetData, widget, config, {
+        status: 'error',
+        error: error?.message || String(error)
+      });
       const currentStatus = container.querySelector('.ivrv-status') || status;
       currentStatus.textContent = `Unable to calculate IV/RV: ${error?.message || String(error)}`;
       currentStatus.classList.add('ivrv-error');

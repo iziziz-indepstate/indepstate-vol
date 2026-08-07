@@ -35,6 +35,36 @@ This keeps responsibilities clean:
 
 `Vol Upfront` consumes published `Straddle ATM` outputs from the current tab and calculates forward volatility from their `snapshot.dte` and `snapshot.atmIv` fields. It does not recalculate straddles.
 
+`SPX IV / RV` publishes its aligned implied-vs-realized volatility dataset after the widget renders:
+
+```ts
+{
+  type: "iv-rv-local",
+  status: "ok" | "waiting_for_local_sources" | "error",
+  title: string,
+  config: object,
+  horizon?: {
+    days: number,
+    label: string,
+    ivSymbol: string | null
+  },
+  sources?: {
+    spx: WidgetMarketDataSource,
+    iv: WidgetMarketDataSource
+  },
+  latest?: IvRvPoint,
+  latestSpxDate?: string | null,
+  series?: IvRvPoint[],
+  warnings?: string[],
+  error?: string,
+  tabId: string,
+  widgetId: string,
+  updatedAt: string
+}
+```
+
+Each `WidgetMarketDataSource` includes `symbol`, `provider`, `cached`, `fallback`, `updatedAt`, and `warning`. MCP exposes this dataset through `get_widget_data` once the containing dashboard tab has rendered in the open UI runtime.
+
 `n-Delta IV` reads the tab's historical option-chain snapshots and produces three aligned chart series for one expiration:
 
 ```ts
