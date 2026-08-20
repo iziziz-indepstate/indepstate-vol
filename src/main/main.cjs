@@ -6,6 +6,7 @@ const { createMarketDataService } = require('./market-data-providers.cjs');
 const { startAutoUpdater } = require('./auto-updater.cjs');
 const { startMcpServer } = require('./mcp-server.cjs');
 const { defaultRawSnapshotDir, saveRawSnapshotAsync } = require('./raw-snapshot-store.cjs');
+const { createDataSourceLifecycleRegistry } = require('./data-source-lifecycle.cjs');
 const profiler = require('./profiler.cjs');
 
 app.setName('IS-VOL');
@@ -15,6 +16,12 @@ let mcpServer = null;
 let persistedState = null;
 let scheduledStateSaveTimer = null;
 let scheduledStateSavePromise = Promise.resolve();
+let dataSourceLifecycleRegistry = null;
+let dataSourceLifecycleTimer = null;
+let mainPluginCleanup = null;
+let rendererCommandSeq = 0;
+const pendingRendererCommands = new Map();
+const rendererRunningTabIds = new Set();
 
 const DEFAULT_STATE = {
   activeTabId: 'tab-1',
@@ -143,12 +150,82 @@ function createWindow() {
   mainWindow = win;
 }
 
-app.whenReady().then(() => {
+function sendDataSourceCommandToRenderer(tabId, command) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return Promise.resolve({ ok: false, error: 'Renderer window is not available', running: rendererRunningTabIds.has(tabId) });
+  }
+
+  const requestId = `datasource-command-${Date.now()}-${rendererCommandSeq += 1}`;
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      pendingRendererCommands.delete(requestId);
+      resolve({ ok: false, error: `Timed out running datasource command: ${command}`, running: rendererRunningTabIds.has(tabId) });
+    }, 30000);
+    pendingRendererCommands.set(requestId, { resolve, timeout, tabId });
+    mainWindow.webContents.send('datasource:command', { requestId, tabId, command });
+  });
+}
+
+function syncDataSourcesFromRenderer(payload = {}) {
+  rendererRunningTabIds.clear();
+  for (const tabId of Array.isArray(payload.runningTabIds) ? payload.runningTabIds : []) {
+    if (tabId) rendererRunningTabIds.add(tabId);
+  }
+  dataSourceLifecycleRegistry?.syncDataSources(Array.isArray(payload.tabs) ? payload.tabs : []);
+  return dataSourceLifecycleRegistry?.getUiExtensions() || {};
+}
+
+function patchDataSourceConfig(tabId, partial) {
+  if (!tabId || !partial || typeof partial !== 'object') return { ok: false, error: 'tabId and partial config are required' };
+  const current = persistedState || loadState(app.getPath('userData'), DEFAULT_STATE);
+  const tabs = Array.isArray(current.tabs) ? current.tabs : [];
+  const tab = tabs.find((item) => item.id === tabId);
+  if (!tab) return { ok: false, error: `Unknown datasource tab: ${tabId}` };
+  tab.providerConfig = {
+    ...(tab.providerConfig || {}),
+    ...partial
+  };
+  persistedState = { ...current, tabs };
+  schedulePersistedStateSave({ reason: 'datasource-config-patch', tabId });
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('datasource:config-patch', { tabId, partial });
+  }
+  return { ok: true };
+}
+
+async function activateMainPlugins() {
+  const { activateMainAppPlugins, appMainPluginManifests } = require('../plugins/main-index.cjs');
+  mainPluginCleanup = activateMainAppPlugins(appMainPluginManifests, {
+    dataSources: {
+      registerLifecycle: (descriptor) => dataSourceLifecycleRegistry.registerLifecycle(descriptor)
+    }
+  });
+}
+
+function startDataSourceLifecycleLoop() {
+  if (dataSourceLifecycleTimer) clearInterval(dataSourceLifecycleTimer);
+  dataSourceLifecycleTimer = setInterval(() => {
+    dataSourceLifecycleRegistry?.tick()
+      .then(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('datasource:lifecycle-ui-updated', dataSourceLifecycleRegistry.getUiExtensions());
+        }
+      })
+      .catch((err) => console.warn('DataSource lifecycle tick failed', err));
+  }, 15000);
+}
+
+app.whenReady().then(async () => {
   profiler.setEnabled(profilerEnabledFromLaunch());
   startAutoUpdater();
   Menu.setApplicationMenu(null);
   const marketDataService = createMarketDataService({
     cacheDir: path.join(app.getPath('userData'), 'market-data-cache')
+  });
+  dataSourceLifecycleRegistry = createDataSourceLifecycleRegistry({
+    command: sendDataSourceCommandToRenderer,
+    patchConfig: patchDataSourceConfig,
+    isRunning: (tabId) => rendererRunningTabIds.has(tabId)
   });
 
   ipcMain.handle('state:load', async () => {
@@ -171,6 +248,58 @@ app.whenReady().then(() => {
       tabs: Array.isArray(persistedState?.tabs) ? persistedState.tabs.length : 0
     }, () => saveUiState(app.getPath('userData'), persistedState));
     return { ok: true };
+  });
+
+  ipcMain.handle('datasource:sync-tabs', async (_evt, payload) => {
+    return { ok: true, lifecycleUiByTab: syncDataSourcesFromRenderer(payload || {}) };
+  });
+
+  ipcMain.handle('datasource:command', async (_evt, payload) => {
+    const tabId = payload?.tabId;
+    const command = payload?.command;
+    if (!tabId || !['start', 'stop', 'refresh'].includes(command)) {
+      return { ok: false, error: 'Invalid datasource command' };
+    }
+    return sendDataSourceCommandToRenderer(tabId, command);
+  });
+
+  ipcMain.handle('datasource:lifecycle-ui', async () => ({
+    ok: true,
+    lifecycleUiByTab: dataSourceLifecycleRegistry?.getUiExtensions() || {}
+  }));
+
+  ipcMain.handle('datasource:update-lifecycle-settings', async (_evt, payload) => {
+    const tabId = payload?.tabId;
+    const lifecycleId = payload?.lifecycleId;
+    const values = payload?.values && typeof payload.values === 'object' ? payload.values : {};
+    if (!tabId || !lifecycleId) return { ok: false, error: 'tabId and lifecycleId are required' };
+    const current = {
+      ...(persistedState || loadState(app.getPath('userData'), DEFAULT_STATE)),
+      tabs: Array.isArray(payload?.tabs) ? payload.tabs : (persistedState || loadState(app.getPath('userData'), DEFAULT_STATE)).tabs
+    };
+    const tab = (Array.isArray(current.tabs) ? current.tabs : []).find((item) => item.id === tabId);
+    if (tab) {
+      tab.providerConfig ||= {};
+      tab.providerConfig.lifecycleSettings ||= {};
+      tab.providerConfig.lifecycleSettings[lifecycleId] = values;
+      persistedState = current;
+      schedulePersistedStateSave({ reason: 'datasource-lifecycle-settings', tabId, lifecycleId });
+    }
+    syncDataSourcesFromRenderer({
+      tabs: current.tabs,
+      runningTabIds: Array.isArray(payload?.runningTabIds) ? payload.runningTabIds : Array.from(rendererRunningTabIds)
+    });
+    return { ok: true, lifecycleUiByTab: dataSourceLifecycleRegistry?.getUiExtensions() || {} };
+  });
+
+  ipcMain.on('datasource:command-result', (_evt, result) => {
+    const request = pendingRendererCommands.get(result?.requestId);
+    if (!request) return;
+    clearTimeout(request.timeout);
+    pendingRendererCommands.delete(result.requestId);
+    if (result?.running) rendererRunningTabIds.add(request.tabId);
+    else rendererRunningTabIds.delete(request.tabId);
+    request.resolve(result || { ok: true, running: rendererRunningTabIds.has(request.tabId) });
   });
 
   ipcMain.handle('state:save-ui', async (_evt, uiState) => {
@@ -259,7 +388,9 @@ app.whenReady().then(() => {
 
   ipcMain.handle('profiler:is-enabled', async () => profiler.isEnabled());
 
+  await activateMainPlugins().catch((err) => console.warn('Failed to activate main plugins', err));
   createWindow();
+  startDataSourceLifecycleLoop();
   mcpServer = startMcpServer({
     getWindow: () => mainWindow
   });
@@ -280,6 +411,15 @@ app.on('before-quit', (event) => {
     mcpServer.close().catch(() => {});
     mcpServer = null;
   }
+  if (dataSourceLifecycleTimer) {
+    clearInterval(dataSourceLifecycleTimer);
+    dataSourceLifecycleTimer = null;
+  }
+  if (typeof mainPluginCleanup === 'function') {
+    mainPluginCleanup();
+    mainPluginCleanup = null;
+  }
+  dataSourceLifecycleRegistry?.cleanup();
 });
 
 app.on('window-all-closed', () => {

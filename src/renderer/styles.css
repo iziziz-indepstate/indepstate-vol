@@ -234,6 +234,40 @@ body {
   gap: 8px;
 }
 
+.lifecycle-controls {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.lifecycle-title {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.lifecycle-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, minmax(180px, 1fr));
+}
+
+.lifecycle-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.lifecycle-grid .checkbox-field {
+  min-height: 58px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+
 .checkbox-field input {
   width: auto;
   margin: 0;

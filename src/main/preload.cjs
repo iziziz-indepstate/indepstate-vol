@@ -10,6 +10,26 @@ contextBridge.exposeInMainWorld('appBridge', {
   getDailyMarketHistory: (params) => ipcRenderer.invoke('market-data:get-daily-history', params),
   getTradingViewSnapshot: (params) => ipcRenderer.invoke('tradingview:get-snapshot', params),
   getTheBlockSnapshot: (params) => ipcRenderer.invoke('theblock:get-snapshot', params),
+  syncDataSources: (payload) => ipcRenderer.invoke('datasource:sync-tabs', payload),
+  runDataSourceCommand: (payload) => ipcRenderer.invoke('datasource:command', payload),
+  getDataSourceLifecycleUi: () => ipcRenderer.invoke('datasource:lifecycle-ui'),
+  updateDataSourceLifecycleSettings: (payload) => ipcRenderer.invoke('datasource:update-lifecycle-settings', payload),
+  onDataSourceCommand: (callback) => {
+    const listener = (_evt, message) => callback(message);
+    ipcRenderer.on('datasource:command', listener);
+    return () => ipcRenderer.removeListener('datasource:command', listener);
+  },
+  sendDataSourceCommandResult: (message) => ipcRenderer.send('datasource:command-result', message),
+  onDataSourceConfigPatch: (callback) => {
+    const listener = (_evt, message) => callback(message);
+    ipcRenderer.on('datasource:config-patch', listener);
+    return () => ipcRenderer.removeListener('datasource:config-patch', listener);
+  },
+  onDataSourceLifecycleUiUpdated: (callback) => {
+    const listener = (_evt, message) => callback(message);
+    ipcRenderer.on('datasource:lifecycle-ui-updated', listener);
+    return () => ipcRenderer.removeListener('datasource:lifecycle-ui-updated', listener);
+  },
   isProfilerEnabled: () => ipcRenderer.invoke('profiler:is-enabled'),
   exportProfilerEvents: (events) => ipcRenderer.invoke('profiler:export', events),
   onMcpRuntimeStateRequest: (callback) => {

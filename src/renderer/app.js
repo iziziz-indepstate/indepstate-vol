@@ -48,6 +48,7 @@ const chartInstances = new Map();
 const widgetDataStore = new Map();
 const mcpRuntimeStore = createMcpRuntimeStore();
 const widgetEventBus = createWidgetEventBus();
+const lifecycleUiByTab = {};
 let tabContextTargetId = null;
 let renameTargetTabId = null;
 let draggedTabId = null;
@@ -233,6 +234,107 @@ function updatePollingControlsForActiveTab() {
   setPollState(running || refreshing);
 }
 
+function updateLifecycleUiFromResponse(response) {
+  const next = response?.lifecycleUiByTab || response;
+  if (!next || typeof next !== 'object') return;
+  Object.keys(lifecycleUiByTab).forEach((key) => delete lifecycleUiByTab[key]);
+  Object.assign(lifecycleUiByTab, next);
+}
+
+function runningTabIds() {
+  return Array.from(tabTimers.keys());
+}
+
+async function syncDataSourcesToMain() {
+  if (typeof window.appBridge?.syncDataSources !== 'function') return;
+  const response = await window.appBridge.syncDataSources({
+    tabs: state.tabs,
+    runningTabIds: runningTabIds()
+  });
+  updateLifecycleUiFromResponse(response);
+  renderDataSourceLifecycleControls(activeTab());
+}
+
+function lifecycleSettingsFor(tab, lifecycleId) {
+  tab.providerConfig ||= {};
+  tab.providerConfig.lifecycleSettings ||= {};
+  tab.providerConfig.lifecycleSettings[lifecycleId] ||= {};
+  return tab.providerConfig.lifecycleSettings[lifecycleId];
+}
+
+function normalizeLifecycleControlValue(control, value) {
+  if (control?.type === 'checkbox') return Boolean(value);
+  if (control?.type === 'time') {
+    const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/);
+    if (!match) return '';
+    return `${match[1].padStart(2, '0')}:${match[2]}`;
+  }
+  if (control?.type === 'number') {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : '';
+  }
+  return value == null ? '' : String(value);
+}
+
+function valueForLifecycleControl(tab, lifecycle, control) {
+  const settings = lifecycleSettingsFor(tab, lifecycle.id);
+  if (settings[control.name] !== undefined) return normalizeLifecycleControlValue(control, settings[control.name]);
+  if (lifecycle.values?.[control.name] !== undefined) return normalizeLifecycleControlValue(control, lifecycle.values[control.name]);
+  return normalizeLifecycleControlValue(control, control.defaultValue);
+}
+
+function renderDataSourceLifecycleControls(tab) {
+  const root = $('dataSourceLifecycleControls');
+  if (!root) return;
+  const lifecycles = tab?.id ? (lifecycleUiByTab[tab.id] || []) : [];
+  root.hidden = !lifecycles.length;
+  root.innerHTML = '';
+  if (!lifecycles.length || !tab) return;
+
+  for (const lifecycle of lifecycles) {
+    const section = document.createElement('section');
+    section.className = 'lifecycle-section';
+
+    const title = document.createElement('h3');
+    title.className = 'lifecycle-title';
+    title.textContent = lifecycle.title || lifecycle.id;
+    section.appendChild(title);
+
+    const grid = document.createElement('div');
+    grid.className = 'lifecycle-grid';
+    for (const control of Array.isArray(lifecycle.controls) ? lifecycle.controls : []) {
+      const value = valueForLifecycleControl(tab, lifecycle, control);
+      const label = document.createElement('label');
+      const input = document.createElement('input');
+      input.dataset.lifecycleId = lifecycle.id;
+      input.dataset.lifecycleControl = control.name;
+      input.type = control.type === 'checkbox' ? 'checkbox' : (control.type === 'time' ? 'text' : control.type);
+      if (control.type === 'time') {
+        input.inputMode = 'numeric';
+        input.placeholder = 'HH:mm';
+        input.pattern = '^\\d{1,2}:\\d{2}$';
+      }
+      if (control.min != null) input.min = String(control.min);
+      if (control.max != null) input.max = String(control.max);
+      if (control.type === 'checkbox') {
+        label.className = 'checkbox-field';
+        input.checked = Boolean(value);
+        label.appendChild(input);
+        const text = document.createElement('span');
+        text.textContent = control.label || control.name;
+        label.appendChild(text);
+      } else {
+        label.textContent = control.label || control.name;
+        input.value = value == null ? '' : String(value);
+        label.appendChild(input);
+      }
+      grid.appendChild(label);
+    }
+    section.appendChild(grid);
+    root.appendChild(section);
+  }
+}
+
 function persist() {
   if (persistTimer) {
     clearTimeout(persistTimer);
@@ -380,6 +482,7 @@ function applyTabToForm(tab) {
   $('keepPoints').value = String(tab.providerConfig.keepPoints ?? 200);
   $('saveRawSnapshots').checked = shouldSaveRawSnapshots(tab);
   $('compactHistorySnapshots').checked = shouldCompactHistorySnapshots(tab);
+  renderDataSourceLifecycleControls(tab);
 }
 
 function readFormToTab(tab) {
@@ -426,6 +529,7 @@ function renderTabs() {
       renderWidgets();
       setStatus(tabStatus[tab.id] || 'ready');
       updatePollingControlsForActiveTab();
+      renderDataSourceLifecycleControls(tab);
       persistUiState();
     };
     item.addEventListener('contextmenu', (evt) => {
@@ -513,6 +617,7 @@ function deleteTabById(tabId) {
   renderWidgets();
   setStatus(tabStatus[state.activeTabId] || 'ready');
   updatePollingControlsForActiveTab();
+  syncDataSourcesToMain().catch((err) => console.warn('Failed to sync deleted datasource', err));
   persistUiState();
 }
 
@@ -2133,6 +2238,7 @@ function addTab() {
   renderTabs();
   renderWidgets();
   updatePollingControlsForActiveTab();
+  syncDataSourcesToMain().catch((err) => console.warn('Failed to sync added datasource', err));
   persistUiState();
 }
 
@@ -2244,33 +2350,55 @@ function stopTabPolling(tabId) {
   tabTickInFlight.delete(tabId);
 }
 
+async function executeDataSourceCommand(tabId, command) {
+  const tab = state.tabs.find((item) => item.id === tabId);
+  if (!tab) return;
+  if (command === 'start') {
+    startTabPolling(tab.id);
+  } else if (command === 'stop') {
+    stopTabPolling(tab.id);
+    setTabStatus(tab.id, 'stopped');
+  } else if (command === 'refresh') {
+    if (tabRefreshInFlight.has(tab.id)) return;
+    tabRefreshInFlight.add(tab.id);
+    updatePollingControlsForActiveTab();
+    try {
+      await tickTab(tab.id);
+    } finally {
+      tabRefreshInFlight.delete(tab.id);
+    }
+  }
+  updatePollingControlsForActiveTab();
+  syncDataSourcesToMain().catch((err) => console.warn('Failed to sync datasource command state', err));
+}
+
+async function requestDataSourceCommand(tabId, command) {
+  if (typeof window.appBridge?.runDataSourceCommand === 'function') {
+    const result = await window.appBridge.runDataSourceCommand({ tabId, command });
+    if (result?.error) console.warn('DataSource command failed', result.error);
+    updatePollingControlsForActiveTab();
+    return result;
+  }
+  await executeDataSourceCommand(tabId, command);
+  return { ok: true, running: tabTimers.has(tabId) };
+}
+
 function start() {
   const tab = activeTab();
   if (!tab) return;
-  startTabPolling(tab.id);
-  updatePollingControlsForActiveTab();
+  requestDataSourceCommand(tab.id, 'start').catch((err) => console.warn('Failed to start datasource', err));
 }
 
 function stop() {
   const tab = activeTab();
   if (!tab) return;
-  stopTabPolling(tab.id);
-  setTabStatus(tab.id, 'stopped');
-  updatePollingControlsForActiveTab();
+  requestDataSourceCommand(tab.id, 'stop').catch((err) => console.warn('Failed to stop datasource', err));
 }
 
 async function refreshActiveTabOnce() {
   const tab = activeTab();
-  if (!tab || tabRefreshInFlight.has(tab.id)) return;
-
-  tabRefreshInFlight.add(tab.id);
-  updatePollingControlsForActiveTab();
-  try {
-    await tickTab(tab.id);
-  } finally {
-    tabRefreshInFlight.delete(tab.id);
-    updatePollingControlsForActiveTab();
-  }
+  if (!tab) return;
+  await requestDataSourceCommand(tab.id, 'refresh');
 }
 
 function clearActiveTabSnapshot() {
@@ -2344,13 +2472,80 @@ function bindEvents() {
       if (id === 'providerKey') updateProviderConfigVisibility(tab.providerKey);
       persistUiState();
       if (tabTimers.has(tab.id)) startTabPolling(tab.id);
+      syncDataSourcesToMain().catch((err) => console.warn('Failed to sync datasource config', err));
     });
+  });
+
+  $('dataSourceLifecycleControls')?.addEventListener('change', (evt) => {
+    const input = evt.target;
+    const lifecycleId = input?.dataset?.lifecycleId;
+    const controlName = input?.dataset?.lifecycleControl;
+    const tab = activeTab();
+    if (!tab || !lifecycleId || !controlName) return;
+    const lifecycle = (lifecycleUiByTab[tab.id] || []).find((item) => item.id === lifecycleId);
+    const control = (lifecycle?.controls || []).find((item) => item.name === controlName) || { name: controlName, type: input.type };
+    const settings = lifecycleSettingsFor(tab, lifecycleId);
+    settings[controlName] = normalizeLifecycleControlValue(
+      control,
+      input.type === 'checkbox' ? Boolean(input.checked) : input.value
+    );
+    if (input.type !== 'checkbox') input.value = settings[controlName];
+    persistUiState();
+    if (typeof window.appBridge?.updateDataSourceLifecycleSettings === 'function') {
+      window.appBridge.updateDataSourceLifecycleSettings({
+        tabId: tab.id,
+        lifecycleId,
+        values: { ...settings },
+        tabs: state.tabs,
+        runningTabIds: runningTabIds()
+      }).then((response) => {
+        updateLifecycleUiFromResponse(response);
+        renderDataSourceLifecycleControls(activeTab());
+      }).catch((err) => console.warn('Failed to update datasource lifecycle settings', err));
+    }
+  });
+}
+
+function bindDataSourceLifecycleBridge() {
+  window.appBridge?.onDataSourceCommand?.(async (message) => {
+    try {
+      await executeDataSourceCommand(message?.tabId, message?.command);
+      window.appBridge.sendDataSourceCommandResult?.({
+        requestId: message?.requestId,
+        ok: true,
+        running: tabTimers.has(message?.tabId)
+      });
+    } catch (err) {
+      window.appBridge.sendDataSourceCommandResult?.({
+        requestId: message?.requestId,
+        ok: false,
+        error: err?.message || String(err),
+        running: tabTimers.has(message?.tabId)
+      });
+    }
+  });
+
+  window.appBridge?.onDataSourceConfigPatch?.((message) => {
+    const tab = state.tabs.find((item) => item.id === message?.tabId);
+    if (!tab) return;
+    tab.providerConfig = normalizeProviderConfig({
+      ...(tab.providerConfig || {}),
+      ...(message.partial || {})
+    });
+    if (tab.id === state.activeTabId) applyTabToForm(tab);
+    persistUiState();
+  });
+
+  window.appBridge?.onDataSourceLifecycleUiUpdated?.((message) => {
+    updateLifecycleUiFromResponse(message);
+    renderDataSourceLifecycleControls(activeTab());
   });
 }
 
 async function init() {
   profilerEnabled = Boolean(await window.appBridge.isProfilerEnabled?.());
   bindMcpRuntimeBridge();
+  bindDataSourceLifecycleBridge();
   bindWidgetEventSubscribers();
   populateWidgetTypeSelect();
   bindEvents();
@@ -2387,6 +2582,7 @@ async function init() {
   renderWidgets();
   updatePollingControlsForActiveTab();
   setTabStatus(state.activeTabId, 'ready');
+  await syncDataSourcesToMain();
   if (profilerEnabled) {
     console.info('[IS-VOL profiler] enabled: window.isVolProfiler.summary(), window.isVolProfiler.export(), window.isVolProfiler.clear()');
   }
