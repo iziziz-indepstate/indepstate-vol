@@ -1,0 +1,107 @@
+name: Build macOS release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build and upload (for example, v1.5.0)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: macos-release-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  build-macos:
+    name: Build macOS x64 and arm64
+    runs-on: macos-15
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate release version
+        shell: bash
+        run: |
+          tag_version="${RELEASE_TAG#v}"
+          package_version="$(node -p "require('./package.json').version")"
+          if [[ "$tag_version" != "$package_version" ]]; then
+            echo "Tag version $tag_version does not match package version $package_version" >&2
+            exit 1
+          fi
+          gh release view "$RELEASE_TAG" >/dev/null
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check renderer syntax
+        run: node --check src/renderer/app.js
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build Intel and Apple Silicon packages
+        run: >-
+          ./node_modules/.bin/electron-builder
+          --mac dmg zip
+          --x64 --arm64
+          --config.artifactName='IS-VOL-${version}-mac-${arch}.${ext}'
+
+      - name: Verify packages and create checksums
+        shell: bash
+        run: |
+          file dist/mac/IS-VOL.app/Contents/MacOS/IS-VOL | grep -q x86_64
+          file dist/mac-arm64/IS-VOL.app/Contents/MacOS/IS-VOL | grep -q arm64
+          grep -q 'IS-VOL-.*-mac-x64.zip' dist/latest-mac.yml
+          grep -q 'IS-VOL-.*-mac-arm64.zip' dist/latest-mac.yml
+          cd dist
+          shasum -a 256 \
+            IS-VOL-*.dmg \
+            IS-VOL-*.dmg.blockmap \
+            IS-VOL-*.zip \
+            IS-VOL-*.zip.blockmap \
+            latest-mac.yml > SHA256SUMS-mac.txt
+
+      - name: Preserve workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ env.RELEASE_TAG }}
+          compression-level: 0
+          if-no-files-found: error
+          path: |
+            dist/IS-VOL-*.dmg
+            dist/IS-VOL-*.dmg.blockmap
+            dist/IS-VOL-*.zip
+            dist/IS-VOL-*.zip.blockmap
+            dist/latest-mac.yml
+            dist/SHA256SUMS-mac.txt
+
+      - name: Upload assets to GitHub Release
+        shell: bash
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            dist/IS-VOL-*.dmg \
+            dist/IS-VOL-*.dmg.blockmap \
+            dist/IS-VOL-*.zip \
+            dist/IS-VOL-*.zip.blockmap \
+            dist/latest-mac.yml \
+            dist/SHA256SUMS-mac.txt \
+            --clobber
