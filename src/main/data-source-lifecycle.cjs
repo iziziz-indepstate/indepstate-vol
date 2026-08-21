@@ -8,7 +8,7 @@ function normalizeControls(controls) {
     .filter((control) => control && typeof control.name === 'string' && control.name.trim())
     .map((control) => ({
       name: control.name.trim(),
-      type: ['checkbox', 'time', 'number', 'text'].includes(control.type) ? control.type : 'text',
+      type: ['checkbox', 'time', 'time-list', 'number', 'text'].includes(control.type) ? control.type : 'text',
       label: control.label || control.name.trim(),
       defaultValue: cloneJson(control.defaultValue),
       min: control.min,

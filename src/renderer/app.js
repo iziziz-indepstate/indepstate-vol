@@ -269,6 +269,14 @@ function normalizeLifecycleControlValue(control, value) {
     if (!match) return '';
     return `${match[1].padStart(2, '0')}:${match[2]}`;
   }
+  if (control?.type === 'time-list') {
+    const source = Array.isArray(value) ? value : String(value || '').split(/[,\s]+/);
+    return Array.from(new Set(
+      source
+        .map((item) => normalizeLifecycleControlValue({ type: 'time' }, item))
+        .filter(Boolean)
+    )).sort();
+  }
   if (control?.type === 'number') {
     const number = Number(value);
     return Number.isFinite(number) ? number : '';
@@ -281,6 +289,32 @@ function valueForLifecycleControl(tab, lifecycle, control) {
   if (settings[control.name] !== undefined) return normalizeLifecycleControlValue(control, settings[control.name]);
   if (lifecycle.values?.[control.name] !== undefined) return normalizeLifecycleControlValue(control, lifecycle.values[control.name]);
   return normalizeLifecycleControlValue(control, control.defaultValue);
+}
+
+function createLifecycleTimeListRow(lifecycleId, controlName, labelText, time, index) {
+  const row = document.createElement('div');
+  row.className = 'lifecycle-time-row';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.inputMode = 'numeric';
+  input.placeholder = 'HH:mm';
+  input.pattern = '^\\d{1,2}:\\d{2}$';
+  input.value = time || '';
+  input.dataset.lifecycleId = lifecycleId;
+  input.dataset.lifecycleControl = controlName;
+  input.dataset.lifecycleTimeListIndex = String(index);
+  const removeBtn = document.createElement('button');
+  removeBtn.type = 'button';
+  removeBtn.className = 'btn btn-compact btn-icon-only';
+  removeBtn.title = `Remove ${time || labelText}`;
+  removeBtn.setAttribute('aria-label', `Remove ${time || labelText}`);
+  removeBtn.dataset.lifecycleId = lifecycleId;
+  removeBtn.dataset.lifecycleTimeListRemove = controlName;
+  removeBtn.dataset.lifecycleTimeListIndex = String(index);
+  removeBtn.textContent = 'x';
+  row.appendChild(input);
+  row.appendChild(removeBtn);
+  return row;
 }
 
 function renderDataSourceLifecycleControls(tab) {
@@ -305,6 +339,40 @@ function renderDataSourceLifecycleControls(tab) {
     for (const control of Array.isArray(lifecycle.controls) ? lifecycle.controls : []) {
       const value = valueForLifecycleControl(tab, lifecycle, control);
       const label = document.createElement('label');
+      if (control.type === 'time-list') {
+        label.className = 'lifecycle-time-list-field';
+        const header = document.createElement('div');
+        header.className = 'lifecycle-time-list-header';
+        const text = document.createElement('span');
+        text.textContent = control.label || control.name;
+        const addBtn = document.createElement('button');
+        addBtn.type = 'button';
+        addBtn.className = 'btn btn-compact btn-icon-only';
+        addBtn.title = `Add ${control.label || control.name}`;
+        addBtn.setAttribute('aria-label', `Add ${control.label || control.name}`);
+        addBtn.dataset.lifecycleId = lifecycle.id;
+        addBtn.dataset.lifecycleTimeListAdd = control.name;
+        addBtn.textContent = '+';
+        header.appendChild(text);
+        header.appendChild(addBtn);
+        label.appendChild(header);
+
+        const list = document.createElement('div');
+        list.className = 'lifecycle-time-list';
+        const times = Array.isArray(value) && value.length ? value : [''];
+        times.forEach((time, index) => {
+          list.appendChild(createLifecycleTimeListRow(
+            lifecycle.id,
+            control.name,
+            control.label || control.name,
+            time,
+            index
+          ));
+        });
+        label.appendChild(list);
+        grid.appendChild(label);
+        continue;
+      }
       const input = document.createElement('input');
       input.dataset.lifecycleId = lifecycle.id;
       input.dataset.lifecycleControl = control.name;
@@ -333,6 +401,35 @@ function renderDataSourceLifecycleControls(tab) {
     section.appendChild(grid);
     root.appendChild(section);
   }
+}
+
+function lifecycleControlFor(tab, lifecycleId, controlName, fallbackType = 'text') {
+  const lifecycle = (lifecycleUiByTab[tab?.id] || []).find((item) => item.id === lifecycleId);
+  return (lifecycle?.controls || []).find((item) => item.name === controlName) || { name: controlName, type: fallbackType };
+}
+
+function writeLifecycleSettings(tab, lifecycleId, controlName, value) {
+  const control = lifecycleControlFor(tab, lifecycleId, controlName);
+  const settings = lifecycleSettingsFor(tab, lifecycleId);
+  settings[controlName] = normalizeLifecycleControlValue(control, value);
+  persistUiState();
+  if (typeof window.appBridge?.updateDataSourceLifecycleSettings !== 'function') return;
+  window.appBridge.updateDataSourceLifecycleSettings({
+    tabId: tab.id,
+    lifecycleId,
+    values: { ...settings },
+    tabs: state.tabs,
+    runningTabIds: runningTabIds()
+  }).then((response) => {
+    updateLifecycleUiFromResponse(response);
+    renderDataSourceLifecycleControls(activeTab());
+  }).catch((err) => console.warn('Failed to update datasource lifecycle settings', err));
+}
+
+function readTimeListInputs(tab, lifecycleId, controlName) {
+  return Array.from(document.querySelectorAll(
+    `input[data-lifecycle-id="${lifecycleId}"][data-lifecycle-control="${controlName}"][data-lifecycle-time-list-index]`
+  )).map((input) => input.value);
 }
 
 function persist() {
@@ -2482,26 +2579,41 @@ function bindEvents() {
     const controlName = input?.dataset?.lifecycleControl;
     const tab = activeTab();
     if (!tab || !lifecycleId || !controlName) return;
-    const lifecycle = (lifecycleUiByTab[tab.id] || []).find((item) => item.id === lifecycleId);
-    const control = (lifecycle?.controls || []).find((item) => item.name === controlName) || { name: controlName, type: input.type };
-    const settings = lifecycleSettingsFor(tab, lifecycleId);
-    settings[controlName] = normalizeLifecycleControlValue(
-      control,
-      input.type === 'checkbox' ? Boolean(input.checked) : input.value
-    );
-    if (input.type !== 'checkbox') input.value = settings[controlName];
-    persistUiState();
-    if (typeof window.appBridge?.updateDataSourceLifecycleSettings === 'function') {
-      window.appBridge.updateDataSourceLifecycleSettings({
-        tabId: tab.id,
+    const control = lifecycleControlFor(tab, lifecycleId, controlName, input.type);
+    const rawValue = control.type === 'time-list'
+      ? readTimeListInputs(tab, lifecycleId, controlName)
+      : (input.type === 'checkbox' ? Boolean(input.checked) : input.value);
+    const normalized = normalizeLifecycleControlValue(control, rawValue);
+    if (control.type === 'time' && input.type !== 'checkbox') input.value = normalized;
+    writeLifecycleSettings(tab, lifecycleId, controlName, normalized);
+  });
+
+  $('dataSourceLifecycleControls')?.addEventListener('click', (evt) => {
+    const button = evt.target.closest('button');
+    const tab = activeTab();
+    if (!button || !tab) return;
+    const lifecycleId = button.dataset.lifecycleId;
+    const addControlName = button.dataset.lifecycleTimeListAdd;
+    const removeControlName = button.dataset.lifecycleTimeListRemove;
+    if (lifecycleId && addControlName) {
+      const list = button.closest('.lifecycle-time-list-field')?.querySelector('.lifecycle-time-list');
+      if (!list) return;
+      const index = list.querySelectorAll('input[data-lifecycle-time-list-index]').length;
+      list.appendChild(createLifecycleTimeListRow(
         lifecycleId,
-        values: { ...settings },
-        tabs: state.tabs,
-        runningTabIds: runningTabIds()
-      }).then((response) => {
-        updateLifecycleUiFromResponse(response);
-        renderDataSourceLifecycleControls(activeTab());
-      }).catch((err) => console.warn('Failed to update datasource lifecycle settings', err));
+        addControlName,
+        addControlName,
+        '',
+        index
+      ));
+      list.querySelector(`input[data-lifecycle-time-list-index="${index}"]`)?.focus();
+      return;
+    }
+    if (lifecycleId && removeControlName) {
+      const index = Number(button.dataset.lifecycleTimeListIndex);
+      const current = readTimeListInputs(tab, lifecycleId, removeControlName);
+      const next = current.filter((_item, idx) => idx !== index);
+      writeLifecycleSettings(tab, lifecycleId, removeControlName, next);
     }
   });
 }

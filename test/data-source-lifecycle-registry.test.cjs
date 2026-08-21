@@ -41,7 +41,8 @@ test('ui extensions include default and persisted lifecycle settings', () => {
     title: 'Matching',
     controls: [
       { name: 'enabled', type: 'checkbox', defaultValue: false },
-      { name: 'startTime', type: 'time', defaultValue: '' }
+      { name: 'startTime', type: 'time', defaultValue: '' },
+      { name: 'times', type: 'time-list', defaultValue: [] }
     ]
   });
 
@@ -49,7 +50,8 @@ test('ui extensions include default and persisted lifecycle settings', () => {
   const ui = registry.getUiExtensions();
 
   assert.equal(ui['tab-1'][0].id, 'matching');
-  assert.deepEqual(ui['tab-1'][0].values, { enabled: true, startTime: '' });
+  assert.equal(ui['tab-1'][0].controls[2].type, 'time-list');
+  assert.deepEqual(ui['tab-1'][0].values, { enabled: true, startTime: '', times: [] });
 });
 
 test('removing a datasource cleans up its lifecycle instance', async () => {

@@ -1,15 +1,24 @@
-const { createAutoLaunchLifecycle } = require('./auto-launch-datasource/lifecycle.cjs');
+const {
+  createAutoLaunchLifecycle,
+  createScheduledRefreshLifecycle
+} = require('./auto-launch-datasource/lifecycle.cjs');
 
-const autoLaunchDataSourcePlugin = {
-  id: 'auto-launch-datasource',
-  title: 'Auto Launch DataSource',
+const dataSourceLifecycleToolsPlugin = {
+  id: 'datasource-lifecycle-tools',
+  title: 'DataSource Lifecycle Tools',
   activateMain(context) {
-    return context?.dataSources?.registerLifecycle?.(createAutoLaunchLifecycle());
+    const cleanups = [
+      context?.dataSources?.registerLifecycle?.(createAutoLaunchLifecycle()),
+      context?.dataSources?.registerLifecycle?.(createScheduledRefreshLifecycle())
+    ].filter((cleanup) => typeof cleanup === 'function');
+    return () => {
+      for (const cleanup of cleanups.reverse()) cleanup();
+    };
   }
 };
 
 const appMainPluginManifests = [
-  autoLaunchDataSourcePlugin
+  dataSourceLifecycleToolsPlugin
 ];
 
 function activateMainAppPlugins(manifests, context) {
