@@ -12,3 +12,5 @@
 - Upload the hyphenated NSIS assets from `latest.yml`, e.g. `IS-VOL-Setup-X.Y.Z.exe` and `.blockmap`; do not upload renamed dotted assets.
 - If `gh` fails oddly, clear process proxy/token env vars first: `GH_TOKEN`, `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, `GIT_HTTP_PROXY`, `GIT_HTTPS_PROXY`.
 - After publishing, verify with `gh release view vX.Y.Z --json assets` and confirm `latest.yml`, installer, and blockmap are present with matching names.
+- Publishing a GitHub Release triggers `.github/workflows/macos-release.yml`, which builds and uploads x64 and arm64 DMG/ZIP assets plus a combined `latest-mac.yml`.
+- To backfill an existing release, run the **Build macOS release** workflow manually with its `vX.Y.Z` tag.
