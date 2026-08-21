@@ -58,34 +58,11 @@ jobs:
       - name: Run tests
         run: npm test
 
-      - name: Create complete ad-hoc signing hook
-        shell: bash
-        run: |
-          cat > "$RUNNER_TEMP/adhoc-sign-mac.cjs" <<'HOOK'
-          const { execFileSync } = require("node:child_process")
-          const path = require("node:path")
-
-          module.exports = async function adhocSignMac(context) {
-            if (context.electronPlatformName !== "darwin") return
-
-            const appPath = path.join(
-              context.appOutDir,
-              `${context.packager.appInfo.productFilename}.app`
-            )
-            execFileSync(
-              "codesign",
-              ["--force", "--deep", "--sign", "-", appPath],
-              { stdio: "inherit" }
-            )
-          }
-          HOOK
-
       - name: Build Intel and Apple Silicon packages
         run: >-
           ./node_modules/.bin/electron-builder
           --mac dmg zip
           --x64 --arm64
-          --config.afterPack="$RUNNER_TEMP/adhoc-sign-mac.cjs"
           --config.artifactName='IS-VOL-${version}-mac-${arch}.${ext}'
 
       - name: Verify packages and create checksums
@@ -93,8 +70,6 @@ jobs:
         run: |
           file dist/mac/IS-VOL.app/Contents/MacOS/IS-VOL | grep -q x86_64
           file dist/mac-arm64/IS-VOL.app/Contents/MacOS/IS-VOL | grep -q arm64
-          codesign --verify --deep --strict --verbose=4 dist/mac/IS-VOL.app
-          codesign --verify --deep --strict --verbose=4 dist/mac-arm64/IS-VOL.app
           grep -q 'IS-VOL-.*-mac-x64.zip' dist/latest-mac.yml
           grep -q 'IS-VOL-.*-mac-arm64.zip' dist/latest-mac.yml
           cd dist
