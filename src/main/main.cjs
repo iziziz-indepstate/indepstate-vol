@@ -6,6 +6,7 @@ const { createMarketDataService } = require('./market-data-providers.cjs');
 const { startAutoUpdater } = require('./auto-updater.cjs');
 const { startMcpServer } = require('./mcp-server.cjs');
 const { defaultRawSnapshotDir, saveRawSnapshotAsync } = require('./raw-snapshot-store.cjs');
+const { defaultAtmStraddleSnapshotDir, saveAtmStraddleSnapshotAsync } = require('./atm-straddle-snapshot-store.cjs');
 const { createDataSourceLifecycleRegistry } = require('./data-source-lifecycle.cjs');
 const profiler = require('./profiler.cjs');
 
@@ -349,6 +350,14 @@ app.whenReady().then(async () => {
       tabId: payload?.tab?.id,
       providerKey: payload?.tab?.providerKey
     }, () => saveRawSnapshotAsync(defaultRawSnapshotDir(app), payload || {}));
+  });
+
+  ipcMain.handle('atm-straddle-snapshot:save', async (_evt, payload) => {
+    return profiler.measure('atm-straddle-snapshot:save', {
+      symbol: payload?.snapshot?.symbol,
+      tenor: payload?.snapshot?.tenor,
+      expiry: payload?.snapshot?.expiry
+    }, () => saveAtmStraddleSnapshotAsync(defaultAtmStraddleSnapshotDir(app), payload || {}));
   });
 
   ipcMain.handle('market-data:load-local-series', async (_evt, source) => {

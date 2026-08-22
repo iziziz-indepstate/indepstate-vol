@@ -114,6 +114,10 @@ function renderControls(cfg) {
         <input data-straddle-param="compact" type="checkbox" ${cfg.compact ? 'checked' : ''} />
         Compact
       </label>
+      <label class="straddle-checkbox">
+        <input data-straddle-param="saveSnapshot" type="checkbox" ${cfg.saveSnapshot ? 'checked' : ''} />
+        Save snapshot
+      </label>
     </div>
   `;
 }
@@ -316,6 +320,20 @@ function renderCompact(snapshot, priceHistory) {
 
 const BROADCAST_PARAMS = new Set(['atmStrikeOverride', 'manualReferencePrice']);
 
+function hasSaveableSnapshotPoint(result) {
+  return Number.isFinite(result?.atmStrike)
+    && Number.isFinite(result?.referencePrice)
+    && Number.isFinite(result?.straddle?.mid);
+}
+
+function saveAtmStraddleSnapshotDeferred(payload) {
+  if (typeof window.appBridge?.saveAtmStraddleSnapshot !== 'function') return;
+  setTimeout(() => {
+    window.appBridge.saveAtmStraddleSnapshot(payload)
+      .catch((err) => console.warn('Failed to save ATM straddle snapshot', err));
+  }, 750);
+}
+
 function bindControls(container, widget, onConfigChange, onConfigBroadcast) {
   container.querySelectorAll('[data-straddle-param]').forEach((el) => {
     el.addEventListener('change', (evt) => {
@@ -356,7 +374,8 @@ export const atmStraddleWidget = {
     expirySelectionMode: 'nearest',
     quoteMode: 'mid',
     compareTo: 'previous_close',
-    compact: false
+    compact: false,
+    saveSnapshot: false
   },
   render: async ({ container, snapshot, history, widget, widgetData, onConfigChange, onConfigBroadcast }) => {
     const renderVersion = (renderVersions.get(container) || 0) + 1;
@@ -378,9 +397,9 @@ export const atmStraddleWidget = {
 
     try {
       const referenceParams = manualReferenceParams(cfg);
+      const effectiveConfig = { ...cfg, ...referenceParams };
       const result = await calculateAtmStraddle({
-        ...cfg,
-        ...referenceParams,
+        ...effectiveConfig,
         expiryOverride: cfg.expiryOverride || undefined,
         snapshot,
         snapshotTime: snapshot.time,
@@ -397,6 +416,14 @@ export const atmStraddleWidget = {
         snapshot: result,
         priceHistory
       });
+      if (cfg.saveSnapshot && hasSaveableSnapshotPoint(result)) {
+        saveAtmStraddleSnapshotDeferred({
+          title: widget.title || atmStraddleWidget.defaultTitle,
+          config: effectiveConfig,
+          snapshot: result,
+          sourceSnapshotTime: snapshot.time
+        });
+      }
       container.innerHTML = `${renderControls(cfg)}${body}`;
       bindControls(container, widget, onConfigChange, onConfigBroadcast);
       if (renderVersions.get(container) === renderVersion) {

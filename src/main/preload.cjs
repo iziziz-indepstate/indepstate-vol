@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('appBridge', {
   saveUiState: (uiState) => ipcRenderer.invoke('state:save-ui', uiState),
   appendHistoryPoint: (payload) => ipcRenderer.invoke('state:append-history-point', payload),
   saveRawSnapshot: (payload) => ipcRenderer.invoke('raw-snapshot:save', payload),
+  saveAtmStraddleSnapshot: (payload) => ipcRenderer.invoke('atm-straddle-snapshot:save', payload),
   loadLocalMarketSeries: (source) => ipcRenderer.invoke('market-data:load-local-series', source),
   getDailyMarketHistory: (params) => ipcRenderer.invoke('market-data:get-daily-history', params),
   getTradingViewSnapshot: (params) => ipcRenderer.invoke('tradingview:get-snapshot', params),
