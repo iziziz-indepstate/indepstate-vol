@@ -4,7 +4,13 @@ import { getWidgetDefinition, widgetDefinitions } from './widgets/index.js';
 import { createWidgetCard, createWidgetChartForDefinition } from './widgets/widget-renderers.js';
 import { skewMetrics } from './widgets/metrics.js';
 import { createWidgetEventBus } from './widget-event-bus.js';
+import { createWidgetDataPublishBus } from './widget-data-publish-bus.js';
 import { activateAppPlugins, appPluginManifests } from '../plugins/index.js';
+import {
+  applicableWidgetExtensions,
+  normalizeWidgetPluginConfig,
+  writeWidgetExtensionControlValue
+} from './widget-extensions.js';
 import {
   normalizeWidgetParamValue,
   shouldRefreshOnWidgetParamChange,
@@ -48,6 +54,7 @@ const chartInstances = new Map();
 const widgetDataStore = new Map();
 const mcpRuntimeStore = createMcpRuntimeStore();
 const widgetEventBus = createWidgetEventBus();
+const widgetDataPublishBus = createWidgetDataPublishBus();
 const lifecycleUiByTab = {};
 let tabContextTargetId = null;
 let renameTargetTabId = null;
@@ -761,6 +768,9 @@ function widgetDataKey(tabId, widgetId) {
 
 function publishWidgetData(tabId, widgetId, data, sourceSnapshotTime = null) {
   if (!tabId || !widgetId) return;
+  const tab = state.tabs.find((item) => item.id === tabId) || null;
+  const widget = tab?.widgets?.find((item) => item.id === widgetId) || null;
+  const definition = widget ? getWidgetDefinition(widget.type) : null;
   const output = {
     ...data,
     tabId,
@@ -776,6 +786,13 @@ function publishWidgetData(tabId, widgetId, data, sourceSnapshotTime = null) {
     title: data?.title || null,
     sourceSnapshotTime,
     output
+  });
+  widgetDataPublishBus.publish({
+    tab,
+    widget,
+    definition,
+    output,
+    sourceSnapshotTime
   });
 }
 
@@ -842,7 +859,9 @@ function bindMcpRuntimeBridge() {
 function bindWidgetEventSubscribers() {
   activateAppPlugins(appPluginManifests, {
     eventBus: widgetEventBus,
+    widgetDataEvents: widgetDataPublishBus,
     getWidgetDefinition,
+    appBridge: window.appBridge,
     clipboard: {
       writeText: (text) => navigator.clipboard.writeText(text)
     },
@@ -1217,8 +1236,11 @@ async function renderWidgets() {
         if (widget.config[k] == null) widget.config[k] = v;
       });
     }
+    normalizeWidgetPluginConfig(widget, appPluginManifests);
 
-    grid.appendChild(createWidgetCard(widget, definition));
+    grid.appendChild(createWidgetCard(widget, definition, {
+      widgetExtensions: applicableWidgetExtensions(appPluginManifests, widget, definition)
+    }));
   }
 
   const sidecar = document.createElement('aside');
@@ -1380,6 +1402,7 @@ async function renderWidgets() {
   });
 
   const widgetParamSelector = '[data-widget-param-widget-id][data-widget-param-name]';
+  const widgetExtensionSelector = '[data-widget-extension-widget-id][data-widget-extension-plugin-id][data-widget-extension-control]';
 
   function setWidgetParamValue(wid, paramName, rawValue) {
     const target = tab.widgets.find((w) => w.id === wid);
@@ -1448,6 +1471,22 @@ async function renderWidgets() {
             .map((widget) => refreshWidget(widget.id))
         ).catch((err) => console.error('Failed to refresh broadcast widget params', err));
       }
+      persistUiState();
+    });
+  });
+
+  root.querySelectorAll(widgetExtensionSelector).forEach((input) => {
+    input.addEventListener('change', (evt) => {
+      const wid = evt.target.dataset.widgetExtensionWidgetId;
+      const pluginId = evt.target.dataset.widgetExtensionPluginId;
+      const controlName = evt.target.dataset.widgetExtensionControl;
+      const target = tab.widgets.find((w) => w.id === wid);
+      if (!target || !pluginId || !controlName) return;
+      const definition = getWidgetDefinition(target.type);
+      const extensions = applicableWidgetExtensions(appPluginManifests, target, definition);
+      const extension = extensions.find((item) => item.pluginId === pluginId);
+      const rawValue = evt.target.type === 'checkbox' ? evt.target.checked : evt.target.value;
+      if (!writeWidgetExtensionControlValue(target, extension, controlName, rawValue)) return;
       persistUiState();
     });
   });

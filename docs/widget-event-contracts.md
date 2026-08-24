@@ -69,7 +69,7 @@ Historical overlay datasets are ignored by the point-click producer.
 
 ## App Plugins
 
-Plugins are first-class consumers of widget data and widget events. A plugin lives under `src/plugins/<plugin-id>/` and exposes a `manifest.js` module.
+Plugins are first-class consumers of widget data and widget events. A plugin lives under `src/plugins/<plugin-id>/` and exposes a `manifest.js` module. For per-widget plugin controls and data publish hooks, see [Widget Plugin Extensions](widget-plugin-extensions.md).
 
 The manifest is the plugin's initialization contract:
 
@@ -78,6 +78,7 @@ type AppPluginManifest = {
   id: string
   title?: string
   eventSubscriptions?: string[]
+  widgetExtensions?: WidgetExtension[]
   activate(context: AppPluginContext): void | (() => void)
 }
 ```
@@ -87,7 +88,9 @@ The app imports manifests through `src/plugins/index.js` and activates them with
 ```ts
 type AppPluginContext = {
   eventBus: WidgetEventBus
+  widgetDataEvents: WidgetDataPublishBus
   getWidgetDefinition(type: string): WidgetDefinition | null
+  appBridge: WindowAppBridge
   clipboard: {
     writeText(text: string): Promise<void>
   }

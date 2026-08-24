@@ -21,6 +21,8 @@ The widget answers:
 - `Compare`: `previous_close`, `previous_snapshot`, or `none`. The app uses stored option-chain snapshots from the current tab. If comparison data is unavailable, the widget still renders the current value and shows comparison unavailable.
 - `Compact`: dashboard-card layout with headline values only.
 
+Optional snapshot saving is not a widget-owned body control. It is provided by the `atm-straddle-snapshot` renderer plugin as a widget header extension. Details: [ATM Straddle Snapshot Plugin](atm-straddle-snapshot-plugin.md).
+
 ## Price History
 
 The widget renders a small straddle-price sparkline above the text output. It recalculates the same selected tenor, expiry override, ATM strike override, and reference-price mode across the current tab history.

@@ -2,7 +2,7 @@
 
 Widgets can act as derived data sources inside the dashboard.
 
-For interaction events, use the parallel event contract architecture described in [Widget Event Contracts](widget-event-contracts.md).
+For interaction events, use the parallel event contract architecture described in [Widget Event Contracts](widget-event-contracts.md). For plugin-owned widget controls and data-publish subscribers, use [Widget Plugin Extensions](widget-plugin-extensions.md).
 
 The primary market-data provider still owns raw snapshots. A widget may then transform that snapshot into a structured output and publish it through the renderer's local widget data store. Other widgets should consume that published output instead of re-running the producer widget's calculation.
 
@@ -107,6 +107,8 @@ The first implementation calculates this output in the renderer from history and
 ## Implementation Notes
 
 - The widget data store is local to the renderer runtime.
+- `publishWidgetData` notifies plugin data subscribers after updating the widget data store and MCP runtime store.
+- Widget data subscriber failures are caught and logged; they must not break widget rendering.
 - Full dashboard refresh renders producer table widgets before widget-data consumers.
 - When a `Straddle ATM` config changes, dependent `Vol Upfront` widgets are refreshed after the source output is republished.
 - Exact persistence of widget outputs is intentionally not implemented yet; outputs are recalculated from current snapshots and widget configs.

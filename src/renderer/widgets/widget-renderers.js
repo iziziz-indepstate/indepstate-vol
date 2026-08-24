@@ -1,4 +1,5 @@
 import { WIDGET_PARAM_NAMES } from './widget-params.js';
+import { createWidgetExtensionControlsHtml } from '../widget-extensions.js';
 
 let chartJsLoadPromise = null;
 let uPlotLoadPromise = null;
@@ -33,7 +34,7 @@ export async function ensureUPlotRuntime() {
   return mod.default || mod.uPlot || mod;
 }
 
-export function createWidgetCard(widget, definition) {
+export function createWidgetCard(widget, definition, options = {}) {
   const card = document.createElement('article');
   card.className = 'widget-card';
   if (widget.collapsed) card.classList.add('widget-card-collapsed');
@@ -64,7 +65,8 @@ export function createWidgetCard(widget, definition) {
   const timeRangeValue = String(widget?.config?.range ?? definition?.defaultConfig?.range ?? '1M');
   const mirrorXChecked = Boolean(widget?.config?.mirrorX ?? definition?.defaultConfig?.mirrorX);
   const isNDateSkewWidget = String(widget?.type || '').startsWith('ndate-skew-');
-  const controls = Object.keys(controlsConfig).length
+  const extensionControls = createWidgetExtensionControlsHtml(widget, options.widgetExtensions || []);
+  const controls = Object.keys(controlsConfig).length || extensionControls
     ? `<div class="widget-controls widget-controls-inline">
         ${controlsConfig.strike ? `<label class="widget-control">S
           <input type="${strikeInputType}" class="widget-strike-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.BASE_STRIKE}" value="${strikeValue}" step="1" placeholder="ATM или 500" />
@@ -105,6 +107,7 @@ export function createWidgetCard(widget, definition) {
         ${isNDateSkewWidget ? `<div class="widget-control widget-history-control">
           <button type="button" class="widget-history-toggle" data-widget-history-toggle-widget-id="${widget.id}" title="History">H</button>
         </div>` : ''}
+        ${extensionControls}
        </div>`
     : '';
 

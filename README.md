@@ -17,6 +17,7 @@ npm start
 - **Widget abstraction**: each widget lives in `src/renderer/widgets/` and is composed through the central widget registry.
 - **Widget data outputs**: widgets can publish structured outputs for other widgets to consume. This makes derived widgets depend on widget contracts instead of recalculating upstream logic. Details: [Widget Data Contracts](docs/widget-data-contracts.md).
 - **Widget events and plugins**: widgets declare interaction event contracts and publish demand-driven events through scoped event ports. App plugins subscribe to those events for side effects such as clipboard commands. Details: [Widget Event Contracts](docs/widget-event-contracts.md).
+- **Widget plugin extensions**: renderer plugins can add per-widget controls and subscribe to widget data publish events without moving side effects into widgets. Details: [Widget Plugin Extensions](docs/widget-plugin-extensions.md).
 - **nDate generic engine**: put/call nDate widgets are created from one generic parameterized implementation.
 - **Metric abstraction**: metric definitions (`key` + `compute`) live in `src/renderer/widgets/metrics.js` and are passed into providers for calculation.
 - **Dashboard tabs**: each tab stores its own provider config and widget list.
@@ -26,7 +27,7 @@ npm start
 
 ## Included Widgets
 
-- **Straddle ATM**: text widget for the selected symbol and expiry tenor. It selects expiry, picks the ATM call/put pair, calculates the ATM straddle, implied move, expected range, ATM IV, quote quality, and comparison state. `ATM K` accepts an exact strike or `ATM`. Details: [Straddle ATM Widget](docs/atm-straddle-widget.md).
+- **Straddle ATM**: text widget for the selected symbol and expiry tenor. It selects expiry, picks the ATM call/put pair, calculates the ATM straddle, implied move, expected range, ATM IV, quote quality, and comparison state. `ATM K` accepts an exact strike or `ATM`. Optional snapshot persistence is provided by the [ATM Straddle Snapshot Plugin](docs/atm-straddle-snapshot-plugin.md). Details: [Straddle ATM Widget](docs/atm-straddle-widget.md).
 - **Vol Upfront**: chart and table widget that reads Straddle ATM widgets on the same tab and calculates adjacent forward volatility segments. Details: [Vol Upfront Widget](docs/vol-upfront-widget.md).
 - **ATM Call-Put Skew**: time series for `dAtm = callATM.iv - putATM.iv`.
 - **+/-3 Strike Put-Call Skew**: time series for `dTail = put(-steps).bid_iv - call(+steps).bid_iv`.

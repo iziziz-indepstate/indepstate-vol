@@ -1,6 +1,8 @@
+import atmStraddleSnapshotPlugin from './atm-straddle-snapshot/manifest.js';
 import nDateStrikeClipboardPlugin from './ndate-strike-clipboard/manifest.js';
 
 export const appPluginManifests = [
+  atmStraddleSnapshotPlugin,
   nDateStrikeClipboardPlugin
 ];
 
