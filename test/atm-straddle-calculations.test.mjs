@@ -135,6 +135,7 @@ test('calculates straddle mid, bid/ask aggregation, implied move, and expected r
   }, 6024.33);
 
   const result = await calculateAtmStraddle({ snapshot: snap, tenor: '1W', snapshotTime: time, compareTo: 'none' });
+  assert.equal(result.snapshotTime, time);
   assert.equal(result.atmStrike, 6025);
   assert.equal(result.call.mid, 58.2);
   assert.equal(result.put.mid, 54.7);

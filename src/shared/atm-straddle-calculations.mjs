@@ -305,6 +305,7 @@ function computeFromSnapshot(snapshot, params = {}) {
     symbol,
     tenor,
     expiry: selected.expiry,
+    snapshotTime,
     dte: selected.dte,
     expirySelectionMode: selected.selectionMode,
     referencePrice: ref.value,
