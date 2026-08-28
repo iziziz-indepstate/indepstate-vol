@@ -717,13 +717,14 @@ select option {
   margin-top: 8px;
 }
 
-.widget-card-collapsed .widget-body > :not(.straddle-controls):not(.ivrv-controls):not(.spread-opt-controls) {
+.widget-card-collapsed .widget-body > :not(.straddle-controls):not(.ivrv-controls):not(.spread-opt-controls):not(.straddle-snapshot-controls):not(.straddle-snapshot-settings) {
   display: none !important;
 }
 
 .widget-card-collapsed .straddle-controls,
 .widget-card-collapsed .ivrv-controls,
-.widget-card-collapsed .spread-opt-controls {
+.widget-card-collapsed .spread-opt-controls,
+.widget-card-collapsed .straddle-snapshot-controls {
   margin-bottom: 0;
 }
 
@@ -807,6 +808,113 @@ select option {
 
 .spread-opt-eff.good { color: #22c55e; }
 .spread-opt-eff.bad { color: #ef4444; }
+
+.straddle-snapshot-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+
+.straddle-snapshot-settings {
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 6px;
+  padding: 6px;
+}
+
+.straddle-snapshot-settings summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  list-style-position: inside;
+}
+
+.straddle-snapshot-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.straddle-snapshot-line {
+  display: grid;
+  grid-template-columns: minmax(72px, 1fr) minmax(82px, 1fr) 28px;
+  gap: 6px;
+  align-items: end;
+}
+
+.straddle-snapshot-line-add {
+  margin-top: 7px;
+  min-height: 26px;
+}
+
+.straddle-snapshot-line-remove {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.straddle-snapshot-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 10px;
+  color: var(--muted);
+  min-width: 92px;
+}
+
+.straddle-snapshot-controls .straddle-snapshot-time-label {
+  min-width: 44px;
+  width: 54px;
+}
+
+.straddle-snapshot-controls input,
+.straddle-snapshot-controls select {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 5px 7px;
+  font-size: 12px;
+}
+
+.straddle-snapshot-chart {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  min-height: 220px;
+  overflow: hidden;
+}
+
+.straddle-snapshot-chart .uplot {
+  max-width: 100%;
+}
+
+.straddle-snapshot-status {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.straddle-snapshot-tooltip {
+  position: absolute;
+  z-index: 4;
+  min-width: 170px;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+  padding: 7px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: rgba(12, 16, 28, 0.94);
+  color: var(--text);
+  font-size: 11px;
+  pointer-events: none;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28);
+}
 
 .ivrv-controls {
   display: grid;

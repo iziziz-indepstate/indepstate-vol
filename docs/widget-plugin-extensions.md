@@ -123,4 +123,4 @@ Subscriber failures are caught and logged by the publish bus. They must never bl
 
 ## Current Built-In Extensions
 
-- `atm-straddle-snapshot`: adds `Save snapshot` to `Straddle ATM` widgets and saves valid `atm-straddle` data outputs through the existing main-process IPC boundary.
+- `atm-straddle-snapshot`: adds `Save snapshot` to `Straddle ATM` widgets and saves valid `atm-straddle:point` widget events through the existing main-process IPC boundary.

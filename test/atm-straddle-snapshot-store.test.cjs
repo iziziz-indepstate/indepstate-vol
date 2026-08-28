@@ -6,6 +6,7 @@ const path = require('path');
 const {
   defaultAtmStraddleSnapshotDir,
   atmStraddleSnapshotFileName,
+  loadAtmStraddleSnapshots,
   saveAtmStraddleSnapshot,
   saveAtmStraddleSnapshotAsync
 } = require('../src/main/atm-straddle-snapshot-store.cjs');
@@ -186,4 +187,124 @@ test('saveAtmStraddleSnapshotAsync serializes concurrent writes to the same file
   assert.equal(firstResult.file, secondResult.file);
   assert.equal(document.points.length, 2);
   assert.deepEqual(document.points.map((point) => point.straddlePts), [82.4, 83.2]);
+});
+
+test('loadAtmStraddleSnapshots loads valid daily documents', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'is-vol-atm-straddle-'));
+  saveAtmStraddleSnapshot(directory, payload());
+
+  const result = loadAtmStraddleSnapshots(directory, { tenor: '1W' });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.directory, directory);
+  assert.equal(result.warnings.length, 0);
+  assert.equal(result.documents.length, 1);
+  assert.equal(result.documents[0].kind, 'atm-straddle-daily-snapshot');
+  assert.equal(result.documents[0].identity.tenor, '1W');
+  assert.equal(result.documents[0].points[0].straddlePts, 82.4);
+  assert.match(result.documents[0].source.filename, /^atm-straddle_/);
+});
+
+test('loadAtmStraddleSnapshots filters by tenor and date range', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'is-vol-atm-straddle-'));
+  saveAtmStraddleSnapshot(directory, payload({
+    sourceSnapshotTime: '2026-08-21T13:30:00.000Z',
+    config: { tenor: '1W' },
+    snapshot: { tenor: '1W', expiry: '2026-08-28' }
+  }));
+  saveAtmStraddleSnapshot(directory, payload({
+    sourceSnapshotTime: '2026-08-22T13:30:00.000Z',
+    config: { tenor: '0DTE' },
+    snapshot: { tenor: '0DTE', expiry: '2026-08-22' }
+  }));
+  saveAtmStraddleSnapshot(directory, payload({
+    sourceSnapshotTime: '2026-08-23T13:30:00.000Z',
+    config: { tenor: '1W' },
+    snapshot: { tenor: '1W', expiry: '2026-08-30' }
+  }));
+
+  const result = loadAtmStraddleSnapshots(directory, {
+    tenor: '1W',
+    startDate: '2026-08-22',
+    endDate: '2026-08-24'
+  });
+
+  assert.deepEqual(result.documents.map((document) => document.date), ['2026-08-23']);
+});
+
+test('loadAtmStraddleSnapshots skips malformed and wrong-kind files with warnings', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'is-vol-atm-straddle-'));
+  fs.writeFileSync(path.join(directory, 'broken.json'), '{ nope', 'utf-8');
+  fs.writeFileSync(path.join(directory, 'wrong.json'), JSON.stringify({ kind: 'other', version: 1 }), 'utf-8');
+  saveAtmStraddleSnapshot(directory, payload());
+
+  const result = loadAtmStraddleSnapshots(directory, { tenor: '1W' });
+
+  assert.equal(result.documents.length, 1);
+  assert.equal(result.warnings.length, 2);
+});
+
+test('loadAtmStraddleSnapshots keeps the last same-date same-identity document', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'is-vol-atm-straddle-'));
+  const base = {
+    kind: 'atm-straddle-daily-snapshot',
+    version: 1,
+    date: '2026-08-21',
+    identity: {
+      symbol: 'SPX',
+      tenor: '0DTE',
+      expiry: '2026-08-21',
+      atmStrikeOverride: 'ATM',
+      manualReferencePrice: 'ATM',
+      referencePriceMode: 'spot',
+      quoteMode: 'mid'
+    },
+    summary: {},
+    updatedAt: '2026-08-21T12:00:00.000Z'
+  };
+  fs.writeFileSync(path.join(directory, 'a.json'), JSON.stringify({
+    ...base,
+    points: [{ time: '2026-08-21T12:00:00.000Z', atmStrike: 6500, spot: 6490, straddlePts: 20 }]
+  }), 'utf-8');
+  fs.writeFileSync(path.join(directory, 'b.json'), JSON.stringify({
+    ...base,
+    points: [{ time: '2026-08-21T12:01:00.000Z', atmStrike: 6505, spot: 6495, straddlePts: 21 }]
+  }), 'utf-8');
+
+  const result = loadAtmStraddleSnapshots(directory, { tenor: '0DTE' });
+
+  assert.equal(result.documents.length, 1);
+  assert.equal(result.documents[0].source.filename, 'b.json');
+  assert.equal(result.documents[0].points[0].straddlePts, 21);
+});
+
+test('loadAtmStraddleSnapshots keeps different same-date identities separate', () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'is-vol-atm-straddle-'));
+  saveAtmStraddleSnapshot(directory, payload({
+    sourceSnapshotTime: '2026-08-21T13:30:00.000Z',
+    config: { tenor: '0DTE', atmStrikeOverride: 'ATM' },
+    snapshot: { tenor: '0DTE', expiry: '2026-08-21', atmStrike: 6500 }
+  }));
+  saveAtmStraddleSnapshot(directory, payload({
+    sourceSnapshotTime: '2026-08-21T13:35:00.000Z',
+    config: { tenor: '0DTE', atmStrikeOverride: '6510' },
+    snapshot: { tenor: '0DTE', expiry: '2026-08-21', atmStrike: 6510 }
+  }));
+
+  const result = loadAtmStraddleSnapshots(directory, { tenor: '0DTE' });
+
+  assert.equal(result.documents.length, 2);
+});
+
+test('loadAtmStraddleSnapshots returns empty data for a missing directory', () => {
+  const directory = path.join(os.tmpdir(), `is-vol-missing-${Date.now()}`);
+
+  const result = loadAtmStraddleSnapshots(directory, { tenor: '1W' });
+
+  assert.deepEqual(result, {
+    ok: true,
+    directory,
+    documents: [],
+    warnings: []
+  });
 });

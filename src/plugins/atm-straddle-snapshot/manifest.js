@@ -1,11 +1,15 @@
 import {
   ATM_STRADDLE_SNAPSHOT_PLUGIN_ID,
+  ATM_STRADDLE_POINT_EVENT,
   subscribeAtmStraddleSnapshot
 } from './listener.js';
+import { atmStraddleSnapshotWidgets } from './widgets.js';
 
 const manifest = {
   id: ATM_STRADDLE_SNAPSHOT_PLUGIN_ID,
   title: 'ATM Straddle Snapshot',
+  widgets: atmStraddleSnapshotWidgets,
+  eventSubscriptions: [ATM_STRADDLE_POINT_EVENT],
   widgetExtensions: [
     {
       settingsKey: ATM_STRADDLE_SNAPSHOT_PLUGIN_ID,
@@ -37,7 +41,7 @@ const manifest = {
   ],
   activate(context) {
     return subscribeAtmStraddleSnapshot({
-      widgetDataEvents: context?.widgetDataEvents,
+      eventBus: context?.eventBus,
       appBridge: context?.appBridge
     });
   }

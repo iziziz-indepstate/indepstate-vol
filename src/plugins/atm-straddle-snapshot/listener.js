@@ -1,40 +1,46 @@
+import { ATM_STRADDLE_POINT_EVENT, buildAtmStraddlePoint } from '../../shared/atm-straddle-point.mjs';
+
 export const ATM_STRADDLE_SNAPSHOT_PLUGIN_ID = 'atm-straddle-snapshot';
 
-export function isSaveableAtmStraddleSnapshot(snapshot) {
-  return Number.isFinite(snapshot?.atmStrike)
-    && Number.isFinite(snapshot?.referencePrice)
-    && Number.isFinite(snapshot?.straddle?.mid);
+export { ATM_STRADDLE_POINT_EVENT };
+
+export function isSaveableAtmStraddlePointPayload(payload) {
+  return Boolean(buildAtmStraddlePoint({
+    snapshotTime: payload?.time,
+    atmStrike: payload?.atmStrike,
+    referencePrice: payload?.referencePrice,
+    straddle: { mid: payload?.straddlePts }
+  }));
 }
 
-export function shouldSaveAtmStraddleSnapshotEvent(event, pluginId = ATM_STRADDLE_SNAPSHOT_PLUGIN_ID) {
-  const widget = event?.widget;
-  const output = event?.output;
-  const settings = widget?.config?.plugins?.[pluginId] || {};
+export function shouldSaveAtmStraddlePointEvent(event, pluginId = ATM_STRADDLE_SNAPSHOT_PLUGIN_ID) {
+  const widget = event?.payload?.widget || {};
+  const settings = widget?.config?.plugins?.[pluginId] || event?.payload?.config?.plugins?.[pluginId] || {};
 
-  return widget?.type === 'atm-straddle'
-    && event?.definition?.type === 'atm-straddle'
-    && output?.type === 'atm-straddle'
-    && output?.status === 'ok'
+  return event?.type === ATM_STRADDLE_POINT_EVENT
+    && event?.widgetType === 'atm-straddle'
     && settings.enabled === true
-    && isSaveableAtmStraddleSnapshot(output?.snapshot);
+    && isSaveableAtmStraddlePointPayload(event?.payload)
+    && event?.payload?.snapshot
+    && typeof event.payload.snapshot === 'object';
 }
 
 export function subscribeAtmStraddleSnapshot({
-  widgetDataEvents,
+  eventBus,
   appBridge,
   pluginId = ATM_STRADDLE_SNAPSHOT_PLUGIN_ID
 }) {
-  if (!widgetDataEvents || typeof widgetDataEvents.subscribe !== 'function') return () => {};
+  if (!eventBus || typeof eventBus.subscribe !== 'function') return () => {};
 
-  return widgetDataEvents.subscribe(async (event) => {
-    if (!shouldSaveAtmStraddleSnapshotEvent(event, pluginId)) return;
+  return eventBus.subscribe(ATM_STRADDLE_POINT_EVENT, async (event) => {
+    if (!shouldSaveAtmStraddlePointEvent(event, pluginId)) return;
     if (typeof appBridge?.saveAtmStraddleSnapshot !== 'function') return;
 
     await appBridge.saveAtmStraddleSnapshot({
-      title: event.output.title || event.widget.title || event.definition.defaultTitle || 'Straddle ATM',
-      config: { ...(event.output.config || event.widget.config || {}) },
-      snapshot: event.output.snapshot,
-      sourceSnapshotTime: event.sourceSnapshotTime
+      title: event.payload.title || event.payload.widget?.title || 'Straddle ATM',
+      config: { ...(event.payload.config || event.payload.widget?.config || {}) },
+      snapshot: event.payload.snapshot,
+      sourceSnapshotTime: event.payload.time
     });
   });
 }

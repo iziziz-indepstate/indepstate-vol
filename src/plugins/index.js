@@ -6,6 +6,9 @@ export const appPluginManifests = [
   nDateStrikeClipboardPlugin
 ];
 
+export const appPluginWidgets = appPluginManifests
+  .flatMap((manifest) => (Array.isArray(manifest?.widgets) ? manifest.widgets : []));
+
 export function activateAppPlugins(manifests, context) {
   const cleanups = [];
   for (const manifest of Array.isArray(manifests) ? manifests : []) {

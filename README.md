@@ -28,6 +28,8 @@ npm start
 ## Included Widgets
 
 - **Straddle ATM**: text widget for the selected symbol and expiry tenor. It selects expiry, picks the ATM call/put pair, calculates the ATM straddle, implied move, expected range, ATM IV, quote quality, and comparison state. `ATM K` accepts an exact strike or `ATM`. Optional snapshot persistence is provided by the [ATM Straddle Snapshot Plugin](docs/atm-straddle-snapshot-plugin.md). Details: [Straddle ATM Widget](docs/atm-straddle-widget.md).
+- **Straddle Daily Price**: chart widget from persisted ATM straddle snapshots. It plots one point per day for each configured tenor + local `HH:mm` line. Details: [ATM Straddle Snapshot Plugin](docs/atm-straddle-snapshot-plugin.md).
+- **Straddle Dynamics**: chart widget from persisted ATM straddle snapshots. It overlays intraday straddle price paths for saved days in a date range and optional local time window. Details: [ATM Straddle Snapshot Plugin](docs/atm-straddle-snapshot-plugin.md).
 - **Vol Upfront**: chart and table widget that reads Straddle ATM widgets on the same tab and calculates adjacent forward volatility segments. Details: [Vol Upfront Widget](docs/vol-upfront-widget.md).
 - **ATM Call-Put Skew**: time series for `dAtm = callATM.iv - putATM.iv`.
 - **+/-3 Strike Put-Call Skew**: time series for `dTail = put(-steps).bid_iv - call(+steps).bid_iv`.

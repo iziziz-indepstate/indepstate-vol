@@ -120,6 +120,156 @@ function readExistingJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf-8'));
 }
 
+function normalizedDateFilter(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const dt = new Date(raw);
+  return Number.isNaN(dt.getTime()) ? '' : dt.toISOString().slice(0, 10);
+}
+
+function pointIsValid(point) {
+  return point
+    && !Number.isNaN(new Date(point.time || 0).getTime())
+    && Number.isFinite(Number(point.atmStrike))
+    && Number.isFinite(Number(point.spot))
+    && Number.isFinite(Number(point.straddlePts));
+}
+
+function documentIsValid(document) {
+  return document
+    && document.kind === KIND
+    && document.version === VERSION
+    && /^\d{4}-\d{2}-\d{2}$/.test(String(document.date || ''))
+    && document.identity
+    && typeof document.identity === 'object'
+    && Array.isArray(document.points);
+}
+
+function documentIdentitySignature(document) {
+  return `${document.date}:${JSON.stringify(document.identity || {})}`;
+}
+
+function dedupeDocumentsByIdentity(documents) {
+  const byIdentity = new Map();
+  for (const document of documents) {
+    byIdentity.set(documentIdentitySignature(document), document);
+  }
+  return Array.from(byIdentity.values());
+}
+
+function normalizeLoadedDocument(document, file) {
+  const points = document.points
+    .filter(pointIsValid)
+    .map((point) => ({
+      time: point.time,
+      atmStrike: Number(point.atmStrike),
+      spot: Number(point.spot),
+      straddlePts: Number(point.straddlePts)
+    }))
+    .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+
+  return {
+    kind: document.kind,
+    version: document.version,
+    date: document.date,
+    identity: { ...(document.identity || {}) },
+    summary: document.summary && typeof document.summary === 'object' ? { ...document.summary } : {},
+    updatedAt: document.updatedAt || null,
+    points,
+    source: {
+      file,
+      filename: path.basename(file)
+    }
+  };
+}
+
+function loadAtmStraddleSnapshots(directory, params = {}) {
+  const warnings = [];
+  const documents = [];
+  const tenor = String(params.tenor || '').trim();
+  const startDate = normalizedDateFilter(params.startDate);
+  const endDate = normalizedDateFilter(params.endDate);
+
+  if (!fs.existsSync(directory)) {
+    return { ok: true, directory, documents, warnings };
+  }
+
+  const entries = fs.readdirSync(directory, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.json'))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  for (const entry of entries) {
+    const file = path.join(directory, entry.name);
+    try {
+      const document = JSON.parse(fs.readFileSync(file, 'utf-8'));
+      if (!documentIsValid(document)) {
+        warnings.push({ file, message: 'Skipped invalid ATM straddle snapshot document.' });
+        continue;
+      }
+      if (tenor && String(document.identity?.tenor || '') !== tenor) continue;
+      if (startDate && document.date < startDate) continue;
+      if (endDate && document.date > endDate) continue;
+      documents.push(normalizeLoadedDocument(document, file));
+    } catch (err) {
+      warnings.push({ file, message: err?.message || String(err) });
+    }
+  }
+
+  const deduped = dedupeDocumentsByIdentity(documents);
+  deduped.sort((a, b) => {
+    const byDate = String(a.date).localeCompare(String(b.date));
+    if (byDate) return byDate;
+    return String(a.source?.filename || '').localeCompare(String(b.source?.filename || ''));
+  });
+
+  return { ok: true, directory, documents: deduped, warnings };
+}
+
+async function loadAtmStraddleSnapshotsAsync(directory, params = {}) {
+  const warnings = [];
+  const documents = [];
+  const tenor = String(params.tenor || '').trim();
+  const startDate = normalizedDateFilter(params.startDate);
+  const endDate = normalizedDateFilter(params.endDate);
+
+  try {
+    await fs.promises.access(directory, fs.constants.R_OK);
+  } catch (_err) {
+    return { ok: true, directory, documents, warnings };
+  }
+
+  const entries = (await fs.promises.readdir(directory, { withFileTypes: true }))
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.json'))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  for (const entry of entries) {
+    const file = path.join(directory, entry.name);
+    try {
+      const document = JSON.parse(await fs.promises.readFile(file, 'utf-8'));
+      if (!documentIsValid(document)) {
+        warnings.push({ file, message: 'Skipped invalid ATM straddle snapshot document.' });
+        continue;
+      }
+      if (tenor && String(document.identity?.tenor || '') !== tenor) continue;
+      if (startDate && document.date < startDate) continue;
+      if (endDate && document.date > endDate) continue;
+      documents.push(normalizeLoadedDocument(document, file));
+    } catch (err) {
+      warnings.push({ file, message: err?.message || String(err) });
+    }
+  }
+
+  const deduped = dedupeDocumentsByIdentity(documents);
+  deduped.sort((a, b) => {
+    const byDate = String(a.date).localeCompare(String(b.date));
+    if (byDate) return byDate;
+    return String(a.source?.filename || '').localeCompare(String(b.source?.filename || ''));
+  });
+
+  return { ok: true, directory, documents: deduped, warnings };
+}
+
 function writeJsonAtomic(file, data) {
   const tmp = `${file}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf-8');
@@ -167,6 +317,8 @@ async function saveAtmStraddleSnapshotAsync(directory, payload = {}) {
 module.exports = {
   defaultAtmStraddleSnapshotDir,
   atmStraddleSnapshotFileName,
+  loadAtmStraddleSnapshots,
+  loadAtmStraddleSnapshotsAsync,
   saveAtmStraddleSnapshot,
   saveAtmStraddleSnapshotAsync
 };

@@ -18,6 +18,7 @@ import { atmStraddleWidget } from './atm-straddle-widget.js';
 import { volUpfrontWidget } from './vol-upfront-widget.js';
 import { nDeltaIVWidget } from './n-delta-iv-widget.js';
 import { theBlockWidgets } from './theblock-widgets.js';
+import { appPluginWidgets } from '../../plugins/index.js';
 
 export const widgetDefinitions = [
   atmStraddleWidget,
@@ -35,6 +36,7 @@ export const widgetDefinitions = [
   nDateSkewBidIVRatioWidget,
   spreadOptimizerWidget,
   ivRvWidget,
+  ...appPluginWidgets,
   ...theBlockWidgets
 ];
 

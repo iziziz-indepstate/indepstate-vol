@@ -1196,7 +1196,8 @@ async function ensureWidgetChartEntry(widget) {
 
 function destroyWidgetChartEntry(widgetId) {
   const entry = chartInstances.get(widgetId);
-  if (!entry || entry.mode === 'table') return;
+  if (!entry) return;
+  if (entry.mode === 'table') return;
   if (entry.chart && typeof entry.chart.destroy === 'function') entry.chart.destroy();
   entry.eventPort?.destroy?.();
   chartInstances.delete(widgetId);
@@ -1265,12 +1266,21 @@ async function renderWidgets() {
     if (!definition) continue;
 
     if ((definition.mode || 'timeseries') === 'table') {
+      const eventPort = Array.isArray(definition.eventContracts) && definition.eventContracts.length
+        ? widgetEventBus.registerSource({
+          tabId: tab.id,
+          widgetId: widget.id,
+          widgetType: widget.type,
+          contracts: definition.eventContracts
+        })
+        : null;
       chartInstances.set(widget.id, {
         chart: null,
         mode: 'table',
         metric: null,
         definition,
-        widget
+        widget,
+        eventPort
       });
       continue;
     }
@@ -2175,7 +2185,7 @@ async function refreshCharts() {
 
 async function renderTableWidgetEntry(entry, latest, history) {
   const profileStart = performance.now();
-  const { mode, definition, widget } = entry || {};
+  const { mode, definition, widget, eventPort } = entry || {};
   if (mode !== 'table' || typeof definition?.render !== 'function' || !widget?.id) return;
 
   const target = document.getElementById(`widget-body-${widget.id}`);
@@ -2197,6 +2207,7 @@ async function renderTableWidgetEntry(entry, latest, history) {
       readByType: (type) => readWidgetDataByType(tab, type)
     },
     widget,
+    eventPort,
     onConfigChange: () => {
       persistUiState();
       refreshSingleTableWidget(widget.id)

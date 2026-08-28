@@ -6,7 +6,11 @@ const { createMarketDataService } = require('./market-data-providers.cjs');
 const { startAutoUpdater } = require('./auto-updater.cjs');
 const { startMcpServer } = require('./mcp-server.cjs');
 const { defaultRawSnapshotDir, saveRawSnapshotAsync } = require('./raw-snapshot-store.cjs');
-const { defaultAtmStraddleSnapshotDir, saveAtmStraddleSnapshotAsync } = require('./atm-straddle-snapshot-store.cjs');
+const {
+  defaultAtmStraddleSnapshotDir,
+  loadAtmStraddleSnapshotsAsync,
+  saveAtmStraddleSnapshotAsync
+} = require('./atm-straddle-snapshot-store.cjs');
 const { createDataSourceLifecycleRegistry } = require('./data-source-lifecycle.cjs');
 const profiler = require('./profiler.cjs');
 
@@ -358,6 +362,14 @@ app.whenReady().then(async () => {
       tenor: payload?.snapshot?.tenor,
       expiry: payload?.snapshot?.expiry
     }, () => saveAtmStraddleSnapshotAsync(defaultAtmStraddleSnapshotDir(app), payload || {}));
+  });
+
+  ipcMain.handle('atm-straddle-snapshot:load', async (_evt, params) => {
+    return profiler.measure('atm-straddle-snapshot:load', {
+      tenor: params?.tenor,
+      startDate: params?.startDate,
+      endDate: params?.endDate
+    }, () => loadAtmStraddleSnapshotsAsync(defaultAtmStraddleSnapshotDir(app), params || {}));
   });
 
   ipcMain.handle('market-data:load-local-series', async (_evt, source) => {

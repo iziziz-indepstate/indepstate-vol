@@ -1,4 +1,5 @@
 import { calculateAtmStraddle } from '../../shared/atm-straddle-calculations.mjs';
+import { ATM_STRADDLE_POINT_EVENT, buildAtmStraddlePoint } from '../../shared/atm-straddle-point.mjs';
 import { ensureUPlotRuntime } from './widget-renderers.js';
 
 const TENORS = ['0DTE', '1D', '1W', '2W', '1M', '2M', '3M', '6M'];
@@ -168,13 +169,11 @@ async function buildPriceHistory(history, cfg, currentResult) {
         snapshotTime: snap.time,
         compareTo: 'none'
       });
-      if (!Number.isFinite(result?.straddle?.mid)) continue;
+      const point = buildAtmStraddlePoint(result);
+      if (!point) continue;
       points.push({
-        time: snap.time,
+        ...point,
         label: fmtTime(snap.time),
-        value: result.straddle.mid,
-        impliedMovePct: result.straddle.impliedMovePct,
-        atmIv: result.atmIv
       });
     } catch (_err) {
       // Historical snapshots may not all contain the selected expiry/strike.
@@ -183,17 +182,32 @@ async function buildPriceHistory(history, cfg, currentResult) {
 
   const currentTime = String(currentResult?.snapshotTime || '');
   const lastTime = String(points[points.length - 1]?.time || '');
-  if (currentResult && currentTime && currentTime !== lastTime && Number.isFinite(currentResult?.straddle?.mid)) {
+  const currentPoint = buildAtmStraddlePoint(currentResult);
+  if (currentPoint && currentTime && currentTime !== lastTime) {
     points.push({
-      time: currentResult.snapshotTime,
+      ...currentPoint,
       label: fmtTime(currentResult.snapshotTime),
-      value: currentResult.straddle.mid,
-      impliedMovePct: currentResult.straddle.impliedMovePct,
-      atmIv: currentResult.atmIv
     });
   }
 
   return points;
+}
+
+export function emitAtmStraddlePointEvent(eventPort, { result, config, widget, title } = {}) {
+  const point = buildAtmStraddlePoint(result);
+  if (!point) return false;
+  return Boolean(eventPort?.emit?.(ATM_STRADDLE_POINT_EVENT, {
+    ...point,
+    snapshot: result,
+    config: { ...(config || {}) },
+    title: title || widget?.title || atmStraddleWidget.defaultTitle,
+    widget: {
+      id: widget?.id,
+      type: widget?.type,
+      title: widget?.title,
+      config: { ...(widget?.config || {}) }
+    }
+  }));
 }
 
 function renderPriceSparkline(points) {
@@ -344,6 +358,7 @@ export const atmStraddleWidget = {
   type: 'atm-straddle',
   mode: 'table',
   wide: false,
+  eventContracts: [ATM_STRADDLE_POINT_EVENT],
   requiresHistory: true,
   defaultTitle: 'Straddle ATM',
   defaultConfig: {
@@ -358,7 +373,7 @@ export const atmStraddleWidget = {
     compareTo: 'previous_close',
     compact: false
   },
-  render: async ({ container, snapshot, history, widget, widgetData, onConfigChange, onConfigBroadcast }) => {
+  render: async ({ container, snapshot, history, widget, widgetData, eventPort, onConfigChange, onConfigBroadcast }) => {
     const renderVersion = (renderVersions.get(container) || 0) + 1;
     renderVersions.set(container, renderVersion);
     destroySparklineChart(container);
@@ -388,6 +403,7 @@ export const atmStraddleWidget = {
         compareTo: cfg.compareTo
       });
       const priceHistory = await buildPriceHistory(history, cfg, result);
+      const currentPoint = buildAtmStraddlePoint(result);
       const body = cfg.compact ? renderCompact(result, priceHistory) : renderFull(result, priceHistory);
       widgetData?.publish?.({
         type: atmStraddleWidget.type,
@@ -397,6 +413,7 @@ export const atmStraddleWidget = {
         snapshot: result,
         priceHistory
       });
+      if (currentPoint) emitAtmStraddlePointEvent(eventPort, { result, config: cfg, widget });
       container.innerHTML = `${renderControls(cfg)}${body}`;
       bindControls(container, widget, onConfigChange, onConfigBroadcast);
       if (renderVersions.get(container) === renderVersion) {
