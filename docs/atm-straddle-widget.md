@@ -29,7 +29,7 @@ The widget renders a small straddle-price sparkline above the text output. It re
 
 - At least two matching snapshots are required.
 - Historical snapshots that no longer contain the selected expiry or strike are skipped.
-- Price history points require valid time, `straddle.mid`, ATM strike, and reference price. The snapshot plugin saves from the same current-point event.
+- Price history points require valid time, `straddle.mid`, ATM strike, and reference price. The snapshot plugin saves from the same point event and can backfill history points that were built while the tab was inactive.
 - The sparkline uses the last 120 matching history candidates and colors the line green when the latest value is above the first plotted value, red when below, and blue when flat.
 
 ## Calculation Contract

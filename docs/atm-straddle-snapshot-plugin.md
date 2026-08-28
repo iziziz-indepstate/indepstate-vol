@@ -52,7 +52,7 @@ Legacy widget configs are soft-migrated:
 
 ## Save Event
 
-`Straddle ATM` emits `atm-straddle:point` when it creates the current/latest point used by its straddle price history. Historical points reconstructed from old option-chain snapshots do not emit save events.
+`Straddle ATM` emits `atm-straddle:point` for graph-eligible points in its straddle price history that have not yet been emitted during the current renderer session. This includes reconstructed history points, so inactive-tab gaps can be backfilled when the widget renders again.
 
 Event payload:
 
