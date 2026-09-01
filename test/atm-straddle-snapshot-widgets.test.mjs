@@ -5,6 +5,7 @@ import {
   addSnapshotWidgetLine,
   buildDailyPriceSeries,
   buildDynamicsSeries,
+  normalizeChartValue,
   normalizeDailyLines,
   removeSnapshotWidgetLine,
   straddleDailyPriceWidget,
@@ -39,6 +40,15 @@ test('ATM straddle snapshot plugin manifest exposes display widgets', () => {
   ]);
   assert.deepEqual(straddleDailyPriceWidget.defaultConfig.lines, [{ tenor: '0DTE', time: '16:45' }]);
   assert.equal(straddleDynamicsWidget.defaultConfig.tenor, '0DTE');
+});
+
+test('snapshot chart value normalization keeps missing values as gaps', () => {
+  assert.equal(normalizeChartValue(null), null);
+  assert.equal(normalizeChartValue(undefined), null);
+  assert.equal(normalizeChartValue(''), null);
+  assert.equal(normalizeChartValue(Number.NaN), null);
+  assert.equal(normalizeChartValue(0), 0);
+  assert.equal(normalizeChartValue('12.3'), 12.3);
 });
 
 test('Straddle Daily Price matches exact local HH:mm and ignores seconds', () => {

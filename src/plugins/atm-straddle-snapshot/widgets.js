@@ -18,6 +18,12 @@ function fmt(value, digits = 2) {
   return Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : 'n/a';
 }
 
+export function normalizeChartValue(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
 function normalizeTime(value, fallback = '16:45') {
   const raw = String(value || '').trim();
   const match = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
@@ -434,14 +440,14 @@ async function renderChart(container, series, mode) {
   destroyChart(container);
   const labels = Array.isArray(series?.labels) ? series.labels : [];
   const datasets = Array.isArray(series?.datasets) ? series.datasets : [];
-  if (!labels.length || !datasets.some((dataset) => (dataset.data || []).some((value) => Number.isFinite(value)))) return;
+  if (!labels.length || !datasets.some((dataset) => (dataset.data || []).some((value) => normalizeChartValue(value) !== null))) return;
 
   const UPlot = await ensureUPlotRuntime();
   const columns = [
     labels.map((_, idx) => idx),
     ...datasets.map((dataset) => labels.map((_, idx) => {
       const value = dataset.data?.[idx];
-      return Number.isFinite(Number(value)) ? Number(value) : null;
+      return normalizeChartValue(value);
     }))
   ];
   const hostRect = host.getBoundingClientRect();
