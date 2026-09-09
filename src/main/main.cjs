@@ -3,6 +3,7 @@ const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const { loadState, saveUiState } = require('./store.cjs');
 const { loadLocalMarketSeries } = require('./local-market-data.cjs');
 const { createMarketDataService } = require('./market-data-providers.cjs');
+const { createTradingCalendarProvider } = require('./trading-calendar-provider.cjs');
 const { startAutoUpdater } = require('./auto-updater.cjs');
 const { startMcpServer } = require('./mcp-server.cjs');
 const { defaultRawSnapshotDir, saveRawSnapshotAsync } = require('./raw-snapshot-store.cjs');
@@ -227,6 +228,9 @@ app.whenReady().then(async () => {
   const marketDataService = createMarketDataService({
     cacheDir: path.join(app.getPath('userData'), 'market-data-cache')
   });
+  const tradingCalendarProvider = createTradingCalendarProvider({
+    cacheDir: path.join(app.getPath('userData'), 'trading-calendar-cache')
+  });
   dataSourceLifecycleRegistry = createDataSourceLifecycleRegistry({
     command: sendDataSourceCommandToRenderer,
     patchConfig: patchDataSourceConfig,
@@ -386,7 +390,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('tradingview:get-snapshot', async (_evt, params) => {
     const { TradingViewProvider } = await import('../shared/tradingview-provider.js');
-    const provider = new TradingViewProvider();
+    const provider = new TradingViewProvider({ marketCalendar: tradingCalendarProvider });
     return profiler.measure('tradingview:get-snapshot', {
       ticker: params?.ticker,
       root: params?.root,

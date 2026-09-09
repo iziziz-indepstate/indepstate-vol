@@ -1,4 +1,5 @@
 import { resolveConfiguredStrike } from './option-chain-utils.js';
+import { resolveExpiryToken } from './expiry-placeholders.mjs';
 
 const OPTION_TYPES = new Set(['put', 'call']);
 
@@ -170,7 +171,7 @@ export function calculateAtmIV(expirySnapshot, atmStrikeOverride) {
 }
 
 function findExpirySnapshot(snapshot, expiration) {
-  let key = normalizeExpiryKey(expiration);
+  let key = normalizeExpiryKey(resolveExpiryToken(expiration, snapshot?.expiryPlaceholders).value);
   if (snapshot?.byExpiry && typeof snapshot.byExpiry === 'object') {
     if (!key) key = normalizeExpiryKey(snapshot.expiry) || Object.keys(snapshot.byExpiry)[0] || '';
     if (snapshot.byExpiry[key]) return { key, snapshot: snapshot.byExpiry[key] };

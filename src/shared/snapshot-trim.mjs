@@ -1,4 +1,5 @@
 import { selectAtmPair, selectExpiry } from './atm-straddle-calculations.mjs';
+import { resolveExpiryToken } from './expiry-placeholders.mjs';
 import { findStrikesAroundPrice, resolveConfiguredStrike, resolveStrikeSelection } from './option-chain-utils.js';
 
 export const SNAPSHOT_TRIM_VERSION = 1;
@@ -262,7 +263,8 @@ function addBidIvRatioNeed(snapshot, needs, widget) {
 }
 
 function addNDeltaNeed(snapshot, needs, widget) {
-  const expiry = normalizeExpiryKey(widget?.config?.expiration) || primaryExpiryKey(snapshot);
+  const resolved = resolveExpiryToken(widget?.config?.expiration, snapshot?.expiryPlaceholders).value;
+  const expiry = normalizeExpiryKey(resolved) || primaryExpiryKey(snapshot);
   if (expiry) addNeed(needs, expiry, { allQuotes: true });
 }
 
@@ -413,6 +415,9 @@ function copyRootFields(snapshot, primaryExpiry, primarySnapshot, byExpiry) {
     upper: primarySnapshot?.upper ?? snapshot?.upper ?? null,
     dAtm: snapshot?.dAtm ?? null,
     metrics: snapshot?.metrics && typeof snapshot.metrics === 'object' ? { ...snapshot.metrics } : undefined,
+    expiryPlaceholders: snapshot?.expiryPlaceholders && typeof snapshot.expiryPlaceholders === 'object'
+      ? { ...snapshot.expiryPlaceholders }
+      : undefined,
     byExpiry,
     storage: {
       trimmed: true,

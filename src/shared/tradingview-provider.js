@@ -1,4 +1,12 @@
 import { findStrikesAroundPrice } from './option-chain-utils.js';
+import {
+  buildExpiryList,
+  collectExpiryPlaceholderKeys,
+  hasExpiryPlaceholder,
+  resolveExpiryPlaceholders
+} from './expiry-placeholders.mjs';
+
+export { buildExpiryList, resolveExpiryPlaceholders } from './expiry-placeholders.mjs';
 
 const toNum = (x) => {
   const n = Number(x);
@@ -214,64 +222,6 @@ function computeMetrics(metricDefinitions, basePoint) {
   return values;
 }
 
-function parseExpiryDate(value) {
-  const raw = String(value || '').trim();
-  if (!/^\d{8}$/.test(raw)) return null;
-
-  const y = Number(raw.slice(0, 4));
-  const m = Number(raw.slice(4, 6));
-  const d = Number(raw.slice(6, 8));
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== m - 1 || dt.getUTCDate() !== d) return null;
-  return dt;
-}
-
-function fmtExpiryDate(dt) {
-  return [
-    dt.getUTCFullYear(),
-    String(dt.getUTCMonth() + 1).padStart(2, '0'),
-    String(dt.getUTCDate()).padStart(2, '0')
-  ].join('');
-}
-
-function expandExpiryRange(startValue, endValue) {
-  const start = parseExpiryDate(startValue);
-  if (!start) return [];
-
-  const parsedEnd = parseExpiryDate(endValue);
-  const end = parsedEnd && parsedEnd >= start ? parsedEnd : start;
-  const out = [];
-  let cursor = new Date(start);
-  while (cursor <= end) {
-    out.push(fmtExpiryDate(cursor));
-    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
-  }
-  return out;
-}
-
-export function buildExpiryList(startValue, endValue) {
-  const expiryStart = String(startValue || '').trim();
-  if (expiryStart.includes(',')) {
-    const seen = new Set();
-    const expiries = [];
-    for (const raw of expiryStart.split(',')) {
-      const expiry = raw.trim();
-      if (!expiry) continue;
-      if (!parseExpiryDate(expiry)) {
-        throw new Error(`Invalid expiry in comma-separated list: ${expiry}`);
-      }
-      if (seen.has(expiry)) continue;
-      seen.add(expiry);
-      expiries.push(expiry);
-    }
-    return expiries;
-  }
-
-  const expiryEnd = String(endValue || '').trim();
-  const expiries = expandExpiryRange(expiryStart, expiryEnd || expiryStart);
-  return expiries.length ? expiries : [expiryStart].filter(Boolean);
-}
-
 function buildBasePoint(px, byTypeStrike, nowIso) {
   const optionQuotes = [];
   for (const row of byTypeStrike.values()) {
@@ -324,6 +274,10 @@ function buildBasePoint(px, byTypeStrike, nowIso) {
 }
 
 export class TradingViewProvider {
+  constructor(options = {}) {
+    this.marketCalendar = options.marketCalendar || null;
+  }
+
   key = 'tradingview';
 
   async fetchSnapshot(config, metricDefinitions = []) {
@@ -335,7 +289,20 @@ export class TradingViewProvider {
     const nowIso = new Date().toISOString();
     const expiryStart = String(config.expiryStart || config.expiry || '').trim();
     const expiryEnd = String(config.expiryEnd || '').trim();
-    const expiryList = buildExpiryList(expiryStart, expiryEnd);
+    const requestedPlaceholderKeys = Array.from(new Set([
+      ...collectExpiryPlaceholderKeys(expiryStart, expiryEnd),
+      ...(Array.isArray(config.expiryPlaceholderKeys) ? config.expiryPlaceholderKeys : [])
+    ]));
+    const needsMarketCalendar = requestedPlaceholderKeys.length > 0 || hasExpiryPlaceholder(expiryStart, expiryEnd);
+    const marketHolidays = config.marketHolidays || (needsMarketCalendar
+      ? await this.marketCalendar?.getMarketHolidays(config.now)
+      : undefined);
+    const { expiries: expiryList, placeholders: expiryPlaceholders } = buildExpiryList(expiryStart, expiryEnd, {
+      includeMetadata: true,
+      marketHolidays,
+      now: config.now,
+      placeholderKeys: requestedPlaceholderKeys
+    });
     if (!expiryList.length) throw new Error('Expiry start is required');
 
     const byExpiry = {};
@@ -358,7 +325,8 @@ export class TradingViewProvider {
     return {
       ...basePoint,
       ...metrics,
-      metrics
+      metrics,
+      expiryPlaceholders
     };
   }
 }

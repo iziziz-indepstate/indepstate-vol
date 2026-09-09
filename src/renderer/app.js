@@ -12,6 +12,7 @@ import {
   writeWidgetExtensionControlValue
 } from './widget-extensions.js';
 import {
+  collectExpiryPlaceholderKeys,
   normalizeWidgetParamValue,
   shouldRefreshOnWidgetParamChange,
   WIDGET_PARAM_DATASET
@@ -219,6 +220,23 @@ function formatStatusUpdateTime(value) {
     minute: '2-digit',
     second: '2-digit'
   });
+}
+
+function formatExpiryPlaceholderStatus(point) {
+  const values = point?.expiryPlaceholders;
+  if (!values || typeof values !== 'object') return '';
+  const parts = ['today', 'nextWeek', 'nextMonth']
+    .filter((key) => values[key])
+    .map((key) => `${key}=${values[key]}`);
+  return parts.length ? ` • placeholders ${parts.join(' ')}` : '';
+}
+
+function collectWidgetExpiryPlaceholderKeys(tab) {
+  const keys = new Set();
+  for (const widget of tab?.widgets || []) {
+    for (const key of collectExpiryPlaceholderKeys(widget?.config?.expiration)) keys.add(key);
+  }
+  return Array.from(keys);
 }
 
 function setPollState(isRunning) {
@@ -2409,7 +2427,10 @@ async function tickTab(tabId) {
       tabId,
       providerKey: tab.providerKey,
       title: tab.title
-    }, () => provider.fetchSnapshot(tab.providerConfig, skewMetrics));
+    }, () => provider.fetchSnapshot({
+      ...tab.providerConfig,
+      expiryPlaceholderKeys: collectWidgetExpiryPlaceholderKeys(tab)
+    }, skewMetrics));
     if (shouldSaveRawSnapshots(tab)) {
       const rawStart = performance.now();
       saveRawSnapshotDeferred({
@@ -2426,12 +2447,14 @@ async function tickTab(tabId) {
 
     const policyStart = performance.now();
     ensureTabHistoryPolicy(tab);
+    const updatedAt = formatStatusUpdateTime(point.time);
+    const placeholderStatus = formatExpiryPlaceholderStatus(point);
     if (!tabSupportsHistorySnapshots(tab)) {
       profileDuration('tick:historyPolicy', policyStart, { tabId, supportsHistory: false });
       const renderStart = performance.now();
       tickTabIfActive(tabId);
       profileDuration('tick:activeRenderTrigger', renderStart, { tabId, active: isActiveTabId(tabId) });
-      setTabStatus(tabId, `ok • ${tab.title} • history disabled (no history-input chart)`);
+      setTabStatus(tabId, `ok • ${tab.title} • updated=${updatedAt} • history disabled (no history-input chart)${placeholderStatus}`);
       profileDuration('tick:total', tickStart, { tabId, providerKey: tab.providerKey, historyDisabled: true });
       return;
     }
@@ -2458,14 +2481,13 @@ async function tickTab(tabId) {
     const renderStart = performance.now();
     tickTabIfActive(tabId);
     profileDuration('tick:activeRenderTrigger', renderStart, { tabId, active: isActiveTabId(tabId) });
-    const updatedAt = formatStatusUpdateTime(point.time);
     if (point.theBlock?.latestDate) {
       const chartCount = Object.keys(point.theBlock?.charts || {}).length;
       setTabStatus(tabId, `ok • ${tab.title} • updated=${updatedAt} • The Block charts=${chartCount} • latest=${point.theBlock.latestDate}`);
     } else {
       setTabStatus(
         tabId,
-        `ok • ${tab.title} • updated=${updatedAt} • px=${point.px?.toFixed(3) ?? 'n/a'} • lower=${point.lower ?? 'n/a'} upper=${point.upper ?? 'n/a'}`
+        `ok • ${tab.title} • updated=${updatedAt} • px=${point.px?.toFixed(3) ?? 'n/a'} • lower=${point.lower ?? 'n/a'} upper=${point.upper ?? 'n/a'}${placeholderStatus}`
       );
     }
     const persistStart = performance.now();

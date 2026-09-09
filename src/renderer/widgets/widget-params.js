@@ -1,3 +1,5 @@
+export { collectExpiryPlaceholderKeys } from '../../shared/expiry-placeholders.mjs';
+
 export const WIDGET_PARAM_NAMES = Object.freeze({
   BASE_STRIKE: 'baseStrike',
   EXPIRY_START: 'expiryStart',

@@ -210,6 +210,36 @@ test('builds n-delta point with delta IV, ATM IV, and premium', () => {
   assert.ok(Math.abs(point.deltaIVPremium - 0.09) < 1e-12);
 });
 
+test('resolves n-delta expiration placeholder from snapshot metadata', () => {
+  const snapshot = {
+    time,
+    expiry: '20260612',
+    expiryPlaceholders: { nextWeek: '20260619' },
+    byExpiry: {
+      20260612: expirySnap(100, [
+        quote('put', 90, -0.25, 0.10),
+        quote('call', 100, 0.50, 0.20),
+        quote('put', 100, -0.50, 0.22)
+      ]),
+      20260619: expirySnap(100, [
+        quote('put', 90, -0.25, 0.30),
+        quote('call', 100, 0.50, 0.20),
+        quote('put', 100, -0.50, 0.22)
+      ])
+    }
+  };
+
+  const point = calculateNDeltaIVPoint(snapshot, {
+    optionType: 'put',
+    targetDelta: 0.25,
+    expiration: 'nextWeek'
+  });
+
+  assert.equal(point.expiration, '20260619');
+  assert.equal(point.deltaIV, 0.30);
+  assert.equal(point.warning, null);
+});
+
 test('uses n-delta base strike as ATM strike for ATM IV and premium', () => {
   const snapshot = {
     time,

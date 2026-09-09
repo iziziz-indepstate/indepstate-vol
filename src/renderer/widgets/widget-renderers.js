@@ -93,7 +93,7 @@ export function createWidgetCard(widget, definition, options = {}) {
           <input type="number" min="0.01" max="0.99" step="0.01" class="widget-target-delta-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.TARGET_DELTA}" value="${targetDeltaValue}" />
         </label>` : ''}
         ${controlsConfig.expiration ? `<label class="widget-control">Exp
-          <input type="text" class="widget-expiration-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.EXPIRATION}" value="${expirationValue}" placeholder="20260612" />
+          <input type="text" class="widget-expiration-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.EXPIRATION}" value="${expirationValue}" placeholder="20260612 or nextWeek" />
         </label>` : ''}
         ${controlsConfig.timeRange ? `<label class="widget-control">R
           <select class="widget-range-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.TIME_RANGE}">
