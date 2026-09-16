@@ -140,6 +140,21 @@ function handleLegendClick(evt, legendItem, legend, onLegendVisibilityChange) {
   const clickGroup = [datasetIndex, ...linkedHistoryIndices];
 
   const isCtrlClick = Boolean(evt?.native?.ctrlKey || evt?.ctrlKey);
+  const definition = chart.definition || chart.$widgetDefinition || {};
+  const legendDatasetIndices = (chart.data.datasets || [])
+    .map((dataset, idx) => dataset?.hiddenInLegend ? null : idx)
+    .filter((idx) => idx != null);
+  const isSoleNDateSnapshotSeries = (definition.mode || 'timeseries') === 'snapshot-series'
+    && String(definition.type || '').startsWith('ndate-')
+    && legendDatasetIndices.length === 1
+    && legendDatasetIndices[0] === datasetIndex;
+  if (isSoleNDateSnapshotSeries) {
+    clickGroup.forEach((idx) => chart.setDatasetVisibility(idx, true));
+    chart.update('none');
+    if (typeof onLegendVisibilityChange === 'function') onLegendVisibilityChange(chart);
+    return;
+  }
+
   if (isCtrlClick) {
     const visibleIndices = chart.data.datasets
       .map((_, idx) => (chart.isDatasetVisible(idx) ? idx : null))
@@ -245,6 +260,7 @@ function createChartJsWidgetChart(ctx, definition, options = {}) {
     }
   });
 
+  chart.$widgetDefinition = definition || {};
   return chart;
 }
 

@@ -1044,6 +1044,25 @@ function applyHiddenSnapshotSeriesLabels(widget, chart) {
   });
 }
 
+function isNDateSnapshotWidget(widget, definition) {
+  return (definition?.mode || 'timeseries') === 'snapshot-series'
+    && String(widget?.type || definition?.type || '').startsWith('ndate-');
+}
+
+function ensureSingleNDateSnapshotSeriesVisible(widget, definition, chart, baseDatasetsCount) {
+  if (!isNDateSnapshotWidget(widget, definition) || !chart || baseDatasetsCount !== 1) return;
+  const dataset = chart.data.datasets?.[0];
+  if (!dataset) return;
+
+  chart.setDatasetVisibility(0, true);
+  chart.options.plugins.legend.display = true;
+
+  const label = dataset?.label || 'Series 1';
+  const hiddenLabels = getHiddenSnapshotSeriesLabels(widget).filter((hiddenLabel) => hiddenLabel !== label);
+  widget.config ||= {};
+  widget.config.hiddenSnapshotSeriesLabels = hiddenLabels;
+}
+
 function syncLinkedHistoryVisibility(chart) {
   if (!chart) return;
   chart.data.datasets.forEach((dataset, idx) => {
@@ -1841,6 +1860,7 @@ async function refreshChartEntry(entry, context = createWidgetRefreshContext()) 
     } else {
       syncLinkedHistoryVisibility(chart);
     }
+    ensureSingleNDateSnapshotSeriesVisible(widget, definition, chart, baseDatasetsCount);
     chart.update('none');
     publishChartRuntime(entry);
     profileDuration('refreshChartEntry', profileStart, {
@@ -2126,6 +2146,7 @@ async function refreshCharts() {
       } else {
         syncLinkedHistoryVisibility(chart);
       }
+      ensureSingleNDateSnapshotSeriesVisible(widget, definition, chart, baseDatasetsCount);
       chart.update('none');
       publishChartRuntime(entry);
       continue;
