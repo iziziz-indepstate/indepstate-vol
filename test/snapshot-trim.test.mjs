@@ -132,21 +132,21 @@ test('n-Delta IV keeps the requested expiration with full quote search surface',
 test('n-Delta IV trim resolves expiration placeholder with full quote search surface', () => {
   const snapshot = {
     ...fullSnapshot(),
-    expiryPlaceholders: { nextWeek: '20260619' }
+    expiryPlaceholders: { tomorrow: '20260619' }
   };
   const trimmed = trimSnapshotForWidgets(snapshot, {
     widgets: [{
       type: 'n-delta-iv',
-      config: { expiration: 'nextWeek', optionType: 'put', targetDelta: 0.25, baseStrike: 'ATM' }
+      config: { expiration: 'tomorrow', optionType: 'put', targetDelta: 0.25, baseStrike: 'ATM' }
     }]
   });
 
   assert.ok(trimmed.byExpiry['20260619']);
   assert.equal(trimmed.byExpiry['20260619'].optionQuotes.length, fullSnapshot().byExpiry['20260619'].optionQuotes.length);
-  assert.deepEqual(trimmed.expiryPlaceholders, { nextWeek: '20260619' });
+  assert.deepEqual(trimmed.expiryPlaceholders, { tomorrow: '20260619' });
 
   const point = calculateNDeltaIVPoint(trimmed, {
-    expiration: 'nextWeek',
+    expiration: 'tomorrow',
     optionType: 'put',
     targetDelta: 0.25,
     baseStrike: 'ATM'

@@ -214,7 +214,7 @@ test('resolves n-delta expiration placeholder from snapshot metadata', () => {
   const snapshot = {
     time,
     expiry: '20260612',
-    expiryPlaceholders: { nextWeek: '20260619' },
+    expiryPlaceholders: { tomorrow: '20260619' },
     byExpiry: {
       20260612: expirySnap(100, [
         quote('put', 90, -0.25, 0.10),
@@ -232,7 +232,7 @@ test('resolves n-delta expiration placeholder from snapshot metadata', () => {
   const point = calculateNDeltaIVPoint(snapshot, {
     optionType: 'put',
     targetDelta: 0.25,
-    expiration: 'nextWeek'
+    expiration: 'tomorrow'
   });
 
   assert.equal(point.expiration, '20260619');

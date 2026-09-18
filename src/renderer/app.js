@@ -225,7 +225,7 @@ function formatStatusUpdateTime(value) {
 function formatExpiryPlaceholderStatus(point) {
   const values = point?.expiryPlaceholders;
   if (!values || typeof values !== 'object') return '';
-  const parts = ['today', 'nextWeek', 'nextMonth']
+  const parts = ['today', 'tomorrow', 'nextWeek', 'nextMonth']
     .filter((key) => values[key])
     .map((key) => `${key}=${values[key]}`);
   return parts.length ? ` • placeholders ${parts.join(' ')}` : '';

@@ -1,4 +1,4 @@
-const EXPIRY_PLACEHOLDER_KEYS = Object.freeze(['today', 'nextWeek', 'nextMonth']);
+const EXPIRY_PLACEHOLDER_KEYS = Object.freeze(['today', 'tomorrow', 'nextWeek', 'nextMonth']);
 
 export function parseExpiryDate(value) {
   const raw = String(value || '').trim();
@@ -85,6 +85,7 @@ function lastFridayMonthlyExpiry(year, monthIndex, holidaySet) {
 export function canonicalExpiryPlaceholderKey(value) {
   const key = String(value || '').trim().toLowerCase();
   if (key === 'today') return 'today';
+  if (key === 'tomorrow') return 'tomorrow';
   if (key === 'nextweek') return 'nextWeek';
   if (key === 'nextmonth') return 'nextMonth';
   return null;
@@ -117,6 +118,7 @@ export function resolveExpiryPlaceholders(options = {}) {
 
   return {
     today: fmtExpiryDate(nextTradingDay(base, holidays)),
+    tomorrow: fmtExpiryDate(nextTradingDay(addUtcDays(base, 1), holidays)),
     nextWeek: fmtExpiryDate(nextWeek),
     nextMonth: fmtExpiryDate(nextMonth)
   };
