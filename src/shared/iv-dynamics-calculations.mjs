@@ -242,22 +242,47 @@ function deltaFrom(cell, ref) {
   return Number.isFinite(cell?.value) && Number.isFinite(ref?.value) ? cell.value - ref.value : null;
 }
 
+function buildBASeries(points, columns) {
+  const series = points.map((point, idx) => ({
+    timestamp: point.timestamp,
+    label: columns[idx]?.label || '',
+    price: toNum(point.baPrice),
+    y: null
+  }));
+  const prices = series.map((point) => point.price).filter(Number.isFinite);
+  if (!prices.length) return series;
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  const range = max - min;
+  return series.map((point) => ({
+    ...point,
+    y: Number.isFinite(point.price)
+      ? (range > 0 ? (point.price - min) / range : 0.5)
+      : null
+  }));
+}
+
 export function buildIVDynamicsMatrix(history, config = {}) {
   const mode = config.mode === 'iv' ? 'iv' : 'premium';
   const maxColumns = Math.max(1, Math.floor(Number(config.maxColumns) || 120));
   const selected = (Array.isArray(history) ? history : []).filter(Boolean).slice(-maxColumns);
   const pointConfig = { ...config, mode };
-  const points = selected.map((snapshot) => buildPoint(snapshot, pointConfig));
+  const points = selected.map((snapshot) => ({
+    ...buildPoint(snapshot, pointConfig),
+    baPrice: toNum(snapshot?.px)
+  }));
   const rows = buildIVDynamicsRows(config.deltas);
   const columns = points.map((point, idx) => ({
     index: idx,
     timestamp: point.timestamp,
     expiration: point.expiration,
+    baPrice: point.baPrice,
     label: (() => {
       const dt = new Date(point.timestamp || 0);
       return Number.isNaN(dt.getTime()) ? String(point.timestamp || '') : dt.toLocaleTimeString();
     })()
   }));
+  const baSeries = buildBASeries(points, columns);
   const cells = rows.map((row, rowIdx) => points.map((point, colIdx) => {
     const base = point.rows.find((candidate) => candidate.key === row.key) || {
       ...row,
@@ -274,6 +299,7 @@ export function buildIVDynamicsMatrix(history, config = {}) {
     };
     return {
       ...base,
+      baPrice: point.baPrice,
       rowIdx,
       colIdx,
       comparisons: {}
@@ -299,10 +325,12 @@ export function buildIVDynamicsMatrix(history, config = {}) {
 
   return {
     mode,
+    showBA: Boolean(config.showBA),
     expiration: columns[columns.length - 1]?.expiration || normalizeExpiryKey(config.expiration),
     rows,
     columns,
     cells,
-    warnings: Array.from(new Set(points.flatMap((point) => point.warnings || [])))
+    warnings: Array.from(new Set(points.flatMap((point) => point.warnings || []))),
+    baSeries
   };
 }

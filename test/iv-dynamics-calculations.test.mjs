@@ -131,3 +131,38 @@ test('returns null cells and warnings when expiration is missing', () => {
   assert.equal(matrix.cells[0][0].iv, null);
   assert.ok(matrix.warnings.some((warning) => warning.includes('missing expiration')));
 });
+
+test('builds BA series from root snapshot px aligned to columns', () => {
+  const matrix = buildIVDynamicsMatrix([
+    snapshot('2026-06-07T14:00:00.000Z', { root: { px: 100 } }),
+    snapshot('2026-06-07T14:01:00.000Z', { root: { px: 105 } }),
+    snapshot('2026-06-07T14:02:00.000Z', { root: { px: 103 } })
+  ], {
+    deltas: '25',
+    showBA: true
+  });
+
+  assert.equal(matrix.showBA, true);
+  assert.deepEqual(matrix.columns.map((column) => column.baPrice), [100, 105, 103]);
+  assert.deepEqual(matrix.baSeries.map((point) => point.price), [100, 105, 103]);
+  assert.equal(matrix.baSeries.length, matrix.columns.length);
+  assert.equal(matrix.cells[0][1].baPrice, 105);
+  assert.equal(matrix.baSeries[0].y, 0);
+  assert.equal(matrix.baSeries[1].y, 1);
+});
+
+test('BA series handles missing and flat px values safely', () => {
+  const missing = buildIVDynamicsMatrix([
+    snapshot('2026-06-07T14:00:00.000Z', { root: { px: null } }),
+    snapshot('2026-06-07T14:01:00.000Z', { root: { px: 101 } })
+  ], { deltas: '25' });
+  assert.equal(missing.baSeries[0].price, null);
+  assert.equal(missing.baSeries[0].y, null);
+  assert.equal(missing.baSeries[1].y, 0.5);
+
+  const flat = buildIVDynamicsMatrix([
+    snapshot('2026-06-07T14:00:00.000Z', { root: { px: 100 } }),
+    snapshot('2026-06-07T14:01:00.000Z', { root: { px: 100 } })
+  ], { deltas: '25' });
+  assert.deepEqual(flat.baSeries.map((point) => point.y), [0.5, 0.5]);
+});

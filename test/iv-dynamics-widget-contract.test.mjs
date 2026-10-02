@@ -8,5 +8,6 @@ test('IV Dynamics widget is registered', () => {
   assert.equal(definition.defaultTitle, 'IV Dynamics');
   assert.equal(definition.mode, 'table');
   assert.equal(definition.requiresHistory, true);
+  assert.equal(definition.defaultConfig.showBA, false);
   assert.ok(widgetDefinitions.includes(definition));
 });

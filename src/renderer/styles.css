@@ -1278,7 +1278,7 @@ select option {
 
 .iv-dynamics-controls {
   display: grid;
-  grid-template-columns: minmax(100px, 0.8fr) minmax(220px, 2fr) minmax(130px, 1fr) minmax(90px, 0.7fr);
+  grid-template-columns: minmax(100px, 0.8fr) minmax(220px, 2fr) minmax(130px, 1fr) minmax(90px, 0.7fr) minmax(54px, 0.3fr);
   gap: 6px;
   align-items: end;
   margin-bottom: 8px;
@@ -1301,6 +1301,23 @@ select option {
   font-size: 11px;
 }
 
+.iv-dynamics-controls .iv-dynamics-check {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 5px;
+  padding-bottom: 5px;
+  white-space: nowrap;
+}
+
+.iv-dynamics-check input[type="checkbox"] {
+  width: 13px;
+  min-width: 13px;
+  height: 13px;
+  margin: 0;
+  padding: 0;
+}
+
 .iv-dynamics-shell {
   --iv-dynamics-cell-size: 18px;
   min-width: 0;
@@ -1315,7 +1332,8 @@ select option {
 }
 
 .iv-dynamics-time-row,
-.iv-dynamics-row {
+.iv-dynamics-row,
+.iv-dynamics-ba-row {
   display: grid;
   grid-template-columns: 52px max-content;
   align-items: center;
@@ -1343,6 +1361,26 @@ select option {
 .iv-dynamics-column-labels {
   display: grid;
   gap: 2px;
+}
+
+.iv-dynamics-ba-row {
+  margin-bottom: 4px;
+}
+
+.iv-dynamics-ba-chart {
+  height: 42px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.iv-dynamics-ba-chart svg {
+  display: block;
+  overflow: visible;
+}
+
+.iv-dynamics-ba-chart circle {
+  fill: #facc15;
+  stroke: rgba(15, 17, 22, 0.9);
+  stroke-width: 0.7;
 }
 
 .iv-dynamics-column-labels span {

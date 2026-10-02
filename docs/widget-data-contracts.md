@@ -115,13 +115,16 @@ The first implementation calculates this output in the renderer from history and
     expiration: string,
     deltas: string,
     mode: "premium" | "iv",
-    maxColumns: number
+    maxColumns: number,
+    showBA: boolean
   },
   expiration?: string,
   mode?: "premium" | "iv",
   rows?: Array<{ key: string, side: "put" | "call", delta: number | "ATM", label: string }>,
-  columns?: Array<{ timestamp: string | number, expiration: string, label: string }>,
+  columns?: Array<{ timestamp: string | number, expiration: string, label: string, baPrice: number | null }>,
+  baSeries?: Array<{ timestamp: string | number, label: string, price: number | null, y: number | null }>,
   cells?: Array<Array<{
+    baPrice: number | null,
     iv: number | null,
     atmIV: number | null,
     premium: number | null,
@@ -141,6 +144,7 @@ The first implementation calculates this output in the renderer from history and
 ```
 
 `mode: "premium"` means cells display `IV minus ATM`; `mode: "iv"` means cells display absolute IV. Colors are calculated from the selected value's change versus the previous available column in the same row.
+When `showBA` is enabled, the renderer draws a compact spot-price overlay from root `snapshot.px`; `baSeries.y` is normalized for plotting and uses `0.5` for flat finite price ranges.
 
 ## Implementation Notes
 

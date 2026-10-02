@@ -22,6 +22,10 @@ function fmtNum(value, digits = 2) {
   return Number.isFinite(value) ? Number(value).toFixed(digits) : 'n/a';
 }
 
+function fmtPrice(value, digits = 2) {
+  return Number.isFinite(value) ? Number(value).toFixed(digits) : 'n/a';
+}
+
 function fmtDelta(value) {
   if (value === 'ATM') return 'ATM';
   return Number.isFinite(value) ? `${Math.round(Math.abs(value) * 100)}D` : 'n/a';
@@ -50,6 +54,7 @@ function tooltipForCell(cell, mode) {
     `Delta: ${fmtDelta(cell.delta)}`,
     `Strike: ${fmtNum(cell.matchedStrike, 0)}`,
     `Matched delta: ${fmtNum(cell.matchedDelta, 3)}`,
+    `BA: ${fmtPrice(cell.baPrice)}`,
     `IV: ${fmtPct(cell.iv)}`,
     `ATM IV: ${fmtPct(cell.atmIV)}`,
     `IV minus ATM: ${fmtVolPts(cell.premium)}`,
@@ -80,6 +85,10 @@ function renderControls(cfg) {
       <label>Columns
         <input data-iv-dynamics-param="maxColumns" type="number" min="1" max="1000" step="1" value="${esc(cfg.maxColumns || 120)}" />
       </label>
+      <label class="iv-dynamics-check">
+        <input data-iv-dynamics-param="showBA" type="checkbox" ${cfg.showBA ? 'checked' : ''} />
+        <span>BA</span>
+      </label>
     </div>
   `;
 }
@@ -94,12 +103,46 @@ function bindControls(container, widget, onConfigChange) {
         widget.config[name] = Number.isFinite(parsed) ? Math.max(1, parsed) : 120;
       } else if (name === 'mode') {
         widget.config[name] = evt.target.value === 'iv' ? 'iv' : 'premium';
+      } else if (name === 'showBA') {
+        widget.config[name] = Boolean(evt.target.checked);
       } else {
         widget.config[name] = evt.target.value;
       }
       onConfigChange();
     });
   });
+}
+
+function renderBAStrip(matrix) {
+  const series = Array.isArray(matrix.baSeries) ? matrix.baSeries : [];
+  if (!series.length || !series.some((point) => Number.isFinite(point.price))) return '';
+  const cellSize = 18;
+  const gap = 2;
+  const height = 42;
+  const width = Math.max(cellSize, (series.length * cellSize) + ((series.length - 1) * gap));
+  const points = series.map((point, idx) => {
+    if (!Number.isFinite(point.y)) return null;
+    const x = (idx * (cellSize + gap)) + (cellSize / 2);
+    const y = 5 + ((1 - point.y) * (height - 10));
+    return { ...point, x, y };
+  });
+  const pathPoints = points.filter(Boolean);
+  const polyline = pathPoints.map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(' ');
+  const finitePrices = series.map((point) => point.price).filter(Number.isFinite);
+  const min = Math.min(...finitePrices);
+  const max = Math.max(...finitePrices);
+  const last = [...series].reverse().find((point) => Number.isFinite(point.price));
+  return `
+    <div class="iv-dynamics-ba-row">
+      <div class="iv-dynamics-row-label">BA</div>
+      <div class="iv-dynamics-ba-chart" style="width: ${width}px;" title="BA ${fmtPrice(last?.price)} | range ${fmtPrice(min)}-${fmtPrice(max)}">
+        <svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="BA price overlay">
+          <polyline points="${esc(polyline)}" fill="none" stroke="#facc15" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"></polyline>
+          ${pathPoints.map((point) => `<circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="1.8"><title>${esc(`${point.label}: ${fmtPrice(point.price)}`)}</title></circle>`).join('')}
+        </svg>
+      </div>
+    </div>
+  `;
 }
 
 function renderHeatmap(matrix) {
@@ -125,6 +168,7 @@ function renderHeatmap(matrix) {
   return `
     <div class="iv-dynamics-shell">
       <div class="iv-dynamics-scroll" data-iv-dynamics-scroll>
+        ${matrix.showBA ? renderBAStrip(matrix) : ''}
         <div class="iv-dynamics-time-row">
           <div class="iv-dynamics-row-label"></div>
           <div class="iv-dynamics-column-labels" style="grid-template-columns: repeat(${columns.length}, var(--iv-dynamics-cell-size));">${columnLabels}</div>
@@ -135,6 +179,7 @@ function renderHeatmap(matrix) {
         <span>${esc(matrix.mode === 'iv' ? 'Mode: Absolute IV' : 'Mode: IV minus ATM')}</span>
         <span>Expiration: ${esc(matrix.expiration || 'n/a')}</span>
         <span>Columns: ${matrix.columns.length}</span>
+        ${matrix.showBA ? `<span>BA: ${esc(fmtPrice([...matrix.baSeries].reverse().find((point) => Number.isFinite(point.price))?.price))}</span>` : ''}
       </div>
       ${matrix.warnings.length ? `<div class="iv-dynamics-warning">${esc(matrix.warnings.slice(0, 3).join(' | '))}</div>` : ''}
     </div>
@@ -152,7 +197,8 @@ export const ivDynamicsWidget = {
     expiration: '',
     deltas: 'ATM,90,75,50,25,10,5',
     mode: 'premium',
-    maxColumns: 120
+    maxColumns: 120,
+    showBA: false
   },
   render: async ({ container, history, widget, widgetData, onConfigChange }) => {
     const cfg = { ...ivDynamicsWidget.defaultConfig, ...(widget.config || {}) };
@@ -171,6 +217,7 @@ export const ivDynamicsWidget = {
         rows: matrix.rows,
         columns: matrix.columns,
         cells: matrix.cells,
+        baSeries: matrix.baSeries,
         warnings: matrix.warnings
       });
       container.innerHTML = `${renderControls(cfg)}${renderHeatmap(matrix)}`;
