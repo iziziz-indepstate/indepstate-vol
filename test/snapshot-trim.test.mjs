@@ -155,6 +155,18 @@ test('n-Delta IV trim resolves expiration placeholder with full quote search sur
   assert.equal(point.warning, null);
 });
 
+test('IV Dynamics keeps the requested expiration with full quote search surface', () => {
+  const trimmed = trimSnapshotForWidgets(fullSnapshot(), {
+    widgets: [{
+      type: 'iv-dynamics',
+      config: { expiration: '20260619', deltas: 'ATM,25,10' }
+    }]
+  });
+
+  assert.ok(trimmed.byExpiry['20260619']);
+  assert.equal(trimmed.byExpiry['20260619'].optionQuotes.length, fullSnapshot().byExpiry['20260619'].optionQuotes.length);
+});
+
 test('Straddle ATM remains calculable after trim', async () => {
   const trimmed = trimSnapshotForWidgets(fullSnapshot(), {
     widgets: [{

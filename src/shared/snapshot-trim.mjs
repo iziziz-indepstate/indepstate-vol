@@ -268,6 +268,12 @@ function addNDeltaNeed(snapshot, needs, widget) {
   if (expiry) addNeed(needs, expiry, { allQuotes: true });
 }
 
+function addIvDynamicsNeed(snapshot, needs, widget) {
+  const resolved = resolveExpiryToken(widget?.config?.expiration, snapshot?.expiryPlaceholders).value;
+  const expiry = normalizeExpiryKey(resolved) || primaryExpiryKey(snapshot);
+  if (expiry) addNeed(needs, expiry, { allQuotes: true });
+}
+
 function addStraddleNeed(snapshot, needs, widget) {
   const cfg = widget?.config || {};
   try {
@@ -332,6 +338,7 @@ function collectNeeds(snapshot, tab) {
   for (const widget of tab?.widgets || []) {
     const type = String(widget?.type || '');
     if (type === 'n-delta-iv') addNDeltaNeed(snapshot, needs, widget);
+    else if (type === 'iv-dynamics') addIvDynamicsNeed(snapshot, needs, widget);
     else if (type === 'atm-straddle') addStraddleNeed(snapshot, needs, widget);
     else if (type === 'spread-optimizer') addSpreadOptimizerNeed(snapshot, needs, widget);
     else if (type === 'iv-current-line') addIvCurrentNeed(snapshot, needs, widget);

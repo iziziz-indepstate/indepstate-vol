@@ -17,6 +17,7 @@ import { ivRvWidget } from './iv-rv-widget.js';
 import { atmStraddleWidget } from './atm-straddle-widget.js';
 import { volUpfrontWidget } from './vol-upfront-widget.js';
 import { nDeltaIVWidget } from './n-delta-iv-widget.js';
+import { ivDynamicsWidget } from './iv-dynamics-widget.js';
 import { theBlockWidgets } from './theblock-widgets.js';
 import { appPluginWidgets } from '../../plugins/index.js';
 
@@ -24,6 +25,7 @@ export const widgetDefinitions = [
   atmStraddleWidget,
   volUpfrontWidget,
   nDeltaIVWidget,
+  ivDynamicsWidget,
   atmSkewWidget,
   tailSkewWidget,
   ivCurrentWidget,

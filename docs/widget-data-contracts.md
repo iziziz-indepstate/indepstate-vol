@@ -104,6 +104,44 @@ type NDeltaIVPoint = {
 
 The first implementation calculates this output in the renderer from history and does not persist or republish it through the widget data store yet.
 
+`IV Dynamics` publishes the rendered heatmap matrix after each render:
+
+```ts
+{
+  type: "iv-dynamics",
+  status: "ok" | "error",
+  title: string,
+  config: {
+    expiration: string,
+    deltas: string,
+    mode: "premium" | "iv",
+    maxColumns: number
+  },
+  expiration?: string,
+  mode?: "premium" | "iv",
+  rows?: Array<{ key: string, side: "put" | "call", delta: number | "ATM", label: string }>,
+  columns?: Array<{ timestamp: string | number, expiration: string, label: string }>,
+  cells?: Array<Array<{
+    iv: number | null,
+    atmIV: number | null,
+    premium: number | null,
+    value: number | null,
+    matchedStrike: number | null,
+    matchedDelta: number | null,
+    comparisons: {
+      previous: number | null,
+      m15: number | null,
+      m60: number | null,
+      session: number | null
+    }
+  }>>,
+  warnings?: string[],
+  error?: string
+}
+```
+
+`mode: "premium"` means cells display `IV minus ATM`; `mode: "iv"` means cells display absolute IV. Colors are calculated from the selected value's change versus the previous available column in the same row.
+
 ## Implementation Notes
 
 - The widget data store is local to the renderer runtime.
