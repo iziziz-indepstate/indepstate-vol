@@ -59,20 +59,20 @@ test('parses default deltas and builds row order around two ATM rows', () => {
     deltas: [0.05, 0.1, 0.25, 0.5, 0.75, 0.9]
   });
   assert.deepEqual(buildIVDynamicsRows().map((row) => row.label), [
-    'P 5D',
-    'P 10D',
-    'P 25D',
-    'P 50D',
-    'P 75D',
-    'P 90D',
-    'P ATM',
-    'C ATM',
-    'C 90D',
-    'C 75D',
-    'C 50D',
-    'C 25D',
+    'C 5D',
     'C 10D',
-    'C 5D'
+    'C 25D',
+    'C 50D',
+    'C 75D',
+    'C 90D',
+    'C ATM',
+    'P ATM',
+    'P 90D',
+    'P 75D',
+    'P 50D',
+    'P 25D',
+    'P 10D',
+    'P 5D'
   ]);
 });
 
@@ -99,11 +99,13 @@ test('supports premium and absolute IV display modes', () => {
   const history = [snapshot('2026-06-07T14:00:00.000Z')];
   const premium = buildIVDynamicsMatrix(history, { mode: 'premium', deltas: '25' });
   const iv = buildIVDynamicsMatrix(history, { mode: 'iv', deltas: '25' });
+  const premiumByLabel = Object.fromEntries(premium.rows.map((row, idx) => [row.label, premium.cells[idx][0]]));
+  const ivByLabel = Object.fromEntries(iv.rows.map((row, idx) => [row.label, iv.cells[idx][0]]));
 
   assert.equal(premium.mode, 'premium');
-  assert.ok(Math.abs(premium.cells[0][0].value - 0.09) < 1e-12);
+  assert.ok(Math.abs(premiumByLabel['P 25D'].value - 0.09) < 1e-12);
   assert.equal(iv.mode, 'iv');
-  assert.equal(iv.cells[0][0].value, 0.30);
+  assert.equal(ivByLabel['P 25D'].value, 0.30);
 });
 
 test('calculates previous, 15 minute, 60 minute, and session changes', () => {

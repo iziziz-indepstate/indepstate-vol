@@ -162,16 +162,16 @@ function deltaLabel(delta) {
 export function buildIVDynamicsRows(deltaConfig = DEFAULT_DELTAS) {
   const { includeAtm, deltas } = parseIVDynamicsDeltas(deltaConfig);
   const rows = [
-    ...deltas.map((delta) => ({ key: `put-${delta}`, side: 'put', delta, label: `P ${deltaLabel(delta)}` }))
+    ...deltas.map((delta) => ({ key: `call-${delta}`, side: 'call', delta, label: `C ${deltaLabel(delta)}` }))
   ];
   if (includeAtm) {
     rows.push(
-      { key: 'put-atm', side: 'put', delta: 'ATM', label: 'P ATM', isAtm: true },
-      { key: 'call-atm', side: 'call', delta: 'ATM', label: 'C ATM', isAtm: true }
+      { key: 'call-atm', side: 'call', delta: 'ATM', label: 'C ATM', isAtm: true },
+      { key: 'put-atm', side: 'put', delta: 'ATM', label: 'P ATM', isAtm: true }
     );
   }
   rows.push(
-    ...[...deltas].reverse().map((delta) => ({ key: `call-${delta}`, side: 'call', delta, label: `C ${deltaLabel(delta)}` }))
+    ...[...deltas].reverse().map((delta) => ({ key: `put-${delta}`, side: 'put', delta, label: `P ${deltaLabel(delta)}` }))
   );
   return rows;
 }
