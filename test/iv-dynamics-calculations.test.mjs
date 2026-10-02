@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildIVDynamicsMatrix,
   buildIVDynamicsRows,
+  normalizeIVDynamicsCompareMode,
   parseIVDynamicsDeltas
 } from '../src/shared/iv-dynamics-calculations.mjs';
 
@@ -106,6 +107,14 @@ test('supports premium and absolute IV display modes', () => {
   assert.ok(Math.abs(premiumByLabel['P 25D'].value - 0.09) < 1e-12);
   assert.equal(iv.mode, 'iv');
   assert.equal(ivByLabel['P 25D'].value, 0.30);
+});
+
+test('normalizes IV Dynamics compare mode', () => {
+  assert.equal(normalizeIVDynamicsCompareMode('session'), 'session');
+  assert.equal(normalizeIVDynamicsCompareMode('previous'), 'previous');
+  assert.equal(normalizeIVDynamicsCompareMode('bad'), 'previous');
+  assert.equal(buildIVDynamicsMatrix([snapshot('2026-06-07T14:00:00.000Z')], {}).compareMode, 'previous');
+  assert.equal(buildIVDynamicsMatrix([snapshot('2026-06-07T14:00:00.000Z')], { compareMode: 'session' }).compareMode, 'session');
 });
 
 test('calculates previous, 15 minute, 60 minute, and session changes', () => {

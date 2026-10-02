@@ -115,11 +115,13 @@ The first implementation calculates this output in the renderer from history and
     expiration: string,
     deltas: string,
     mode: "premium" | "iv",
+    compareMode: "previous" | "session",
     maxColumns: number,
     showBA: boolean
   },
   expiration?: string,
   mode?: "premium" | "iv",
+  compareMode?: "previous" | "session",
   rows?: Array<{ key: string, side: "put" | "call", delta: number | "ATM", label: string }>,
   columns?: Array<{ timestamp: string | number, expiration: string, label: string, baPrice: number | null }>,
   baSeries?: Array<{ timestamp: string | number, label: string, price: number | null, y: number | null }>,

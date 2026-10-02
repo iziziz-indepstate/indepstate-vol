@@ -2,6 +2,7 @@ import { resolveExpiryToken } from './expiry-placeholders.mjs';
 
 const OPTION_TYPES = new Set(['put', 'call']);
 const DEFAULT_DELTAS = 'ATM,90,75,50,25,10,5';
+const COMPARE_MODES = new Set(['previous', 'session']);
 
 function toNum(value) {
   if (value == null || value === '') return null;
@@ -12,6 +13,11 @@ function toNum(value) {
 function normalizeOptionType(value) {
   const normalized = String(value || '').toLowerCase();
   return OPTION_TYPES.has(normalized) ? normalized : null;
+}
+
+export function normalizeIVDynamicsCompareMode(value) {
+  const normalized = String(value || '').toLowerCase();
+  return COMPARE_MODES.has(normalized) ? normalized : 'previous';
 }
 
 function quoteType(quote) {
@@ -264,6 +270,7 @@ function buildBASeries(points, columns) {
 
 export function buildIVDynamicsMatrix(history, config = {}) {
   const mode = config.mode === 'iv' ? 'iv' : 'premium';
+  const compareMode = normalizeIVDynamicsCompareMode(config.compareMode);
   const maxColumns = Math.max(1, Math.floor(Number(config.maxColumns) || 120));
   const selected = (Array.isArray(history) ? history : []).filter(Boolean).slice(-maxColumns);
   const pointConfig = { ...config, mode };
@@ -325,6 +332,7 @@ export function buildIVDynamicsMatrix(history, config = {}) {
 
   return {
     mode,
+    compareMode,
     showBA: Boolean(config.showBA),
     expiration: columns[columns.length - 1]?.expiration || normalizeExpiryKey(config.expiration),
     rows,

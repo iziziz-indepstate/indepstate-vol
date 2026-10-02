@@ -44,6 +44,10 @@ function cellColor(delta) {
   return `rgba(34, 197, 94, ${0.20 + magnitude * 0.66})`;
 }
 
+export function comparisonDeltaForCell(cell, compareMode = 'previous') {
+  return compareMode === 'session' ? cell?.comparisons?.session : cell?.comparisons?.previous;
+}
+
 function tooltipForCell(cell, mode) {
   const modeLabel = mode === 'iv' ? 'Absolute IV' : 'IV minus ATM';
   return [
@@ -82,6 +86,12 @@ function renderControls(cfg) {
           <option value="iv" ${cfg.mode === 'iv' ? 'selected' : ''}>Absolute IV</option>
         </select>
       </label>
+      <label>Compare
+        <select data-iv-dynamics-param="compareMode">
+          <option value="previous" ${cfg.compareMode !== 'session' ? 'selected' : ''}>Previous</option>
+          <option value="session" ${cfg.compareMode === 'session' ? 'selected' : ''}>Session</option>
+        </select>
+      </label>
       <label>Columns
         <input data-iv-dynamics-param="maxColumns" type="number" min="1" max="1000" step="1" value="${esc(cfg.maxColumns || 120)}" />
       </label>
@@ -103,6 +113,8 @@ function bindControls(container, widget, onConfigChange) {
         widget.config[name] = Number.isFinite(parsed) ? Math.max(1, parsed) : 120;
       } else if (name === 'mode') {
         widget.config[name] = evt.target.value === 'iv' ? 'iv' : 'premium';
+      } else if (name === 'compareMode') {
+        widget.config[name] = evt.target.value === 'session' ? 'session' : 'previous';
       } else if (name === 'showBA') {
         widget.config[name] = Boolean(evt.target.checked);
       } else {
@@ -153,7 +165,7 @@ function renderHeatmap(matrix) {
   const columnLabels = columns.map((column) => `<span>${esc(column.label)}</span>`).join('');
   const rows = matrix.rows.map((row, rowIdx) => {
     const cells = matrix.cells[rowIdx].map((cell) => {
-      const color = cellColor(cell.comparisons?.previous);
+      const color = cellColor(comparisonDeltaForCell(cell, matrix.compareMode));
       const valueLabel = matrix.mode === 'iv' ? fmtPct(cell.value) : fmtVolPts(cell.value);
       return `<button class="iv-dynamics-cell" type="button" title="${esc(tooltipForCell(cell, matrix.mode))}" style="--iv-cell-bg: ${color}" aria-label="${esc(`${row.label} ${valueLabel}`)}"></button>`;
     }).join('');
@@ -177,6 +189,7 @@ function renderHeatmap(matrix) {
       </div>
       <div class="iv-dynamics-footer">
         <span>${esc(matrix.mode === 'iv' ? 'Mode: Absolute IV' : 'Mode: IV minus ATM')}</span>
+        <span>Compare: ${esc(matrix.compareMode === 'session' ? 'Session' : 'Previous')}</span>
         <span>Expiration: ${esc(matrix.expiration || 'n/a')}</span>
         <span>Columns: ${matrix.columns.length}</span>
         ${matrix.showBA ? `<span>BA: ${esc(fmtPrice([...matrix.baSeries].reverse().find((point) => Number.isFinite(point.price))?.price))}</span>` : ''}
@@ -197,6 +210,7 @@ export const ivDynamicsWidget = {
     expiration: '',
     deltas: 'ATM,90,75,50,25,10,5',
     mode: 'premium',
+    compareMode: 'previous',
     maxColumns: 120,
     showBA: false
   },
@@ -214,6 +228,7 @@ export const ivDynamicsWidget = {
         config: { ...cfg },
         expiration: matrix.expiration,
         mode: matrix.mode,
+        compareMode: matrix.compareMode,
         rows: matrix.rows,
         columns: matrix.columns,
         cells: matrix.cells,
