@@ -38,6 +38,7 @@
             <select id="providerKey">
               <option value="tradingview">TradingView</option>
               <option value="theblock">The Block</option>
+              <option value="tape-contract">Tape Contract</option>
             </select>
           </label>
           <label data-provider-setting="tradingview">API Base
@@ -46,7 +47,7 @@
           <label data-provider-setting="tradingview">Ticker
             <input id="ticker" />
           </label>
-          <label data-provider-setting="tradingview">Root
+          <label data-provider-setting="tradingview tape-contract">Root
             <input id="root" />
           </label>
           <label data-provider-setting="tradingview">Expiry start/list (YYYYMMDD or today,tomorrow,nextWeek,nextMonth)
@@ -58,10 +59,10 @@
           <label data-provider-setting="tradingview">Yahoo Symbol
             <input id="yahooSymbol" />
           </label>
-          <label data-provider-setting="tradingview">Poll sec
+          <label data-provider-setting="tradingview tape-contract">Poll sec
             <input id="pollSec" type="number" min="1" />
           </label>
-          <label data-provider-setting="tradingview">Keep points
+          <label data-provider-setting="tradingview tape-contract">Keep points
             <input id="keepPoints" type="number" min="20" />
           </label>
           <label class="checkbox-field">

@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('appBridge', {
   getDailyMarketHistory: (params) => ipcRenderer.invoke('market-data:get-daily-history', params),
   getTradingViewSnapshot: (params) => ipcRenderer.invoke('tradingview:get-snapshot', params),
   getTheBlockSnapshot: (params) => ipcRenderer.invoke('theblock:get-snapshot', params),
+  getDataSourceSnapshot: (providerKey, params) => ipcRenderer.invoke(`${providerKey}:get-snapshot`, params),
   syncDataSources: (payload) => ipcRenderer.invoke('datasource:sync-tabs', payload),
   runDataSourceCommand: (payload) => ipcRenderer.invoke('datasource:command', payload),
   getDataSourceLifecycleUi: () => ipcRenderer.invoke('datasource:lifecycle-ui'),

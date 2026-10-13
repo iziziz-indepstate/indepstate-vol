@@ -38,6 +38,9 @@ const providers = {
         ? window.appBridge.getTheBlockSnapshot(config)
         : new TheBlockProvider().fetchSnapshot(config)
     )
+  },
+  'tape-contract': {
+    fetchSnapshot: (config) => window.appBridge.getDataSourceSnapshot('tape-contract', config)
   }
 };
 
@@ -623,6 +626,12 @@ function readFormToTab(tab) {
       expiryStart: $('expiryStart').value.trim(),
       expiryEnd: $('expiryEnd').value.trim(),
       yahooSymbol: $('yahooSymbol').value.trim(),
+      pollSec: Number($('pollSec').value) || 5,
+      keepPoints: Number($('keepPoints').value) || 200
+    });
+  } else if (providerKey === 'tape-contract') {
+    Object.assign(nextConfig, {
+      root: $('root').value.trim(),
       pollSec: Number($('pollSec').value) || 5,
       keepPoints: Number($('keepPoints').value) || 200
     });
@@ -2452,6 +2461,16 @@ async function tickTab(tabId) {
       ...tab.providerConfig,
       expiryPlaceholderKeys: collectWidgetExpiryPlaceholderKeys(tab)
     }, skewMetrics));
+    if (point?.noop) {
+      const updatedAt = formatStatusUpdateTime(point.time);
+      const pending = point.stats?.pending || {};
+      setTabStatus(tabId, `ok • ${tab.title} • updated=${updatedAt} • no new records • pending tape=${pending.tape ?? 0} contract=${pending.contract ?? 0}`);
+      const renderStart = performance.now();
+      tickTabIfActive(tabId);
+      profileDuration('tick:activeRenderTrigger', renderStart, { tabId, active: isActiveTabId(tabId), noop: true });
+      profileDuration('tick:total', tickStart, { tabId, providerKey: tab.providerKey, noop: true });
+      return;
+    }
     if (shouldSaveRawSnapshots(tab)) {
       const rawStart = performance.now();
       saveRawSnapshotDeferred({
@@ -2502,7 +2521,12 @@ async function tickTab(tabId) {
     const renderStart = performance.now();
     tickTabIfActive(tabId);
     profileDuration('tick:activeRenderTrigger', renderStart, { tabId, active: isActiveTabId(tabId) });
-    if (point.theBlock?.latestDate) {
+    if (point.provider === 'tape-contract') {
+      setTabStatus(
+        tabId,
+        `ok • ${tab.title} • updated=${updatedAt} • tape=${point.tape?.count ?? 0} contract=${point.contract?.count ?? 0}`
+      );
+    } else if (point.theBlock?.latestDate) {
       const chartCount = Object.keys(point.theBlock?.charts || {}).length;
       setTabStatus(tabId, `ok • ${tab.title} • updated=${updatedAt} • The Block charts=${chartCount} • latest=${point.theBlock.latestDate}`);
     } else {

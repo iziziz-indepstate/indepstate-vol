@@ -148,6 +148,50 @@ The first implementation calculates this output in the renderer from history and
 `mode: "premium"` means cells display `IV minus ATM`; `mode: "iv"` means cells display absolute IV. Colors are calculated from the selected value's change versus the previous available column in the same row.
 When `showBA` is enabled, the renderer draws a compact spot-price overlay from root `snapshot.px`; `baSeries.y` is normalized for plotting and uses `0.5` for flat finite price ranges.
 
+`Option Flow TICK` is a `timeseries-custom` chart widget backed by the `tape-contract` datasource. It publishes through the chart runtime path rather than the table widget data store:
+
+```ts
+{
+  kind: "chart",
+  type: "option-flow-tick",
+  mode: "timeseries-custom",
+  config: {
+    strikeWindow: number
+  },
+  historyLength: number,
+  sourceSnapshotTime: string | null,
+  chart: {
+    labels: string[],
+    datasets: Array<{
+      label: "Bought calls" | "Sold calls" | "Bought puts" | "Sold puts",
+      data: number[],
+      pointMeta: Array<{
+        timestamp: string | number,
+        px: number | null,
+        strikeWindow: number,
+        allowedStrikes: number[],
+        records: number,
+        matchedRecords: number,
+        increments: {
+          boughtCalls: number,
+          soldCalls: number,
+          boughtPuts: number,
+          soldPuts: number
+        },
+        totals: {
+          boughtCalls: number,
+          soldCalls: number,
+          boughtPuts: number,
+          soldPuts: number
+        }
+      }>
+    }>
+  }
+}
+```
+
+The series are cumulative `size_contracts` totals for tape rows whose `call_put` is `CALL` or `PUT`, whose `aggressor_buy_sell` is `BUY` or `SELL`, and whose strike is inside the widget's observed `±S` strike window around tape `underlying_price`. Details: [Tape Contract Datasource](tape-contract-datasource.md).
+
 ## Implementation Notes
 
 - The widget data store is local to the renderer runtime.

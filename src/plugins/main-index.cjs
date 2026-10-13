@@ -2,6 +2,7 @@ const {
   createAutoLaunchLifecycle,
   createScheduledRefreshLifecycle
 } = require('./auto-launch-datasource/lifecycle.cjs');
+const { activateTapeContractDataSource } = require('./tape-contract-datasource/main.cjs');
 
 const dataSourceLifecycleToolsPlugin = {
   id: 'datasource-lifecycle-tools',
@@ -18,7 +19,12 @@ const dataSourceLifecycleToolsPlugin = {
 };
 
 const appMainPluginManifests = [
-  dataSourceLifecycleToolsPlugin
+  dataSourceLifecycleToolsPlugin,
+  {
+    id: 'tape-contract-datasource',
+    title: 'Tape Contract DataSource',
+    activateMain: activateTapeContractDataSource
+  }
 ];
 
 function activateMainAppPlugins(manifests, context) {

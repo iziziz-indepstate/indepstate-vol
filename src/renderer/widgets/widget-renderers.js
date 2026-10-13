@@ -61,6 +61,7 @@ export function createWidgetCard(widget, definition, options = {}) {
   const strikeRangeValue = String(widget?.config?.strikeRange ?? definition?.defaultConfig?.strikeRange ?? '');
   const optionTypeValue = String(widget?.config?.optionType ?? definition?.defaultConfig?.optionType ?? 'put');
   const targetDeltaValue = Number(widget?.config?.targetDelta ?? definition?.defaultConfig?.targetDelta ?? 0.25);
+  const strikeWindowValue = Number(widget?.config?.strikeWindow ?? definition?.defaultConfig?.strikeWindow ?? 3);
   const expirationValue = String(widget?.config?.expiration ?? definition?.defaultConfig?.expiration ?? '');
   const timeRangeValue = String(widget?.config?.range ?? definition?.defaultConfig?.range ?? '1M');
   const mirrorXChecked = Boolean(widget?.config?.mirrorX ?? definition?.defaultConfig?.mirrorX);
@@ -91,6 +92,9 @@ export function createWidgetCard(widget, definition, options = {}) {
         </label>` : ''}
         ${controlsConfig.targetDelta ? `<label class="widget-control">D
           <input type="number" min="0.01" max="0.99" step="0.01" class="widget-target-delta-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.TARGET_DELTA}" value="${targetDeltaValue}" />
+        </label>` : ''}
+        ${controlsConfig.strikeWindow ? `<label class="widget-control">±S
+          <input type="number" min="0" step="1" class="widget-strike-window-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.STRIKE_WINDOW}" value="${strikeWindowValue}" />
         </label>` : ''}
         ${controlsConfig.expiration ? `<label class="widget-control">Exp
           <input type="text" class="widget-expiration-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.EXPIRATION}" value="${expirationValue}" placeholder="20260612 or tomorrow" />

@@ -451,8 +451,56 @@ function copyRootFields(snapshot, primaryExpiry, primarySnapshot, byExpiry) {
   return out;
 }
 
+function compactTapeContractSnapshot(snapshot) {
+  const compactTapeRecord = (record) => ({
+    timestamp: record?.timestamp ?? '',
+    timezone: record?.timezone ?? '',
+    underlying: record?.underlying ?? '',
+    expiration: record?.expiration ?? '',
+    strike: record?.strike ?? null,
+    call_put: record?.call_put ?? '',
+    size_contracts: record?.size_contracts ?? null,
+    premium: record?.premium ?? null,
+    underlying_price: record?.underlying_price ?? '',
+    aggressor_buy_sell: record?.aggressor_buy_sell ?? '',
+    trade_id_sequence: record?.trade_id_sequence ?? '',
+    delta: record?.delta ?? null,
+    _dedupeKey: record?._dedupeKey ?? ''
+  });
+  const compactContractRecord = (record) => ({
+    underlying: record?.underlying ?? '',
+    expiration: record?.expiration ?? '',
+    strike: record?.strike ?? null,
+    call_put: record?.call_put ?? '',
+    oi: record?.oi ?? null,
+    total_volume: record?.total_volume ?? null
+  });
+  return {
+    provider: 'tape-contract',
+    schema: snapshot?.schema,
+    time: snapshot?.time ?? null,
+    px: snapshot?.px ?? null,
+    atmSource: snapshot?.atmSource,
+    underlying: snapshot?.underlying ?? null,
+    tape: {
+      count: snapshot?.tape?.count ?? 0,
+      records: (Array.isArray(snapshot?.tape?.records) ? snapshot.tape.records : []).map(compactTapeRecord)
+    },
+    contract: {
+      count: snapshot?.contract?.count ?? 0,
+      records: (Array.isArray(snapshot?.contract?.records) ? snapshot.contract.records : []).map(compactContractRecord)
+    },
+    stats: snapshot?.stats,
+    storage: {
+      trimmed: true,
+      trimVersion: SNAPSHOT_TRIM_VERSION
+    }
+  };
+}
+
 export function trimSnapshotForWidgets(snapshot, tab) {
   if (!snapshot || typeof snapshot !== 'object') return snapshot;
+  if (snapshot.provider === 'tape-contract') return compactTapeContractSnapshot(snapshot);
   if (snapshot.theBlock?.charts) {
     return {
       ...snapshot,

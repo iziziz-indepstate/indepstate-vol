@@ -202,6 +202,13 @@ function patchDataSourceConfig(tabId, partial) {
 async function activateMainPlugins() {
   const { activateMainAppPlugins, appMainPluginManifests } = require('../plugins/main-index.cjs');
   mainPluginCleanup = activateMainAppPlugins(appMainPluginManifests, {
+    ipc: {
+      handle(channel, listener) {
+        ipcMain.handle(channel, listener);
+        return () => ipcMain.removeHandler(channel);
+      }
+    },
+    profiler,
     dataSources: {
       registerLifecycle: (descriptor) => dataSourceLifecycleRegistry.registerLifecycle(descriptor)
     }

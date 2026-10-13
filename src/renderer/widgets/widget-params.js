@@ -8,6 +8,7 @@ export const WIDGET_PARAM_NAMES = Object.freeze({
   TAIL_STEPS: 'tailSteps',
   OPTION_TYPE: 'optionType',
   TARGET_DELTA: 'targetDelta',
+  STRIKE_WINDOW: 'strikeWindow',
   EXPIRATION: 'expiration',
   TIME_RANGE: 'range',
   MIRROR_X: 'mirrorX'
@@ -38,6 +39,11 @@ export function normalizeWidgetParamValue(paramName, rawValue, currentValue, opt
       return Number.isFinite(numeric) ? Math.min(0.99, Math.max(0.01, numeric)) : (currentValue || 0.25);
     }
 
+    case WIDGET_PARAM_NAMES.STRIKE_WINDOW: {
+      const numeric = Math.abs(Number(str));
+      return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : (currentValue ?? 3);
+    }
+
     case WIDGET_PARAM_NAMES.OPTION_TYPE:
       return str === 'call' ? 'call' : 'put';
 
@@ -64,6 +70,7 @@ export function shouldRefreshOnWidgetParamChange(paramName) {
     || paramName === WIDGET_PARAM_NAMES.TAIL_STEPS
     || paramName === WIDGET_PARAM_NAMES.OPTION_TYPE
     || paramName === WIDGET_PARAM_NAMES.TARGET_DELTA
+    || paramName === WIDGET_PARAM_NAMES.STRIKE_WINDOW
     || paramName === WIDGET_PARAM_NAMES.EXPIRATION
     || paramName === WIDGET_PARAM_NAMES.TIME_RANGE
     || paramName === WIDGET_PARAM_NAMES.MIRROR_X;

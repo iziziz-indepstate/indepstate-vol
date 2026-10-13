@@ -14,6 +14,7 @@ npm start
 ## Current Implementation
 
 - **Provider abstraction**: the renderer keeps a `providers[providerKey]` map. The current live option-chain provider is `TradingViewProvider`.
+- **Tape Contract datasource**: the `tape-contract` provider receives `tape.contract.csv.v1` option-flow batches over local HTTP and drains deduped records into tab history. Details: [Tape Contract Datasource](docs/tape-contract-datasource.md).
 - **Widget abstraction**: each widget lives in `src/renderer/widgets/` and is composed through the central widget registry.
 - **Widget data outputs**: widgets can publish structured outputs for other widgets to consume. This makes derived widgets depend on widget contracts instead of recalculating upstream logic. Details: [Widget Data Contracts](docs/widget-data-contracts.md).
 - **Widget events and plugins**: widgets declare interaction event contracts and publish demand-driven events through scoped event ports. App plugins subscribe to those events for side effects such as clipboard commands. Details: [Widget Event Contracts](docs/widget-event-contracts.md).
@@ -41,6 +42,7 @@ npm start
 - **IV Dynamics**: heatmap widget for intraday changes in IV or IV minus ATM across configurable put/call deltas.
 - **Spread Optimizer**: table widget that ranks candidate vertical spreads by configurable risk, liquidity, and regime inputs.
 - **SPX IV / RV**: standalone table and chart widget for implied-vs-realized volatility comparisons.
+- **Option Flow TICK**: four-line cumulative option-flow chart for bought/sold calls and puts from `tape-contract` snapshots, filtered by observed strikes around tape `underlying_price`. Details: [Tape Contract Datasource](docs/tape-contract-datasource.md).
 
 ## Tests
 

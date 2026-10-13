@@ -227,3 +227,47 @@ test('trimming an already trimmed snapshot is idempotent', () => {
   const twice = trimSnapshotForWidgets(once, tab);
   assert.deepEqual(twice, once);
 });
+
+test('tape-contract snapshots keep only widget fields when compacted', () => {
+  const trimmed = trimSnapshotForWidgets({
+    provider: 'tape-contract',
+    schema: 'tape.contract.csv.v1',
+    time: '2026-10-12T10:00:00.000Z',
+    tape: {
+      count: 1,
+      records: [{
+        timestamp: '09:31:20.000',
+        timezone: 'America/New_York',
+        underlying: 'SPX',
+        expiration: '2026-06-12',
+        strike: 7400,
+        call_put: 'CALL',
+        size_contracts: 10,
+        premium: 25000,
+        aggressor_buy_sell: 'BUY',
+        trade_id_sequence: 't-1',
+        delta: 0.45,
+        exchange: 'CBOE'
+      }]
+    },
+    contract: {
+      count: 1,
+      records: [{
+        underlying: 'SPX',
+        expiration: '2026-06-12',
+        strike: 7400,
+        call_put: 'CALL',
+        oi: 100,
+        total_volume: 10,
+        total_premium: 25000
+      }]
+    }
+  }, { widgets: [{ type: 'option-flow-tick' }] });
+
+  assert.equal(trimmed.provider, 'tape-contract');
+  assert.equal(trimmed.storage.trimmed, true);
+  assert.equal(trimmed.tape.records[0].exchange, undefined);
+  assert.equal(trimmed.tape.records[0].delta, 0.45);
+  assert.equal(trimmed.contract.records[0].total_premium, undefined);
+  assert.equal(trimmed.contract.records[0].total_volume, 10);
+});
