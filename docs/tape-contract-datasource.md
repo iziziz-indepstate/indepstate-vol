@@ -101,6 +101,18 @@ The metric is `size_contracts`. Rows with invalid or missing `strike`, `size_con
 
 The widget control `±S` is the strike-window size around ATM. Default is `3`.
 
+The widget control `Flow` selects display mode:
+
+- `Cum`: cumulative totals since the start of retained history
+- `MA 1m`, `MA 3m`, `MA 5m`, `MA 15m`: trailing timestamp-window sums of per-snapshot tape increments
+
+The display-only point-window controls trim rendered chart points after calculation:
+
+- `From`: skip the first N calculated points. Empty is the default and means `0`.
+- `Last`: show only the last N calculated points after `From` is applied. Empty is the default and means no limit.
+
+These controls do not change cumulative totals, MA windows, or tooltip metadata values for retained points.
+
 For each drained tape snapshot, the widget:
 
 1. Reads ATM from `snapshot.px`, falling back to record-level `underlying_price`.
@@ -114,14 +126,30 @@ Tooltips and runtime chart data include per-point metadata:
 - timestamp
 - ATM price
 - strike window
+- display mode and MA window, when selected
 - allowed strikes
 - matched record count
 - per-series increments
-- cumulative totals
+- cumulative totals and displayed totals
+
+## Option Flow Balanced TICK Widget
+
+`Option Flow Balanced TICK` uses the same `tape-contract` history, ATM selection, observed strike-window filtering, and `size_contracts` metric as `Option Flow TICK`.
+
+It renders four balance lines:
+
+- `Calls balance`: bought calls minus sold calls
+- `Puts balance`: bought puts minus sold puts
+- `Directional balance`: calls balance minus puts balance
+- `Imbalance`: directional balance divided by total bought/sold call/put contracts
+
+The widget controls `±S`, `Flow`, `From`, and `Last` match `Option Flow TICK`. In MA modes, balances and imbalance are derived from trailing timestamp-window sums instead of cumulative totals.
+
+Tooltips and runtime chart data include the same per-point metadata as `Option Flow TICK`, plus cumulative and displayed `balances` for the rendered lines.
 
 ## Runtime Data
 
-The widget uses the normal `timeseries-custom` / uPlot path. MCP/open-runtime inspection exposes it as chart runtime data with four datasets and `pointMeta` arrays.
+Both option-flow widgets use the normal `timeseries-custom` / uPlot path. MCP/open-runtime inspection exposes them as chart runtime data with `pointMeta` arrays.
 
 The datasource itself is exposed through the generic preload bridge:
 

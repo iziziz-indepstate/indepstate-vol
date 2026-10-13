@@ -156,7 +156,10 @@ When `showBA` is enabled, the renderer draws a compact spot-price overlay from r
   type: "option-flow-tick",
   mode: "timeseries-custom",
   config: {
-    strikeWindow: number
+    strikeWindow: number,
+    flowDisplayMode: "cumulative" | "ma-1m" | "ma-3m" | "ma-5m" | "ma-15m",
+    displayPointOffset: number | "",
+    displayPointLimit: number | ""
   },
   historyLength: number,
   sourceSnapshotTime: string | null,
@@ -169,6 +172,8 @@ When `showBA` is enabled, the renderer draws a compact spot-price overlay from r
         timestamp: string | number,
         px: number | null,
         strikeWindow: number,
+        displayMode: "cumulative" | "ma-1m" | "ma-3m" | "ma-5m" | "ma-15m",
+        flowWindowMinutes: number | null,
         allowedStrikes: number[],
         records: number,
         matchedRecords: number,
@@ -183,6 +188,12 @@ When `showBA` is enabled, the renderer draws a compact spot-price overlay from r
           soldCalls: number,
           boughtPuts: number,
           soldPuts: number
+        },
+        displayTotals: {
+          boughtCalls: number,
+          soldCalls: number,
+          boughtPuts: number,
+          soldPuts: number
         }
       }>
     }>
@@ -190,7 +201,74 @@ When `showBA` is enabled, the renderer draws a compact spot-price overlay from r
 }
 ```
 
-The series are cumulative `size_contracts` totals for tape rows whose `call_put` is `CALL` or `PUT`, whose `aggressor_buy_sell` is `BUY` or `SELL`, and whose strike is inside the widget's observed `±S` strike window around tape `underlying_price`. Details: [Tape Contract Datasource](tape-contract-datasource.md).
+The series are cumulative `size_contracts` totals by default. In MA display modes they are trailing timestamp-window sums of per-snapshot increments for tape rows whose `call_put` is `CALL` or `PUT`, whose `aggressor_buy_sell` is `BUY` or `SELL`, and whose strike is inside the widget's observed `±S` strike window around tape `underlying_price`. `displayPointOffset` and `displayPointLimit` trim rendered points after calculation and do not alter metric values. Details: [Tape Contract Datasource](tape-contract-datasource.md).
+
+`Option Flow Balanced TICK` uses the same source rows and strike filtering, but publishes four balance datasets:
+
+```ts
+{
+  kind: "chart",
+  type: "option-flow-balanced-tick",
+  mode: "timeseries-custom",
+  config: {
+    strikeWindow: number,
+    flowDisplayMode: "cumulative" | "ma-1m" | "ma-3m" | "ma-5m" | "ma-15m",
+    displayPointOffset: number | "",
+    displayPointLimit: number | ""
+  },
+  historyLength: number,
+  sourceSnapshotTime: string | null,
+  chart: {
+    labels: string[],
+    datasets: Array<{
+      label: "Calls balance" | "Puts balance" | "Directional balance" | "Imbalance",
+      data: number[],
+      pointMeta: Array<{
+        timestamp: string | number,
+        px: number | null,
+        strikeWindow: number,
+        displayMode: "cumulative" | "ma-1m" | "ma-3m" | "ma-5m" | "ma-15m",
+        flowWindowMinutes: number | null,
+        allowedStrikes: number[],
+        records: number,
+        matchedRecords: number,
+        increments: {
+          boughtCalls: number,
+          soldCalls: number,
+          boughtPuts: number,
+          soldPuts: number
+        },
+        totals: {
+          boughtCalls: number,
+          soldCalls: number,
+          boughtPuts: number,
+          soldPuts: number
+        },
+        balances: {
+          callsBalance: number,
+          putsBalance: number,
+          directionalBalance: number,
+          imbalance: number
+        },
+        displayTotals: {
+          boughtCalls: number,
+          soldCalls: number,
+          boughtPuts: number,
+          soldPuts: number
+        },
+        displayBalances: {
+          callsBalance: number,
+          putsBalance: number,
+          directionalBalance: number,
+          imbalance: number
+        }
+      }>
+    }>
+  }
+}
+```
+
+Option-side balances are calculated as bought contracts minus sold contracts for the active display mode. Directional balance is calls balance minus puts balance. Imbalance is directional balance divided by the active display mode's total bought/sold call/put contracts, or `0` when that total is zero.
 
 ## Implementation Notes
 

@@ -62,6 +62,9 @@ export function createWidgetCard(widget, definition, options = {}) {
   const optionTypeValue = String(widget?.config?.optionType ?? definition?.defaultConfig?.optionType ?? 'put');
   const targetDeltaValue = Number(widget?.config?.targetDelta ?? definition?.defaultConfig?.targetDelta ?? 0.25);
   const strikeWindowValue = Number(widget?.config?.strikeWindow ?? definition?.defaultConfig?.strikeWindow ?? 3);
+  const flowDisplayModeValue = String(widget?.config?.flowDisplayMode ?? definition?.defaultConfig?.flowDisplayMode ?? 'cumulative');
+  const displayPointOffsetValue = String(widget?.config?.displayPointOffset ?? definition?.defaultConfig?.displayPointOffset ?? '');
+  const displayPointLimitValue = String(widget?.config?.displayPointLimit ?? definition?.defaultConfig?.displayPointLimit ?? '');
   const expirationValue = String(widget?.config?.expiration ?? definition?.defaultConfig?.expiration ?? '');
   const timeRangeValue = String(widget?.config?.range ?? definition?.defaultConfig?.range ?? '1M');
   const mirrorXChecked = Boolean(widget?.config?.mirrorX ?? definition?.defaultConfig?.mirrorX);
@@ -95,6 +98,23 @@ export function createWidgetCard(widget, definition, options = {}) {
         </label>` : ''}
         ${controlsConfig.strikeWindow ? `<label class="widget-control">±S
           <input type="number" min="0" step="1" class="widget-strike-window-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.STRIKE_WINDOW}" value="${strikeWindowValue}" />
+        </label>` : ''}
+        ${controlsConfig.flowDisplayMode ? `<label class="widget-control">Flow
+          <select class="widget-flow-display-mode-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.FLOW_DISPLAY_MODE}">
+            ${[
+              ['cumulative', 'Cum'],
+              ['ma-1m', 'MA 1m'],
+              ['ma-3m', 'MA 3m'],
+              ['ma-5m', 'MA 5m'],
+              ['ma-15m', 'MA 15m']
+            ].map(([value, label]) => `<option value="${value}" ${flowDisplayModeValue === value ? 'selected' : ''}>${label}</option>`).join('')}
+          </select>
+        </label>` : ''}
+        ${controlsConfig.displayPointOffset ? `<label class="widget-control">From
+          <input type="number" min="0" step="1" class="widget-display-point-offset-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.DISPLAY_POINT_OFFSET}" value="${displayPointOffsetValue}" placeholder="0" />
+        </label>` : ''}
+        ${controlsConfig.displayPointLimit ? `<label class="widget-control">Last
+          <input type="number" min="0" step="1" class="widget-display-point-limit-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.DISPLAY_POINT_LIMIT}" value="${displayPointLimitValue}" placeholder="all" />
         </label>` : ''}
         ${controlsConfig.expiration ? `<label class="widget-control">Exp
           <input type="text" class="widget-expiration-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.EXPIRATION}" value="${expirationValue}" placeholder="20260612 or tomorrow" />

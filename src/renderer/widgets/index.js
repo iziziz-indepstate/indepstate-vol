@@ -18,7 +18,7 @@ import { atmStraddleWidget } from './atm-straddle-widget.js';
 import { volUpfrontWidget } from './vol-upfront-widget.js';
 import { nDeltaIVWidget } from './n-delta-iv-widget.js';
 import { ivDynamicsWidget } from './iv-dynamics-widget.js';
-import { optionFlowTickWidget } from './option-flow-tick-widget.js';
+import { optionFlowBalancedTickWidget, optionFlowTickWidget } from './option-flow-tick-widget.js';
 import { theBlockWidgets } from './theblock-widgets.js';
 import { appPluginWidgets } from '../../plugins/index.js';
 
@@ -28,6 +28,7 @@ export const widgetDefinitions = [
   nDeltaIVWidget,
   ivDynamicsWidget,
   optionFlowTickWidget,
+  optionFlowBalancedTickWidget,
   atmSkewWidget,
   tailSkewWidget,
   ivCurrentWidget,

@@ -42,7 +42,8 @@ npm start
 - **IV Dynamics**: heatmap widget for intraday changes in IV or IV minus ATM across configurable put/call deltas.
 - **Spread Optimizer**: table widget that ranks candidate vertical spreads by configurable risk, liquidity, and regime inputs.
 - **SPX IV / RV**: standalone table and chart widget for implied-vs-realized volatility comparisons.
-- **Option Flow TICK**: four-line cumulative option-flow chart for bought/sold calls and puts from `tape-contract` snapshots, filtered by observed strikes around tape `underlying_price`. Details: [Tape Contract Datasource](docs/tape-contract-datasource.md).
+- **Option Flow TICK**: four-line option-flow chart for bought/sold calls and puts from `tape-contract` snapshots, filtered by observed strikes around tape `underlying_price`, with cumulative/trailing MA modes and display-only point window controls. Details: [Tape Contract Datasource](docs/tape-contract-datasource.md).
+- **Option Flow Balanced TICK**: four-line option-flow balance chart for calls, puts, directional balance (`Calls balance - Puts balance`), and imbalance ratio over the same ATM strike window as `Option Flow TICK`, with cumulative/trailing MA modes and display-only point window controls. Details: [Tape Contract Datasource](docs/tape-contract-datasource.md).
 
 ## Tests
 

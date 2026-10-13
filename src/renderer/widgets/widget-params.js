@@ -9,10 +9,15 @@ export const WIDGET_PARAM_NAMES = Object.freeze({
   OPTION_TYPE: 'optionType',
   TARGET_DELTA: 'targetDelta',
   STRIKE_WINDOW: 'strikeWindow',
+  FLOW_DISPLAY_MODE: 'flowDisplayMode',
+  DISPLAY_POINT_OFFSET: 'displayPointOffset',
+  DISPLAY_POINT_LIMIT: 'displayPointLimit',
   EXPIRATION: 'expiration',
   TIME_RANGE: 'range',
   MIRROR_X: 'mirrorX'
 });
+
+const FLOW_DISPLAY_MODES = new Set(['cumulative', 'ma-1m', 'ma-3m', 'ma-5m', 'ma-15m']);
 
 export const WIDGET_PARAM_DATASET = Object.freeze({
   WIDGET_ID: 'widgetParamWidgetId',
@@ -44,11 +49,21 @@ export function normalizeWidgetParamValue(paramName, rawValue, currentValue, opt
       return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : (currentValue ?? 3);
     }
 
+    case WIDGET_PARAM_NAMES.DISPLAY_POINT_OFFSET:
+    case WIDGET_PARAM_NAMES.DISPLAY_POINT_LIMIT: {
+      if (str === '') return '';
+      const numeric = Math.abs(Number(str));
+      return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : (currentValue ?? '');
+    }
+
     case WIDGET_PARAM_NAMES.OPTION_TYPE:
       return str === 'call' ? 'call' : 'put';
 
     case WIDGET_PARAM_NAMES.TIME_RANGE:
       return ['1D', '1W', '1M', '6M'].includes(str) ? str : (currentValue || '1M');
+
+    case WIDGET_PARAM_NAMES.FLOW_DISPLAY_MODE:
+      return FLOW_DISPLAY_MODES.has(str) ? str : (currentValue || 'cumulative');
 
     case WIDGET_PARAM_NAMES.MIRROR_X:
       return Boolean(rawValue);
@@ -71,6 +86,9 @@ export function shouldRefreshOnWidgetParamChange(paramName) {
     || paramName === WIDGET_PARAM_NAMES.OPTION_TYPE
     || paramName === WIDGET_PARAM_NAMES.TARGET_DELTA
     || paramName === WIDGET_PARAM_NAMES.STRIKE_WINDOW
+    || paramName === WIDGET_PARAM_NAMES.FLOW_DISPLAY_MODE
+    || paramName === WIDGET_PARAM_NAMES.DISPLAY_POINT_OFFSET
+    || paramName === WIDGET_PARAM_NAMES.DISPLAY_POINT_LIMIT
     || paramName === WIDGET_PARAM_NAMES.EXPIRATION
     || paramName === WIDGET_PARAM_NAMES.TIME_RANGE
     || paramName === WIDGET_PARAM_NAMES.MIRROR_X;
