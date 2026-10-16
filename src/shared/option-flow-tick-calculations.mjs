@@ -130,7 +130,7 @@ function calculateFlowPoints(history, config = {}) {
   const meta = [];
 
   for (const snapshot of Array.isArray(history) ? history : []) {
-    if (snapshot?.provider !== 'tape-contract') continue;
+    if (snapshot?.provider !== 'tape-contract' || snapshot?.gammaClock) continue;
     const records = tapeRecords(snapshot);
     const px = snapshotPx(snapshot, records);
     const allowedStrikes = strikesAroundAtm(records, px, strikeWindow);

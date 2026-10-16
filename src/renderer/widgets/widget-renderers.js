@@ -1,6 +1,7 @@
 import { WIDGET_PARAM_NAMES } from './widget-params.js';
 import { parseOptionFlowStrikeWindow } from '../../shared/option-flow-strike-window.mjs';
 import { createWidgetExtensionControlsHtml } from '../widget-extensions.js';
+import { gammaFlowControls } from './gamma-flow-controls.js';
 
 let chartJsLoadPromise = null;
 let uPlotLoadPromise = null;
@@ -38,6 +39,7 @@ export async function ensureUPlotRuntime() {
 export function createWidgetCard(widget, definition, options = {}) {
   const card = document.createElement('article');
   card.className = 'widget-card';
+  if (definition?.gammaFlow) card.classList.add('widget-card-gamma');
   if (widget.collapsed) card.classList.add('widget-card-collapsed');
   if (definition?.mode === 'table' && definition?.wide !== false) card.classList.add('widget-card-wide');
   if (Number.isInteger(definition?.gridSpan) && definition.gridSpan > 1) {
@@ -73,6 +75,7 @@ export function createWidgetCard(widget, definition, options = {}) {
   const extensionControls = createWidgetExtensionControlsHtml(widget, options.widgetExtensions || []);
   const controls = Object.keys(controlsConfig).length || extensionControls
     ? `<div class="widget-controls widget-controls-inline">
+        ${controlsConfig.gammaFlow ? gammaFlowControls(widget, controlsConfig.gammaAnalysis) : ''}
         ${controlsConfig.strike ? `<label class="widget-control">S
           <input type="${strikeInputType}" class="widget-strike-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.BASE_STRIKE}" value="${strikeValue}" step="1" placeholder="ATM или 500" />
         </label>` : ''}
@@ -292,8 +295,9 @@ function createChartJsWidgetChart(ctx, definition, options = {}) {
 function dataValueAt(dataset, idx, label) {
   const data = Array.isArray(dataset?.data) ? dataset.data : [];
   const direct = data[idx];
+  if (direct == null) return null;
   if (direct && typeof direct === 'object' && String(direct.x) === String(label)) {
-    return Number.isFinite(Number(direct.y)) ? Number(direct.y) : null;
+    return direct.y != null && Number.isFinite(Number(direct.y)) ? Number(direct.y) : null;
   }
   if (Number.isFinite(Number(direct))) return Number(direct);
   const point = data.find((item) => item && typeof item === 'object' && String(item.x) === String(label));
@@ -379,11 +383,16 @@ class UPlotWidgetChart {
     this._legend.className = 'widget-chart-legend';
     this._plotHost = document.createElement('div');
     this._plotHost.className = 'widget-uplot-host';
-    this.host.replaceChildren(this._legend, this._plotHost);
+    this._summary = document.createElement('div');
+    this._summary.className = 'widget-gamma-summary';
+    this._summary.style.cssText = 'white-space:pre-wrap;font-size:11px;line-height:1.5;padding:4px 8px;max-height:160px;overflow:auto;flex-shrink:0';
+    this._summary.hidden = true;
+    this.host.replaceChildren(this._legend, this._summary, this._plotHost);
     this._bindEventInterest();
   }
 
   isDatasetVisible(idx) {
+    if (this.data.datasets[idx]?.alwaysVisible) return true;
     return this._visible[idx] !== false;
   }
 
@@ -413,7 +422,7 @@ class UPlotWidgetChart {
   }
 
   _buildOptions(labels, visible) {
-    const height = cssPx(this.host, 240);
+    const height = this.definition.gammaFlow ? 240 : cssPx(this.host, 240);
     const width = Math.max(100, Math.round(this.host.clientWidth || this.host.getBoundingClientRect().width || 300));
     const hideXAxisValues = Boolean(this.definition?.hideXAxisValues);
     return {
@@ -421,26 +430,41 @@ class UPlotWidgetChart {
       height,
       cursor: { show: false },
       legend: { show: false },
-      scales: { x: { time: false } },
+      scales: { x: { time: false },
+        ...(this.definition.gammaFlow ? {
+          y: { range: (u, min, max) => this.options.scales?.y?.min != null ? [-1, 1]
+            : [Math.min(0, min ?? 0) - Math.max(1, Math.abs(min || 0) * 0.05), Math.max(0, max ?? 0) + Math.max(1, Math.abs(max || 0) * 0.05)] },
+          ivPressure: { auto: true }
+        } : {}) },
       axes: [
         {
           show: !hideXAxisValues,
-          values: (_, vals) => vals.map((x) => labels[x] ?? ''),
+          values: (_, vals) => vals.map((x) => this.definition.gammaFlow && labels[x]
+            ? new Date(labels[x]).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour12: false }) : labels[x] ?? ''),
           stroke: 'rgba(234,234,240,0.66)',
           grid: { show: false },
           ticks: { show: false },
           size: hideXAxisValues ? 0 : 24
         },
         {
+          ...(this.definition.gammaFlow ? { values: (_, vals) => vals.map((v) => new Intl.NumberFormat('en-US', {
+            notation: 'compact', maximumFractionDigits: 1
+          }).format(v)) } : {}),
           stroke: 'rgba(234,234,240,0.66)',
           grid: { stroke: 'rgba(234,234,240,0.10)', width: 1 },
           size: 46
-        }
+        },
+        ...(visible.some(({ dataset }) => dataset.yAxisID === 'ivPressure') ? [{
+          scale: 'ivPressure', side: 1, label: 'IV Pressure Z', size: 48,
+          stroke: '#f59e0b', grid: { show: false }
+        }] : [])
       ],
       series: [
         {},
         ...visible.map(({ dataset }) => ({
           label: dataset?.label || 'Series',
+          scale: dataset?.yAxisID || 'y',
+          ...(this.definition.gammaFlow ? { points: { show: false } } : {}),
           stroke: seriesColor(dataset, this.definition.color),
           width: dataset?.borderWidth ?? 1,
           dash: seriesDash(dataset)
@@ -518,6 +542,18 @@ class UPlotWidgetChart {
   _bindPlotClick() {
     const over = this._plot?.over;
     if (!over || this._plotClickHandler) return;
+    if (this.definition.gammaFlow) {
+      this._gammaHover = (evt) => {
+        if (!this.options.gammaDebug) return;
+        const idx = this._plot.posToIdx(evt.clientX - over.getBoundingClientRect().left);
+        const dataset = this.data.datasets[0];
+        if (!dataset?.pointMeta?.[idx]) return;
+        this._summary.textContent = dataset.tooltipFormatter?.({ dataIndex: idx, dataset })?.join('\n') || this.options.gammaSummary;
+      };
+      this._gammaLeave = () => { this._summary.textContent = this.options.gammaSummary || ''; };
+      over.addEventListener('mousemove', this._gammaHover);
+      over.addEventListener('mouseleave', this._gammaLeave);
+    }
     this._plotClickHandler = (evt) => {
       this._handlePlotClick(evt);
     };
@@ -526,6 +562,9 @@ class UPlotWidgetChart {
 
   _unbindPlotClick() {
     const over = this._plot?.over;
+    if (over && this._gammaHover) over.removeEventListener('mousemove', this._gammaHover);
+    if (over && this._gammaLeave) over.removeEventListener('mouseleave', this._gammaLeave);
+    this._gammaHover = this._gammaLeave = null;
     if (over && this._plotClickHandler) over.removeEventListener('click', this._plotClickHandler);
     this._plotClickHandler = null;
   }
@@ -534,6 +573,7 @@ class UPlotWidgetChart {
     return visible.map(({ dataset, idx }) => JSON.stringify({
       idx,
       label: dataset?.label || `Series ${idx + 1}`,
+      scale: dataset?.yAxisID || 'y',
       color: seriesColor(dataset, this.definition.color),
       width: dataset?.borderWidth ?? 1,
       dash: seriesDash(dataset)
@@ -572,6 +612,8 @@ class UPlotWidgetChart {
   }
 
   update() {
+    this._summary.hidden = !this.options.gammaDebug || !this.options.gammaSummary;
+    this._summary.textContent = this.options.gammaSummary || '';
     const { labels, columns, visible } = this._buildData();
     this._lastBuild = { labels, visible };
     const opts = this._buildOptions(labels, visible);

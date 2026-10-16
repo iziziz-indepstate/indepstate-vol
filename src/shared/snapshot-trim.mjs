@@ -465,6 +465,14 @@ function compactTapeContractSnapshot(snapshot) {
     aggressor_buy_sell: record?.aggressor_buy_sell ?? '',
     trade_id_sequence: record?.trade_id_sequence ?? '',
     delta: record?.delta ?? null,
+    gamma: record?.gamma ?? null,
+    gamma_unit: record?.gamma_unit ?? 'per_point',
+    executed_at: record?.executed_at ?? '',
+    classification_quality: record?.classification_quality ?? 'unknown',
+    complex_order_id: record?.complex_order_id ?? '',
+    iv: record?.iv ?? '',
+    _sentAt: record?._sentAt ?? '',
+    _receivedAt: record?._receivedAt ?? '',
     _dedupeKey: record?._dedupeKey ?? ''
   });
   const compactContractRecord = (record) => ({
@@ -482,6 +490,9 @@ function compactTapeContractSnapshot(snapshot) {
     px: snapshot?.px ?? null,
     atmSource: snapshot?.atmSource,
     underlying: snapshot?.underlying ?? null,
+    gammaClock: snapshot?.gammaClock === true,
+    quote: snapshot?.quote,
+    calibration: snapshot?.calibration,
     tape: {
       count: snapshot?.tape?.count ?? 0,
       records: (Array.isArray(snapshot?.tape?.records) ? snapshot.tape.records : []).map(compactTapeRecord)

@@ -632,6 +632,38 @@ select option {
   flex: 1;
 }
 
+.widget-card-gamma .widget-title {
+  flex-wrap: wrap;
+}
+
+.widget-card-gamma .widget-control[hidden] {
+  display: none;
+}
+
+.widget-card-gamma .widget-controls {
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+
+.widget-card-gamma .widget-control select {
+  width: auto;
+  max-width: 190px;
+}
+
+.widget-card-gamma input[data-widget-param-name="gammaAnchorAt"],
+.widget-card-gamma input[data-widget-param-name="gammaStart"] {
+  width: 210px;
+}
+
+.widget-card-gamma .widget-chart-host {
+  height: auto;
+}
+
+.widget-card-gamma .widget-uplot-host {
+  height: 240px;
+}
+
 .widget-history-control {
   align-items: center;
 }

@@ -1,4 +1,5 @@
 import { parseOptionFlowStrikeWindow } from '../../shared/option-flow-strike-window.mjs';
+import { normalizeGammaParam } from '../../shared/gamma-flow-calculations.mjs';
 
 export { collectExpiryPlaceholderKeys } from '../../shared/expiry-placeholders.mjs';
 
@@ -27,6 +28,7 @@ export const WIDGET_PARAM_DATASET = Object.freeze({
 });
 
 export function normalizeWidgetParamValue(paramName, rawValue, currentValue, options = {}) {
+  if (paramName.startsWith('gamma')) return normalizeGammaParam(paramName, rawValue, currentValue);
   const str = String(rawValue ?? '').trim();
 
   switch (paramName) {
@@ -81,6 +83,7 @@ export function normalizeWidgetParamValue(paramName, rawValue, currentValue, opt
 }
 
 export function shouldRefreshOnWidgetParamChange(paramName) {
+  if (paramName.startsWith('gamma')) return true;
   return paramName === WIDGET_PARAM_NAMES.BASE_STRIKE
     || paramName === WIDGET_PARAM_NAMES.STRIKE_RANGE
     || paramName === WIDGET_PARAM_NAMES.TAIL_STEPS

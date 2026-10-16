@@ -23,6 +23,8 @@ import {
   createMcpRuntimeStore
 } from '../shared/mcp-runtime-store.mjs';
 import { trimSnapshotForWidgets } from '../shared/snapshot-trim.mjs';
+import { captureGammaAnchor } from '../shared/gamma-flow-calculations.mjs';
+import { syncGammaFlowControls } from './widgets/gamma-flow-controls.js';
 
 const providers = {
   tradingview: {
@@ -1471,6 +1473,19 @@ async function renderWidgets() {
       strikeInputType: definition?.controls?.strikeInputType === 'text' ? 'text' : 'number'
     });
     target.config[paramName] = nextValue;
+    if (definition?.gammaFlow && ((paramName === 'gammaStrikeScope' && nextValue === 'anchored'
+      && !target.config.gammaAnchorStrikes) || (paramName === 'gammaAnchorAt' && nextValue !== currentValue))) {
+      const history = state.historyByTab[tab.id] || [];
+      const at = target.config.gammaAnchorAt || history.at(-1)?.time || new Date().toISOString();
+      const anchor = captureGammaAnchor(history, at);
+      target.config.gammaAnchorAt = at;
+      target.config.gammaAnchorStrike = anchor?.atm ?? '';
+      target.config.gammaAnchorStrikes = anchor?.strikes.join(',') ?? '';
+      root.querySelectorAll(widgetParamSelector).forEach((input) => {
+        if (input.dataset.widgetParamWidgetId === wid && input.dataset.widgetParamName === 'gammaAnchorAt') input.value = at;
+      });
+    }
+    if (definition?.gammaFlow) syncGammaFlowControls(root, target, definition.controls?.gammaAnalysis);
     return true;
   }
 
@@ -2453,7 +2468,7 @@ async function tickTab(tabId) {
 
   try {
     setTabStatus(tabId, `Loading snapshot (${tab.title})...`);
-    const point = await profileMeasure('tick:fetchSnapshot', {
+    let point = await profileMeasure('tick:fetchSnapshot', {
       tabId,
       providerKey: tab.providerKey,
       title: tab.title
@@ -2461,6 +2476,10 @@ async function tickTab(tabId) {
       ...tab.providerConfig,
       expiryPlaceholderKeys: collectWidgetExpiryPlaceholderKeys(tab)
     }, skewMetrics));
+    if (point?.noop && tab.providerKey === 'tape-contract' && tab.widgets.some((w) => getWidgetDefinition(w.type)?.gammaFlow)) {
+      point = { ...point, noop: false, gammaClock: true,
+        tape: { records: [], count: 0 }, contract: { records: [], count: 0 } };
+    }
     if (point?.noop) {
       const updatedAt = formatStatusUpdateTime(point.time);
       const pending = point.stats?.pending || {};
@@ -2471,7 +2490,7 @@ async function tickTab(tabId) {
       profileDuration('tick:total', tickStart, { tabId, providerKey: tab.providerKey, noop: true });
       return;
     }
-    if (shouldSaveRawSnapshots(tab)) {
+    if (!point.gammaClock && shouldSaveRawSnapshots(tab)) {
       const rawStart = performance.now();
       saveRawSnapshotDeferred({
         tab: {

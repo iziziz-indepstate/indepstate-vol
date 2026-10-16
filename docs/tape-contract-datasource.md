@@ -42,7 +42,7 @@ Request body:
 Accepted envelope fields:
 
 - `schema`: must be `tape.contract.csv.v1`.
-- `kind`: `tape` or `contract`.
+- `kind`: `tape`, `contract`, `quote` or `calibration`.
 - `sentAt`: valid ISO timestamp.
 - `records`: array.
 
@@ -87,6 +87,9 @@ Formatted market values are accepted, for example `$7,799.8` and `23.73%`. The p
 No Yahoo lookup is used for this datasource.
 
 ## Option Flow TICK Widget
+
+The gamma widgets also use this datasource, with additional execution fields and analytical
+quote/calibration records. See [Option Flow Gamma Widgets](option-flow-gamma-widgets.md).
 
 `Option Flow TICK` is the paired chart widget for `tape-contract` history.
 

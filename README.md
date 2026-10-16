@@ -28,6 +28,8 @@ npm start
 
 ## Included Widgets
 
+- **Option Flow Gamma Flow**: signed SPX 0DTE trade gamma with executed and revalued modes. **Option Flow Gamma Imbalance**: raw imbalance, IV confirmation and relative convexity demand. Details: [Option Flow Gamma Widgets](docs/option-flow-gamma-widgets.md).
+
 - **Straddle ATM**: text widget for the selected symbol and expiry tenor. It selects expiry, picks the ATM call/put pair, calculates the ATM straddle, implied move, expected range, ATM IV, quote quality, and comparison state. `ATM K` accepts an exact strike or `ATM`. Optional snapshot persistence is provided by the [ATM Straddle Snapshot Plugin](docs/atm-straddle-snapshot-plugin.md). Details: [Straddle ATM Widget](docs/atm-straddle-widget.md).
 - **Straddle Daily Price**: chart widget from persisted ATM straddle snapshots. It plots one point per day for each configured tenor + local `HH:mm` line. Details: [ATM Straddle Snapshot Plugin](docs/atm-straddle-snapshot-plugin.md).
 - **Straddle Dynamics**: chart widget from persisted ATM straddle snapshots. It overlays intraday straddle price paths for saved days in a date range and optional local time window. Details: [ATM Straddle Snapshot Plugin](docs/atm-straddle-snapshot-plugin.md).

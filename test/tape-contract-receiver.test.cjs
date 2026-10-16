@@ -6,11 +6,71 @@ const {
   contractDedupeKey,
   createTapeContractStore,
   normalizeContractRecord,
+  normalizeAnalyticalRecord,
   normalizeTapeRecord,
   parseMarketNumber,
   startTapeContractReceiver,
   tapeDedupeKey
 } = require('../src/plugins/tape-contract-datasource/receiver.cjs');
+
+function quote(overrides = {}) {
+  return { underlying: 'SPX', expiration: '2026-10-16', strike: 7750, call_put: 'CALL',
+    timestamp: '2026-10-16T13:31:00Z', expiration_at: '2026-10-16T20:00:00Z',
+    gamma: .01, gamma_unit: 'per_point', iv: .2, iv_unit: 'decimal',
+    underlying_price: 7750, forward: 7751, quality: 'reliable', ...overrides };
+}
+
+test('gamma tape fields survive normalization without inferring gamma or aggressor', () => {
+  const r = normalizeTapeRecord(tape({ gamma: '.012', executed_at: '2026-10-16T13:31:00Z',
+    classification_quality: 'RELIABLE', complex_order_id: 'spread', iv: '20%' }));
+  assert.equal(r.gamma, .012); assert.equal(r.gamma_unit, 'per_point');
+  assert.equal(r.executed_at, '2026-10-16T13:31:00Z'); assert.equal(r.classification_quality, 'reliable');
+  assert.equal(r.complex_order_id, 'spread'); assert.equal(r.iv, '20%');
+  assert.equal(normalizeTapeRecord(tape()).gamma, null);
+  assert.equal(normalizeTapeRecord(tape({ gamma: -1500, size_contracts: 10 })).gamma, -1500);
+  assert.equal(normalizeTapeRecord(tape({ aggressor_buy_sell: '' })).aggressor_buy_sell, '');
+});
+
+test('quote versions dedupe by contract and timestamp, drain independently, and filter by underlying', () => {
+  const store = createTapeContractStore();
+  const payload = envelope('quote', [quote(), quote(), quote({ timestamp: '2026-10-16T13:32:00Z', gamma: .02 })]);
+  const result = store.ingestEnvelope(payload);
+  assert.equal(result.accepted, 2); assert.equal(result.duplicate, 1); assert.equal(result.pending.quote, 2);
+  assert.equal(store.drainSnapshot({ underlying: 'SPY' }).noop, true);
+  const s = store.drainSnapshot({ underlying: 'SPX' });
+  assert.equal(s.quote.count, 2); assert.equal(s.tape.count, 0);
+  assert.deepEqual(s.quote.records.map((r) => r.gamma), [.01, .02]);
+  assert.equal(store.drainSnapshot().noop, true);
+});
+
+test('analytical records require explicit units, absolute timestamps and finite valid values; batch validation is atomic', () => {
+  assert.equal(normalizeAnalyticalRecord('quote', quote({ underlying_price: undefined })).underlying_price, null);
+  assert.equal(normalizeAnalyticalRecord('quote', quote({ underlying_price: 123 })).underlying_price, 123);
+  for (const bad of [{ gamma: null }, { gamma: -1 }, { gamma_unit: 'notional' }, { iv_unit: '%' },
+    { timestamp: '09:31:00' }, { expiration_at: '2026-10-16T13:00:00Z' }, { forward: 0 }, { quality: '' }]) {
+    assert.throws(() => normalizeAnalyticalRecord('quote', quote(bad)), /Invalid/);
+  }
+  const store = createTapeContractStore();
+  assert.throws(() => store.ingestEnvelope(envelope('quote', [quote(), quote({ gamma: null })])));
+  assert.equal(store.stats().pending.quote, 0);
+});
+
+test('calibration accepts only historical comparable-surface evidence with an explicit window/context', () => {
+  const row = { ...quote(), segment: 'atm', scope_key: '["dynamic",3]', gamma_mode: 'executed', option_types: 'total',
+    window_start: '2026-10-16T13:30:00Z', window_end: '2026-10-16T13:31:00Z',
+    historical: true, sample_count: 100, tod_start_minute: 570, tod_end_minute: 600,
+    min_seconds_to_expiry: 0, max_seconds_to_expiry: 86400, iv_scale: .01, skew_scale: .02,
+    activity_threshold: 1000, adjusted_iv_change: .001, comparable_iv_start: .2,
+    comparable_iv_end: .201, comparison_method: 'constant_forward_moneyness_adjusted' };
+  const store = createTapeContractStore();
+  assert.equal(store.ingestEnvelope(envelope('calibration', [row, row])).accepted, 1);
+  assert.equal(store.drainSnapshot().calibration.count, 1);
+  for (const bad of [{ historical: false }, { iv_scale: 0 }, { skew_scale: -1 }, { sample_count: 0 },
+    { comparison_method: 'fixed_strike' }, { scope_key: '' }, { window_end: '2026-10-16T13:32:00Z' },
+    { tod_start_minute: null }, { min_seconds_to_expiry: null }, { iv_scale: 'bad' }, { comparable_iv_start: 0 }]) {
+    assert.throws(() => normalizeAnalyticalRecord('calibration', { ...row, ...bad }), /Invalid/);
+  }
+});
 
 function envelope(kind, records) {
   return {
@@ -142,6 +202,19 @@ test('http receiver accepts valid batches and rejects invalid schema', async (t)
     assert.equal(ok.status, 200);
     assert.equal((await ok.json()).accepted, 1);
     assert.equal(store.drainSnapshot().tape.count, 1);
+
+    const acceptedQuote = await fetch(`http://127.0.0.1:${port}/tape-contract/batch`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(envelope('quote', [quote()]))
+    });
+    assert.equal(acceptedQuote.status, 200);
+    assert.equal((await acceptedQuote.json()).accepted, 1);
+    assert.equal(store.drainSnapshot().quote.count, 1);
+    const invalidQuote = await fetch(`http://127.0.0.1:${port}/tape-contract/batch`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(envelope('quote', [quote({ iv_unit: '%' })]))
+    });
+    assert.equal(invalidQuote.status, 400);
 
     const bad = await fetch(`http://127.0.0.1:${port}/tape-contract/batch`, {
       method: 'POST',

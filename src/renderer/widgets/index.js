@@ -19,6 +19,7 @@ import { volUpfrontWidget } from './vol-upfront-widget.js';
 import { nDeltaIVWidget } from './n-delta-iv-widget.js';
 import { ivDynamicsWidget } from './iv-dynamics-widget.js';
 import { optionFlowBalancedTickWidget, optionFlowTickWidget } from './option-flow-tick-widget.js';
+import { gammaFlowWidget, gammaImbalanceWidget } from './gamma-flow-widget.js';
 import { theBlockWidgets } from './theblock-widgets.js';
 import { appPluginWidgets } from '../../plugins/index.js';
 
@@ -29,6 +30,8 @@ export const widgetDefinitions = [
   ivDynamicsWidget,
   optionFlowTickWidget,
   optionFlowBalancedTickWidget,
+  gammaFlowWidget,
+  gammaImbalanceWidget,
   atmSkewWidget,
   tailSkewWidget,
   ivCurrentWidget,
