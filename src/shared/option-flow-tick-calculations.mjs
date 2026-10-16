@@ -1,3 +1,5 @@
+import { parseOptionFlowStrikeWindow } from './option-flow-strike-window.mjs';
+
 const SERIES = [
   { key: 'boughtCalls', label: 'Bought calls', color: '#22c55e', type: 'CALL', side: 'BUY' },
   { key: 'soldCalls', label: 'Sold calls', color: '#ef4444', type: 'CALL', side: 'SELL' },
@@ -34,11 +36,6 @@ function toNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function normalizeStrikeWindow(value) {
-  const number = Math.abs(Number(value));
-  return Number.isFinite(number) ? Math.max(0, Math.floor(number)) : 3;
-}
-
 function tapeRecords(snapshot) {
   return Array.isArray(snapshot?.tape?.records) ? snapshot.tape.records : [];
 }
@@ -54,19 +51,21 @@ function timeMs(value) {
 }
 
 function strikesAroundAtm(records, px, strikeWindow) {
-  if (!Number.isFinite(px)) return new Set();
   const strikes = Array.from(new Set(
     records
       .map((record) => toNumber(record?.strike))
       .filter(Number.isFinite)
   )).sort((a, b) => a - b);
+  if (strikeWindow === 'ALL') return new Set(strikes);
+  if (!Number.isFinite(px)) return new Set();
   if (!strikes.length) return new Set();
   let atmIdx = 0;
   for (let idx = 1; idx < strikes.length; idx += 1) {
     if (Math.abs(strikes[idx] - px) < Math.abs(strikes[atmIdx] - px)) atmIdx = idx;
   }
-  const from = Math.max(0, atmIdx - strikeWindow);
-  const to = Math.min(strikes.length - 1, atmIdx + strikeWindow);
+  const count = Math.abs(Number(strikeWindow));
+  const from = Math.max(0, atmIdx - (String(strikeWindow).startsWith('+') ? 0 : count));
+  const to = Math.min(strikes.length - 1, atmIdx + (String(strikeWindow).startsWith('-') ? 0 : count));
   return new Set(strikes.slice(from, to + 1));
 }
 
@@ -125,7 +124,7 @@ function windowTotals(points, pointIdx, windowMinutes) {
 }
 
 function calculateFlowPoints(history, config = {}) {
-  const strikeWindow = normalizeStrikeWindow(config.strikeWindow ?? config.strikeRange);
+  const strikeWindow = parseOptionFlowStrikeWindow(config.strikeWindow ?? config.strikeRange) ?? 3;
   const labels = [];
   const totals = emptySeriesValues();
   const meta = [];

@@ -8,6 +8,27 @@ import {
   optionFlowBalancedTickWidget,
   optionFlowTickWidget
 } from '../src/renderer/widgets/option-flow-tick-widget.js';
+import { createWidgetCard } from '../src/renderer/widgets/widget-renderers.js';
+
+test('both widget cards restore signed and ALL values into a text ATM control', () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = {
+    createElement: () => ({ dataset: {}, classList: { add() {} } })
+  };
+  try {
+    for (const definition of [optionFlowTickWidget, optionFlowBalancedTickWidget]) {
+      for (const strikeWindow of [3, '+3', '-5', 'ALL']) {
+        const card = createWidgetCard({ id: 'flow-test', type: definition.type, config: { strikeWindow } }, definition);
+        assert.match(card.innerHTML, /class="widget-control">ATM\s+<input type="text"/);
+        assert.ok(card.innerHTML.includes(`data-widget-param-name="strikeWindow" value="${strikeWindow}"`));
+        assert.ok(card.innerHTML.includes('placeholder="3 / +3 / -5 / ALL"'));
+      }
+    }
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
 
 function snapshot(time, records, px = 100) {
   return {
@@ -28,6 +49,70 @@ function record(callPut, side, size, strike, extra = {}) {
     ...extra
   };
 }
+
+for (const build of [buildOptionFlowTickSeries, buildOptionFlowBalancedTickSeries]) {
+  test(`${build.name} selects signed observed strike windows and keeps metadata`, () => {
+    const history = [snapshot('2026-10-12T10:00:00Z',
+      [60, 90, 100, 105, 130, 200].map((strike) => record('CALL', 'BUY', 1, strike)))];
+    for (const [strikeWindow, expected] of [
+      [1, [90, 100, 105]], ['+3', [100, 105, 130, 200]],
+      ['-5', [60, 90, 100]], [-1, [90, 100]],
+      [0, [100]], ['+0', [100]], ['-0', [100]], ['+99', [100, 105, 130, 200]],
+      ['ALL', [60, 90, 100, 105, 130, 200]], ['bad', [60, 90, 100, 105, 130, 200]]
+    ]) {
+      const result = build(history, { strikeWindow });
+      const meta = result.datasets[0].pointMeta[0];
+      assert.deepEqual(meta.allowedStrikes, expected);
+      assert.equal(result.datasets[0].data[0], expected.length);
+      assert.equal(meta.strikeWindow, strikeWindow === 'bad' ? 3 : strikeWindow === -1 ? '-1' : strikeWindow);
+      assert.equal(result.summary.strikeWindow, meta.strikeWindow);
+    }
+    const tied = build([snapshot('2026-10-12T10:00:00Z', [
+      record('CALL', 'BUY', 1, 105), record('CALL', 'BUY', 1, 95)
+    ])], { strikeWindow: 0 });
+    assert.deepEqual(tied.datasets[0].pointMeta[0].allowedStrikes, [95]);
+  });
+
+  test(`${build.name} ALL needs no underlying price and still validates records`, () => {
+    const history = [snapshot('2026-10-12T10:00:00Z', [
+      record('CALL', 'BUY', 10, 50), record('CALL', 'SELL', 2, 200),
+      record('PUT', 'BUY', 3, 300), record('PUT', 'SELL', 1, 400),
+      record('CALL', 'BUY', 9, null), record('CALL', 'BUY', 0, 500),
+      record('CALL', 'HOLD', 9, 600), record('UNKNOWN', 'BUY', 9, 700)
+    ], null)];
+    const result = build(history, { strikeWindow: ' all ' });
+    const meta = result.datasets[0].pointMeta[0];
+    assert.equal(meta.px, null);
+    assert.equal(meta.strikeWindow, 'ALL');
+    assert.equal(meta.matchedRecords, 4);
+    assert.deepEqual(meta.totals, { boughtCalls: 10, soldCalls: 2, boughtPuts: 3, soldPuts: 1 });
+    assert.equal(build(history, { strikeWindow: '+3' }).datasets[0].data[0], 0);
+  });
+}
+
+test('signed windows feed cumulative and MA totals and balanced values before display', () => {
+  const history = ['10:00:00', '10:01:00', '10:04:00'].map((time) => snapshot(`2026-10-12T${time}Z`, [
+    record('CALL', 'BUY', 50, 90), record('CALL', 'BUY', 10, 100),
+    record('CALL', 'SELL', 2, 110), record('PUT', 'BUY', 3, 110), record('PUT', 'SELL', 1, 100)
+  ]));
+  for (const [flowDisplayMode, factor] of [['cumulative', 3], ['ma-1m', 1]]) {
+    const config = { strikeWindow: '+1', flowDisplayMode };
+    const tick = buildOptionFlowTickSeries(history, config);
+    const balanced = buildOptionFlowBalancedTickSeries(history, config);
+    assert.deepEqual(tick.datasets.map((d) => d.data.at(-1)), [10, 2, 3, 1].map((n) => n * factor));
+    assert.deepEqual(balanced.datasets.map((d) => d.data.at(-1)), [8 * factor, 2 * factor, 6 * factor, 6 / 16]);
+  }
+});
+
+test('both widget tooltips describe the configured strike window', () => {
+  for (const widget of [optionFlowTickWidget, optionFlowBalancedTickWidget]) {
+    for (const [strikeWindow, label] of [[3, '±3'], ['+3', '+3'], ['-5', '-5'], ['ALL', 'ALL']]) {
+      const series = widget.buildTimeSeries([snapshot('2026-10-12T10:00:00Z', [record('CALL', 'BUY', 1, 100)])], { config: { strikeWindow } });
+      const dataset = series.datasets[0];
+      assert.ok(dataset.tooltipFormatter({ dataset, dataIndex: 0, parsed: { y: 1 } }).includes(`Strike window: ${label}`));
+    }
+  }
+});
 
 test('builds four cumulative option flow series from ATM strike window', () => {
   const result = buildOptionFlowTickSeries([

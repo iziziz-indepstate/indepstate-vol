@@ -2,6 +2,7 @@ import {
   buildOptionFlowBalancedTickSeries,
   buildOptionFlowTickSeries
 } from '../../shared/option-flow-tick-calculations.mjs';
+import { formatOptionFlowStrikeWindow } from '../../shared/option-flow-strike-window.mjs';
 
 function fmt(value, digits = 0) {
   return Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : 'n/a';
@@ -55,7 +56,7 @@ function pointTooltip(context) {
     `Increment: ${fmt(increment)}`,
     `Timestamp: ${meta.timestamp || 'n/a'}`,
     `ATM px: ${fmt(meta.px, 2)}`,
-    `Strike window: +/-${fmt(meta.strikeWindow)}`,
+    `Strike window: ${formatOptionFlowStrikeWindow(meta.strikeWindow)}`,
     flowModeTooltip(meta),
     `Matched records: ${fmt(meta.matchedRecords)} / ${fmt(meta.records)}`
   ];
@@ -89,7 +90,7 @@ function balancedPointTooltip(context) {
     `Increment: ${fmt(increment, digits)}`,
     `Timestamp: ${meta.timestamp || 'n/a'}`,
     `ATM px: ${fmt(meta.px, 2)}`,
-    `Strike window: +/-${fmt(meta.strikeWindow)}`,
+    `Strike window: ${formatOptionFlowStrikeWindow(meta.strikeWindow)}`,
     flowModeTooltip(meta),
     `Matched records: ${fmt(meta.matchedRecords)} / ${fmt(meta.records)}`
   ];

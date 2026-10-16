@@ -1,3 +1,5 @@
+import { parseOptionFlowStrikeWindow } from '../../shared/option-flow-strike-window.mjs';
+
 export { collectExpiryPlaceholderKeys } from '../../shared/expiry-placeholders.mjs';
 
 export const WIDGET_PARAM_NAMES = Object.freeze({
@@ -45,8 +47,7 @@ export function normalizeWidgetParamValue(paramName, rawValue, currentValue, opt
     }
 
     case WIDGET_PARAM_NAMES.STRIKE_WINDOW: {
-      const numeric = Math.abs(Number(str));
-      return Number.isFinite(numeric) ? Math.max(0, Math.floor(numeric)) : (currentValue ?? 3);
+      return parseOptionFlowStrikeWindow(str) ?? (currentValue ?? 3);
     }
 
     case WIDGET_PARAM_NAMES.DISPLAY_POINT_OFFSET:

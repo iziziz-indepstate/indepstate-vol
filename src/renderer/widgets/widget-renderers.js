@@ -1,4 +1,5 @@
 import { WIDGET_PARAM_NAMES } from './widget-params.js';
+import { parseOptionFlowStrikeWindow } from '../../shared/option-flow-strike-window.mjs';
 import { createWidgetExtensionControlsHtml } from '../widget-extensions.js';
 
 let chartJsLoadPromise = null;
@@ -61,7 +62,7 @@ export function createWidgetCard(widget, definition, options = {}) {
   const strikeRangeValue = String(widget?.config?.strikeRange ?? definition?.defaultConfig?.strikeRange ?? '');
   const optionTypeValue = String(widget?.config?.optionType ?? definition?.defaultConfig?.optionType ?? 'put');
   const targetDeltaValue = Number(widget?.config?.targetDelta ?? definition?.defaultConfig?.targetDelta ?? 0.25);
-  const strikeWindowValue = Number(widget?.config?.strikeWindow ?? definition?.defaultConfig?.strikeWindow ?? 3);
+  const strikeWindowValue = parseOptionFlowStrikeWindow(widget?.config?.strikeWindow ?? definition?.defaultConfig?.strikeWindow) ?? 3;
   const flowDisplayModeValue = String(widget?.config?.flowDisplayMode ?? definition?.defaultConfig?.flowDisplayMode ?? 'cumulative');
   const displayPointOffsetValue = String(widget?.config?.displayPointOffset ?? definition?.defaultConfig?.displayPointOffset ?? '');
   const displayPointLimitValue = String(widget?.config?.displayPointLimit ?? definition?.defaultConfig?.displayPointLimit ?? '');
@@ -96,8 +97,8 @@ export function createWidgetCard(widget, definition, options = {}) {
         ${controlsConfig.targetDelta ? `<label class="widget-control">D
           <input type="number" min="0.01" max="0.99" step="0.01" class="widget-target-delta-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.TARGET_DELTA}" value="${targetDeltaValue}" />
         </label>` : ''}
-        ${controlsConfig.strikeWindow ? `<label class="widget-control">±S
-          <input type="number" min="0" step="1" class="widget-strike-window-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.STRIKE_WINDOW}" value="${strikeWindowValue}" />
+        ${controlsConfig.strikeWindow ? `<label class="widget-control">ATM
+          <input type="text" class="widget-strike-window-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.STRIKE_WINDOW}" value="${strikeWindowValue}" placeholder="3 / +3 / -5 / ALL" title="3: around ATM; +3: ATM and higher; -5: ATM and lower; ALL: all strikes" />
         </label>` : ''}
         ${controlsConfig.flowDisplayMode ? `<label class="widget-control">Flow
           <select class="widget-flow-display-mode-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.FLOW_DISPLAY_MODE}">

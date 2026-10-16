@@ -99,7 +99,15 @@ It renders four cumulative lines:
 
 The metric is `size_contracts`. Rows with invalid or missing `strike`, `size_contracts`, `call_put`, or `aggressor_buy_sell` are ignored.
 
-The widget control `±S` is the strike-window size around ATM. Default is `3`.
+The widget control `ATM` accepts `3 / +3 / -5 / ALL`. Default is `3`:
+
+- `3`: ATM plus up to three observed strikes on each side.
+- `+3`: ATM plus up to three observed strikes above it.
+- `-5`: ATM plus up to five observed strikes below it.
+- `0`, `+0`, `-0`: ATM only.
+- `ALL`: every observed strike, even without an underlying price.
+
+Counts must be whole numbers. Leading/trailing whitespace is ignored; `ALL` is case-insensitive. Invalid or empty input keeps the previous setting. The `ATM` suffix is not accepted. The setting applies equally to calls and puts and recalculates retained history.
 
 The widget control `Flow` selects display mode:
 
@@ -117,8 +125,8 @@ For each drained tape snapshot, the widget:
 
 1. Reads ATM from `snapshot.px`, falling back to record-level `underlying_price`.
 2. Builds the sorted set of observed tape strikes in that snapshot.
-3. Selects the observed strike nearest to ATM.
-4. Includes `±S` observed strikes around that nearest strike.
+3. Selects the observed strike nearest to ATM (the lower strike wins a tie), unless `ALL` is selected.
+4. Includes ATM and the configured count of observed strikes on both sides or only the signed side, or all strikes for `ALL`. Counts follow the sorted observed strikes, regardless of price gaps; insufficient strikes are used as available.
 5. Adds matching record `size_contracts` into the matching call/put and buy/sell cumulative bucket.
 
 Tooltips and runtime chart data include per-point metadata:
@@ -143,7 +151,7 @@ It renders four balance lines:
 - `Directional balance`: calls balance minus puts balance
 - `Imbalance`: directional balance divided by total bought/sold call/put contracts
 
-The widget controls `±S`, `Flow`, `From`, and `Last` match `Option Flow TICK`. In MA modes, balances and imbalance are derived from trailing timestamp-window sums instead of cumulative totals.
+The widget controls `ATM`, `Flow`, `From`, and `Last` match `Option Flow TICK`. In MA modes, balances and imbalance are derived from trailing timestamp-window sums instead of cumulative totals.
 
 Tooltips and runtime chart data include the same per-point metadata as `Option Flow TICK`, plus cumulative and displayed `balances` for the rendered lines.
 
