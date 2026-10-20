@@ -20,7 +20,7 @@ export const WIDGET_PARAM_NAMES = Object.freeze({
   MIRROR_X: 'mirrorX'
 });
 
-const FLOW_DISPLAY_MODES = new Set(['cumulative', 'ma-1m', 'ma-3m', 'ma-5m', 'ma-15m']);
+const FLOW_DISPLAY_MODES = new Set(['cumulative', 'linear', 'ma-1m', 'ma-3m', 'ma-5m', 'ma-15m']);
 
 export const WIDGET_PARAM_DATASET = Object.freeze({
   WIDGET_ID: 'widgetParamWidgetId',

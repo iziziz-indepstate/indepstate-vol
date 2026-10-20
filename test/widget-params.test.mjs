@@ -26,6 +26,10 @@ test('strike windows preserve direction and normalize ALL across saved config ro
 
 test('normalizes option flow display mode widget param', () => {
   assert.equal(
+    normalizeWidgetParamValue(WIDGET_PARAM_NAMES.FLOW_DISPLAY_MODE, 'linear', 'cumulative'),
+    'linear'
+  );
+  assert.equal(
     normalizeWidgetParamValue(WIDGET_PARAM_NAMES.FLOW_DISPLAY_MODE, 'ma-5m', 'cumulative'),
     'ma-5m'
   );

@@ -157,7 +157,7 @@ When `showBA` is enabled, the renderer draws a compact spot-price overlay from r
   mode: "timeseries-custom",
   config: {
     strikeWindow: number | string,
-    flowDisplayMode: "cumulative" | "ma-1m" | "ma-3m" | "ma-5m" | "ma-15m",
+    flowDisplayMode: "cumulative" | "linear" | "ma-1m" | "ma-3m" | "ma-5m" | "ma-15m",
     displayPointOffset: number | "",
     displayPointLimit: number | ""
   },
@@ -172,7 +172,7 @@ When `showBA` is enabled, the renderer draws a compact spot-price overlay from r
         timestamp: string | number,
         px: number | null,
         strikeWindow: number | string,
-        displayMode: "cumulative" | "ma-1m" | "ma-3m" | "ma-5m" | "ma-15m",
+        displayMode: "cumulative" | "linear" | "ma-1m" | "ma-3m" | "ma-5m" | "ma-15m",
         flowWindowMinutes: number | null,
         allowedStrikes: number[],
         records: number,
@@ -203,7 +203,7 @@ When `showBA` is enabled, the renderer draws a compact spot-price overlay from r
 
 For both option flow widgets, `strikeWindow` is a nonnegative number for a symmetric window, a signed string such as `"+3"` or `"-5"` for a directional window, or `"ALL"` for all observed strikes. Metadata and calculation summaries preserve this normalized value. Existing positive numeric settings retain their behavior; negative numeric configuration values normalize to downward signed strings. Invalid external configuration falls back to `3`.
 
-The series are cumulative `size_contracts` totals by default. In MA display modes they are trailing timestamp-window sums of per-snapshot increments for tape rows whose `call_put` is `CALL` or `PUT`, whose `aggressor_buy_sell` is `BUY` or `SELL`, and whose strike is selected by the widget's `ATM` strike window (`ALL` does not require an underlying price). `displayPointOffset` and `displayPointLimit` trim rendered points after calculation and do not alter metric values. Details: [Tape Contract Datasource](tape-contract-datasource.md).
+The series are cumulative `size_contracts` totals by default. In Linear mode, each point displays only its own snapshot increments; Balanced TICK derives balances and imbalance from those increments, with zero imbalance when gross volume is zero. Cumulative metadata is retained in every mode; `flowWindowMinutes` is `null` for Linear and Cum. In MA display modes they are trailing timestamp-window sums of per-snapshot increments for tape rows whose `call_put` is `CALL` or `PUT`, whose `aggressor_buy_sell` is `BUY` or `SELL`, and whose strike is selected by the widget's `ATM` strike window (`ALL` does not require an underlying price). `displayPointOffset` and `displayPointLimit` trim rendered points after calculation and do not alter metric values. Details: [Tape Contract Datasource](tape-contract-datasource.md).
 
 `Option Flow Balanced TICK` uses the same source rows and strike filtering, but publishes four balance datasets:
 
@@ -214,7 +214,7 @@ The series are cumulative `size_contracts` totals by default. In MA display mode
   mode: "timeseries-custom",
   config: {
     strikeWindow: number | string,
-    flowDisplayMode: "cumulative" | "ma-1m" | "ma-3m" | "ma-5m" | "ma-15m",
+    flowDisplayMode: "cumulative" | "linear" | "ma-1m" | "ma-3m" | "ma-5m" | "ma-15m",
     displayPointOffset: number | "",
     displayPointLimit: number | ""
   },
@@ -229,7 +229,7 @@ The series are cumulative `size_contracts` totals by default. In MA display mode
         timestamp: string | number,
         px: number | null,
         strikeWindow: number | string,
-        displayMode: "cumulative" | "ma-1m" | "ma-3m" | "ma-5m" | "ma-15m",
+        displayMode: "cumulative" | "linear" | "ma-1m" | "ma-3m" | "ma-5m" | "ma-15m",
         flowWindowMinutes: number | null,
         allowedStrikes: number[],
         records: number,

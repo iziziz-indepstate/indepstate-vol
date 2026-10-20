@@ -16,6 +16,7 @@ const BALANCED_SERIES = [
 
 const FLOW_DISPLAY_MODES = Object.freeze({
   CUMULATIVE: 'cumulative',
+  LINEAR: 'linear',
   MA_1M: 'ma-1m',
   MA_3M: 'ma-3m',
   MA_5M: 'ma-5m',
@@ -168,6 +169,15 @@ function calculateFlowPoints(history, config = {}) {
 function applyFlowDisplayMode(meta, config = {}) {
   const displayMode = normalizeFlowDisplayMode(config.flowDisplayMode);
   const windowMinutes = FLOW_DISPLAY_WINDOW_MINUTES[displayMode] || null;
+  if (displayMode === FLOW_DISPLAY_MODES.LINEAR) {
+    return meta.map((point) => ({
+      ...point,
+      displayMode,
+      flowWindowMinutes: null,
+      displayTotals: { ...point.increments },
+      displayBalances: balancesFromTotals(point.increments)
+    }));
+  }
   if (!windowMinutes) {
     return meta.map((point) => ({
       ...point,

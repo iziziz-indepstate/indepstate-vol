@@ -50,6 +50,68 @@ function record(callPut, side, size, strike, extra = {}) {
   };
 }
 
+test('linear flow uses each snapshot and preserves cumulative metadata and latest summary', () => {
+  const history = [
+    snapshot('2026-10-12T10:00:00Z', [
+      record('CALL', 'BUY', 10, 100), record('PUT', 'SELL', 2, 100)
+    ]),
+    snapshot('2026-10-12T10:00:01Z', [
+      record('CALL', 'BUY', 2, 100), record('CALL', 'SELL', 6, 100),
+      record('PUT', 'BUY', 9, 100), record('PUT', 'SELL', 1, 100),
+      record('CALL', 'BUY', 100, 130)
+    ])
+  ];
+  const config = { strikeWindow: 0, flowDisplayMode: 'linear' };
+  const tick = buildOptionFlowTickSeries(history, config);
+  const balanced = buildOptionFlowBalancedTickSeries(history, config);
+  assert.deepEqual(tick.datasets.map((d) => d.data), [[10, 2], [0, 6], [0, 9], [2, 1]]);
+  assert.deepEqual(balanced.datasets.map((d) => d.data), [[10, -4], [-2, 8], [12, -12], [1, -12 / 18]]);
+  for (const result of [tick, balanced]) {
+    const meta = result.datasets[0].pointMeta[1];
+    assert.equal(meta.displayMode, 'linear');
+    assert.equal(meta.flowWindowMinutes, null);
+    assert.deepEqual(meta.displayTotals, meta.increments);
+    assert.deepEqual(meta.totals, { boughtCalls: 12, soldCalls: 6, boughtPuts: 9, soldPuts: 3 });
+    assert.deepEqual(meta.balances, { callsBalance: 6, putsBalance: 6, directionalBalance: 0, imbalance: 0 });
+    assert.equal(result.summary.flowDisplayMode, 'linear');
+    assert.equal(result.summary.flowWindowMinutes, null);
+  }
+  assert.deepEqual(tick.summary.totals, tick.datasets[0].pointMeta[1].increments);
+  assert.deepEqual(balanced.summary.balances, balanced.datasets[0].pointMeta[1].displayBalances);
+
+  for (const build of [buildOptionFlowTickSeries, buildOptionFlowBalancedTickSeries]) {
+    const zero = build([...history, snapshot('2026-10-12T10:00:02Z', [])], config);
+    assert.deepEqual(zero.datasets.map((d) => d.data.at(-1)), [0, 0, 0, 0]);
+    assert.deepEqual(build([], config).datasets.map((d) => d.data), [[], [], [], []]);
+    const emptySummary = build([], config).summary;
+    assert.deepEqual(Object.values(emptySummary.totals || emptySummary.balances), [0, 0, 0, 0]);
+  }
+});
+
+test('both linear widgets restore selection, trim history and describe the mode in tooltips', () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = { createElement: () => ({ dataset: {}, classList: { add() {} } }) };
+  try {
+    const history = [10, 2, 7].map((size, idx) => snapshot(`2026-10-12T10:00:0${idx}Z`, [record('CALL', 'BUY', size, 100)]));
+    for (const definition of [optionFlowTickWidget, optionFlowBalancedTickWidget]) {
+      const widget = JSON.parse(JSON.stringify({ id: 'linear-test', type: definition.type, config: {
+        flowDisplayMode: 'linear', displayPointOffset: 1, displayPointLimit: 1
+      } }));
+      const card = createWidgetCard(widget, definition);
+      assert.match(card.innerHTML, /<option value="cumulative"[^>]*>Cum<\/option>\s*<option value="linear" selected>Linear<\/option>/);
+      const series = definition.buildTimeSeries(history, widget);
+      assert.equal(series.labels.length, 1);
+      assert.deepEqual(series.datasets[0].data, [7]);
+      const dataset = series.datasets[0];
+      assert.equal(dataset.pointMeta[0].totals.boughtCalls, 19);
+      assert.ok(dataset.tooltipFormatter({ dataset, dataIndex: 0, parsed: { y: 7 } }).includes('Mode: linear'));
+    }
+  } finally {
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
 for (const build of [buildOptionFlowTickSeries, buildOptionFlowBalancedTickSeries]) {
   test(`${build.name} selects signed observed strike windows and keeps metadata`, () => {
     const history = [snapshot('2026-10-12T10:00:00Z',

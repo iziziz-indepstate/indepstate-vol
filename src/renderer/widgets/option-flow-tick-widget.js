@@ -9,6 +9,7 @@ function fmt(value, digits = 0) {
 }
 
 function flowModeTooltip(meta) {
+  if (meta.displayMode === 'linear') return 'Mode: linear';
   return meta.flowWindowMinutes
     ? `Mode: MA ${fmt(meta.flowWindowMinutes)}m`
     : 'Mode: cumulative';

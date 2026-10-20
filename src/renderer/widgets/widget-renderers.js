@@ -107,6 +107,7 @@ export function createWidgetCard(widget, definition, options = {}) {
           <select class="widget-flow-display-mode-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.FLOW_DISPLAY_MODE}">
             ${[
               ['cumulative', 'Cum'],
+              ['linear', 'Linear'],
               ['ma-1m', 'MA 1m'],
               ['ma-3m', 'MA 3m'],
               ['ma-5m', 'MA 5m'],

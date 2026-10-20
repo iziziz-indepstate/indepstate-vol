@@ -115,6 +115,7 @@ Counts must be whole numbers. Leading/trailing whitespace is ignored; `ALL` is c
 The widget control `Flow` selects display mode:
 
 - `Cum`: cumulative totals since the start of retained history
+- `Linear`: each point shows only its own snapshot increments, preserving chart history
 - `MA 1m`, `MA 3m`, `MA 5m`, `MA 15m`: trailing timestamp-window sums of per-snapshot tape increments
 
 The display-only point-window controls trim rendered chart points after calculation:
@@ -154,7 +155,7 @@ It renders four balance lines:
 - `Directional balance`: calls balance minus puts balance
 - `Imbalance`: directional balance divided by total bought/sold call/put contracts
 
-The widget controls `ATM`, `Flow`, `From`, and `Last` match `Option Flow TICK`. In MA modes, balances and imbalance are derived from trailing timestamp-window sums instead of cumulative totals.
+The widget controls `ATM`, `Flow`, `From`, and `Last` match `Option Flow TICK`. In Linear mode, balances and imbalance are derived from the individual snapshot increments; imbalance is zero when total snapshot volume is zero. In MA modes, balances and imbalance are derived from trailing timestamp-window sums instead of cumulative totals.
 
 Tooltips and runtime chart data include the same per-point metadata as `Option Flow TICK`, plus cumulative and displayed `balances` for the rendered lines.
 
