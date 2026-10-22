@@ -191,3 +191,27 @@ node --check src\plugins\tape-contract-datasource\receiver.cjs
 node --check src\renderer\app.js
 npm test
 ```
+
+
+## Underlying price overlay and time axis
+
+All four Option Flow widgets (TICK, Balanced TICK, Gamma Flow and Gamma Imbalance)
+provide a `BA` checkbox backed by `config.showUnderlying` (boolean, default `false`).
+The setting is saved separately for each widget. When enabled, runtime datasets
+append an `Underlying` series (`seriesKey: "underlying"`, `yAxisID: "underlying"`)
+without changing the indices of existing flow series. Its `pointMeta` matches the
+flow observations. The renderer draws this muted gray line behind the flow on an
+independent right price axis with two decimal places and no additional grid.
+The checkbox controls its visibility; it has no separate legend toggle.
+Gamma Imbalance retains its separate IV Pressure Z axis alongside the price axis.
+
+TICK and Balanced TICK use each point's calculated `px`; Gamma widgets use
+`currentSpot`. Flow filters, cumulative mode and moving-window sums do not
+transform the underlying price. Missing prices remain `null`, with gaps in the
+line and no zero substitution or additional forward filling. TICK's `From` and
+`Last` controls trim all series together.
+
+The X axis displays local computer time as `HH:mm:ss` from the original point
+`timestamp`, including on Gamma widgets. Labels are thinned automatically to fit
+the chart width and only mark whole observation indices. Observations remain
+equally spaced, even when elapsed time between them differs.

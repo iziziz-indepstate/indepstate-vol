@@ -280,3 +280,19 @@ Option-side balances are calculated as bought contracts minus sold contracts for
 - Full dashboard refresh renders producer table widgets before widget-data consumers.
 - When a `Straddle ATM` config changes, dependent `Vol Upfront` widgets are refreshed after the source output is republished.
 - Exact persistence of widget outputs is intentionally not implemented yet; outputs are recalculated from current snapshots and widget configs.
+
+
+## Option Flow underlying series
+
+All four Option Flow widgets accept `config.showUnderlying` (boolean, default
+`false`). When enabled, runtime data appends an `Underlying` dataset with
+`seriesKey: "underlying"` and `yAxisID: "underlying"`; existing dataset indices
+remain stable. Its `data` and `pointMeta` align with the displayed flow points,
+including TICK's `From`/`Last` trimming. Prices come from `pointMeta.px` for
+TICK/Balanced TICK and `pointMeta.currentSpot` for Gamma widgets. Missing prices
+remain `null`; flow transformations do not apply to this series.
+
+Renderer hints are `drawOrder: -1`, `hiddenInLegend: true` and `alwaysVisible: true`:
+the checkbox controls the background line and its independent right axis.
+Original point timestamps remain unchanged; local `HH:mm:ss` labels are a
+presentation concern. See [chart behavior](tape-contract-datasource.md#underlying-price-overlay-and-time-axis).

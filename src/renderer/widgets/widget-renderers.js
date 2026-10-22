@@ -2,6 +2,7 @@ import { WIDGET_PARAM_NAMES } from './widget-params.js';
 import { parseOptionFlowStrikeWindow } from '../../shared/option-flow-strike-window.mjs';
 import { createWidgetExtensionControlsHtml } from '../widget-extensions.js';
 import { gammaFlowControls } from './gamma-flow-controls.js';
+import { flowTimeSplits, localFlowTime } from './option-flow-chart.js';
 
 let chartJsLoadPromise = null;
 let uPlotLoadPromise = null;
@@ -76,6 +77,10 @@ export function createWidgetCard(widget, definition, options = {}) {
   const controls = Object.keys(controlsConfig).length || extensionControls
     ? `<div class="widget-controls widget-controls-inline">
         ${controlsConfig.gammaFlow ? gammaFlowControls(widget, controlsConfig.gammaAnalysis) : ''}
+        ${controlsConfig.showUnderlying ? `<label class="widget-control widget-control-checkbox" title="Underlying price on a separate axis">
+          <input type="checkbox" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.SHOW_UNDERLYING}" ${(widget?.config?.showUnderlying ?? definition?.defaultConfig?.showUnderlying) === true ? 'checked' : ''} />
+          <span>BA</span>
+        </label>` : ''}
         ${controlsConfig.strike ? `<label class="widget-control">S
           <input type="${strikeInputType}" class="widget-strike-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.BASE_STRIKE}" value="${strikeValue}" step="1" placeholder="ATM или 500" />
         </label>` : ''}
@@ -348,7 +353,7 @@ function supportsEvent(definition, eventType) {
     .some((contract) => contract?.type === eventType);
 }
 
-class UPlotWidgetChart {
+export class UPlotWidgetChart {
   constructor(UPlot, host, definition, options = {}) {
     this.UPlot = UPlot;
     this.host = host;
@@ -408,7 +413,8 @@ class UPlotWidgetChart {
   _visibleDatasets() {
     return (Array.isArray(this.data.datasets) ? this.data.datasets : [])
       .map((dataset, idx) => ({ dataset, idx }))
-      .filter(({ dataset, idx }) => this.isDatasetVisible(idx) && !dataset?.hidden);
+      .filter(({ dataset, idx }) => this.isDatasetVisible(idx) && !dataset?.hidden)
+      .sort((a, b) => (a.dataset.drawOrder ?? 0) - (b.dataset.drawOrder ?? 0));
   }
 
   _buildData() {
@@ -426,6 +432,7 @@ class UPlotWidgetChart {
     const height = this.definition.gammaFlow ? 240 : cssPx(this.host, 240);
     const width = Math.max(100, Math.round(this.host.clientWidth || this.host.getBoundingClientRect().width || 300));
     const hideXAxisValues = Boolean(this.definition?.hideXAxisValues);
+    const hasUnderlying = visible.some(({ dataset }) => dataset.yAxisID === 'underlying');
     return {
       width,
       height,
@@ -436,12 +443,15 @@ class UPlotWidgetChart {
           y: { range: (u, min, max) => this.options.scales?.y?.min != null ? [-1, 1]
             : [Math.min(0, min ?? 0) - Math.max(1, Math.abs(min || 0) * 0.05), Math.max(0, max ?? 0) + Math.max(1, Math.abs(max || 0) * 0.05)] },
           ivPressure: { auto: true }
-        } : {}) },
+        } : {}),
+        ...(hasUnderlying ? { underlying: { auto: true } } : {}) },
       axes: [
         {
           show: !hideXAxisValues,
-          values: (_, vals) => vals.map((x) => this.definition.gammaFlow && labels[x]
-            ? new Date(labels[x]).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour12: false }) : labels[x] ?? ''),
+          ...(this.definition.optionFlow ? {
+            splits: (plot, _axis, min, max) => flowTimeSplits(plot, min, max, this.data.labels.length),
+            values: (_, vals) => vals.map((x) => localFlowTime(this.data.datasets[0]?.pointMeta?.[x]?.timestamp))
+          } : { values: (_, vals) => vals.map((x) => this.data.labels[x] ?? '') }),
           stroke: 'rgba(234,234,240,0.66)',
           grid: { show: false },
           ticks: { show: false },
@@ -458,6 +468,12 @@ class UPlotWidgetChart {
         ...(visible.some(({ dataset }) => dataset.yAxisID === 'ivPressure') ? [{
           scale: 'ivPressure', side: 1, label: 'IV Pressure Z', size: 48,
           stroke: '#f59e0b', grid: { show: false }
+        }] : []),
+        ...(hasUnderlying ? [{
+          scale: 'underlying', side: 1, label: 'Underlying', size: 76,
+          font: '9px system-ui', labelFont: 'bold 9px system-ui',
+          values: (_, vals) => vals.map((value) => Number(value).toFixed(2)),
+          stroke: 'rgba(156,163,175,0.85)', grid: { show: false }
         }] : [])
       ],
       series: [
@@ -465,7 +481,7 @@ class UPlotWidgetChart {
         ...visible.map(({ dataset }) => ({
           label: dataset?.label || 'Series',
           scale: dataset?.yAxisID || 'y',
-          ...(this.definition.gammaFlow ? { points: { show: false } } : {}),
+          ...(this.definition.optionFlow ? { points: { show: false }, spanGaps: false } : {}),
           stroke: seriesColor(dataset, this.definition.color),
           width: dataset?.borderWidth ?? 1,
           dash: seriesDash(dataset)

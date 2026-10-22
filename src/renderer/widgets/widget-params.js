@@ -13,6 +13,7 @@ export const WIDGET_PARAM_NAMES = Object.freeze({
   TARGET_DELTA: 'targetDelta',
   STRIKE_WINDOW: 'strikeWindow',
   FLOW_DISPLAY_MODE: 'flowDisplayMode',
+  SHOW_UNDERLYING: 'showUnderlying',
   DISPLAY_POINT_OFFSET: 'displayPointOffset',
   DISPLAY_POINT_LIMIT: 'displayPointLimit',
   EXPIRATION: 'expiration',
@@ -68,6 +69,9 @@ export function normalizeWidgetParamValue(paramName, rawValue, currentValue, opt
     case WIDGET_PARAM_NAMES.FLOW_DISPLAY_MODE:
       return FLOW_DISPLAY_MODES.has(str) ? str : (currentValue || 'cumulative');
 
+    case WIDGET_PARAM_NAMES.SHOW_UNDERLYING:
+      return rawValue === true || rawValue === 'true';
+
     case WIDGET_PARAM_NAMES.MIRROR_X:
       return Boolean(rawValue);
 
@@ -90,6 +94,7 @@ export function shouldRefreshOnWidgetParamChange(paramName) {
     || paramName === WIDGET_PARAM_NAMES.OPTION_TYPE
     || paramName === WIDGET_PARAM_NAMES.TARGET_DELTA
     || paramName === WIDGET_PARAM_NAMES.STRIKE_WINDOW
+    || paramName === WIDGET_PARAM_NAMES.SHOW_UNDERLYING
     || paramName === WIDGET_PARAM_NAMES.FLOW_DISPLAY_MODE
     || paramName === WIDGET_PARAM_NAMES.DISPLAY_POINT_OFFSET
     || paramName === WIDGET_PARAM_NAMES.DISPLAY_POINT_LIMIT

@@ -1,3 +1,4 @@
+import { withUnderlying } from './option-flow-chart.js';
 import { createGammaFlowCalculator, GAMMA_DEFAULTS } from '../../shared/gamma-flow-calculations.mjs';
 
 const calculateGammaFlow = createGammaFlowCalculator();
@@ -46,18 +47,18 @@ function build(history, widget, imbalance) {
   }));
   datasets.push({ label: 'Zero', data: points.map(() => 0), borderColor: '#888888',
     borderDash: [4, 4], hiddenInLegend: true, alwaysVisible: true, pointMeta: points });
-  return { labels: points.map((p) => p.timestamp), datasets,
+  return withUnderlying({ labels: points.map((p) => p.timestamp), datasets,
     summary: points.at(-1) ?? null,
     chartOptions: { gammaDebug: cfg.gammaDebug === true, gammaSummary: details(points.at(-1), relative, imbalance),
-      scales: { y: imbalance ? { min: -1, max: 1 } : {}, ivPressure: {} } } };
+      scales: { y: imbalance ? { min: -1, max: 1 } : {}, ivPressure: {} } } }, cfg, 'currentSpot');
 }
 function definition(imbalance) {
   return {
     type: imbalance ? 'option-flow-gamma-imbalance' : 'option-flow-gamma-flow',
     defaultTitle: imbalance ? 'Option Flow Gamma Imbalance' : 'Option Flow Gamma Flow',
     mode: 'timeseries-custom', chartRuntime: 'uplot', gridSpan: 3, requiresHistory: true,
-    gammaFlow: true, hideXAxisValues: false, color: '#38bdf8',
-    defaultConfig: { ...GAMMA_DEFAULTS }, controls: { gammaFlow: true, gammaAnalysis: imbalance },
+    gammaFlow: true, optionFlow: true, hideXAxisValues: false, color: '#38bdf8',
+    defaultConfig: { ...GAMMA_DEFAULTS, showUnderlying: false }, controls: { showUnderlying: true, gammaFlow: true, gammaAnalysis: imbalance },
     buildTimeSeries: (history, widget) => build(history, widget, imbalance)
   };
 }

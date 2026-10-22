@@ -1,3 +1,4 @@
+import { withUnderlying } from './option-flow-chart.js';
 import {
   buildOptionFlowBalancedTickSeries,
   buildOptionFlowTickSeries
@@ -105,14 +106,17 @@ export const optionFlowTickWidget = {
   defaultTitle: 'Option Flow TICK',
   color: '#22c55e',
   requiresHistory: true,
-  hideXAxisValues: true,
+  hideXAxisValues: false,
+  optionFlow: true,
   defaultConfig: {
+    showUnderlying: false,
     strikeWindow: 3,
     flowDisplayMode: 'cumulative',
     displayPointOffset: '',
     displayPointLimit: ''
   },
   controls: {
+    showUnderlying: true,
     strikeWindow: true,
     flowDisplayMode: true,
     displayPointOffset: true,
@@ -121,7 +125,7 @@ export const optionFlowTickWidget = {
   buildTimeSeries: (history, widget) => {
     const cfg = { ...optionFlowTickWidget.defaultConfig, ...(widget?.config || {}) };
     const series = applyDisplayPointWindow(buildOptionFlowTickSeries(history, cfg), cfg);
-    return {
+    return withUnderlying({
       labels: series.labels,
       datasets: series.datasets.map((dataset) => ({
         ...dataset,
@@ -132,7 +136,7 @@ export const optionFlowTickWidget = {
         pointHoverRadius: 0,
         tooltipFormatter: pointTooltip
       }))
-    };
+    }, cfg, 'px');
   }
 };
 
@@ -144,14 +148,17 @@ export const optionFlowBalancedTickWidget = {
   defaultTitle: 'Option Flow Balanced TICK',
   color: '#38bdf8',
   requiresHistory: true,
-  hideXAxisValues: true,
+  hideXAxisValues: false,
+  optionFlow: true,
   defaultConfig: {
+    showUnderlying: false,
     strikeWindow: 3,
     flowDisplayMode: 'cumulative',
     displayPointOffset: '',
     displayPointLimit: ''
   },
   controls: {
+    showUnderlying: true,
     strikeWindow: true,
     flowDisplayMode: true,
     displayPointOffset: true,
@@ -160,7 +167,7 @@ export const optionFlowBalancedTickWidget = {
   buildTimeSeries: (history, widget) => {
     const cfg = { ...optionFlowBalancedTickWidget.defaultConfig, ...(widget?.config || {}) };
     const series = applyDisplayPointWindow(buildOptionFlowBalancedTickSeries(history, cfg), cfg);
-    return {
+    return withUnderlying({
       labels: series.labels,
       datasets: series.datasets.map((dataset) => ({
         ...dataset,
@@ -171,6 +178,6 @@ export const optionFlowBalancedTickWidget = {
         pointHoverRadius: 0,
         tooltipFormatter: balancedPointTooltip
       }))
-    };
+    }, cfg, 'px');
   }
 };

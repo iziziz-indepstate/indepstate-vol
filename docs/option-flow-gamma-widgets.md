@@ -255,3 +255,13 @@ Executed flow and raw B can operate, while dependent Z/C/R/A remain unavailable.
 boundaries, spreads, missing data, DST, raw/compact and replay/incremental equivalence,
 retention and transport latency. Receiver tests cover units, atomic validation and versioned
 quotes/calibration. Run `node --check src/renderer/app.js` and `npm test`.
+
+
+## Underlying price overlay and time axis
+
+Both Gamma widgets offer a `BA` checkbox (saved `showUnderlying` boolean, default
+`false`). It plots each observation's `currentSpot` as a muted background line
+on its own right price axis; Gamma Imbalance keeps its IV Pressure Z axis too.
+No additional forward filling is applied. The X axis now uses local computer
+time in `HH:mm:ss`, with labels thinned to fit the chart width.
+See [shared Option Flow chart behavior](tape-contract-datasource.md#underlying-price-overlay-and-time-axis).
