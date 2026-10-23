@@ -46,7 +46,7 @@ export function normalizeWidgetParamValue(paramName, rawValue, currentValue, opt
 
     case WIDGET_PARAM_NAMES.TARGET_DELTA: {
       const numeric = Math.abs(Number(str));
-      return Number.isFinite(numeric) ? Math.min(0.99, Math.max(0.01, numeric)) : (currentValue || 0.25);
+      return Number.isFinite(numeric) ? Math.min(options.targetDeltaMax ?? 0.99, Math.max(0.01, numeric)) : (currentValue || 0.25);
     }
 
     case WIDGET_PARAM_NAMES.STRIKE_WINDOW: {

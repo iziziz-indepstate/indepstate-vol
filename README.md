@@ -42,6 +42,7 @@ npm start
 - **nDate Skew BidIV Ratio**: ratio widget for symmetric strikes around a reference level: `(putBid / putIV) / (callBid / callIV)`. `S` accepts an exact strike or `ATM`.
 - **IV Current**: time series for IV at a selected strike. The `S` control accepts an exact strike or `ATM`.
 - **IV Dynamics**: heatmap widget for intraday changes in IV or IV minus ATM across configurable put/call deltas.
+- **0DTE Skew**: intraday put-minus-call IV skew and both wings relative to ATM, with configurable symmetric delta. Details: [0DTE Skew](docs/zero-dte-skew.md).
 - **Spread Optimizer**: table widget that ranks candidate vertical spreads by configurable risk, liquidity, and regime inputs.
 - **SPX IV / RV**: standalone table and chart widget for implied-vs-realized volatility comparisons.
 - **Option Flow TICK**: four-line option-flow chart for bought/sold calls and puts from `tape-contract` snapshots, filtered by observed strikes around tape `underlying_price`, with cumulative/trailing MA modes and display-only point window controls. Details: [Tape Contract Datasource](docs/tape-contract-datasource.md).

@@ -1,5 +1,6 @@
 import { selectAtmPair, selectExpiry } from './atm-straddle-calculations.mjs';
 import { resolveExpiryToken } from './expiry-placeholders.mjs';
+import { resolveSkewExpiration } from './zero-dte-skew-calculations.mjs';
 import { findStrikesAroundPrice, resolveConfiguredStrike, resolveStrikeSelection } from './option-chain-utils.js';
 
 export const SNAPSHOT_TRIM_VERSION = 1;
@@ -337,7 +338,11 @@ function collectNeeds(snapshot, tab) {
   const needs = new Map();
   for (const widget of tab?.widgets || []) {
     const type = String(widget?.type || '');
-    if (type === 'n-delta-iv') addNDeltaNeed(snapshot, needs, widget);
+    if (type === 'zero-dte-skew') {
+      const expiry = resolveSkewExpiration(snapshot, widget?.config?.expiration);
+      if (expiry) addNeed(needs, expiry, { allQuotes: true });
+    }
+    else if (type === 'n-delta-iv') addNDeltaNeed(snapshot, needs, widget);
     else if (type === 'iv-dynamics') addIvDynamicsNeed(snapshot, needs, widget);
     else if (type === 'atm-straddle') addStraddleNeed(snapshot, needs, widget);
     else if (type === 'spread-optimizer') addSpreadOptimizerNeed(snapshot, needs, widget);

@@ -103,7 +103,7 @@ export function createWidgetCard(widget, definition, options = {}) {
           </select>
         </label>` : ''}
         ${controlsConfig.targetDelta ? `<label class="widget-control">D
-          <input type="number" min="0.01" max="0.99" step="0.01" class="widget-target-delta-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.TARGET_DELTA}" value="${targetDeltaValue}" />
+          <input type="number" min="0.01" max="${controlsConfig.targetDeltaMax ?? 0.99}" step="0.01" class="widget-target-delta-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.TARGET_DELTA}" value="${targetDeltaValue}" />
         </label>` : ''}
         ${controlsConfig.strikeWindow ? `<label class="widget-control">ATM
           <input type="text" class="widget-strike-window-input" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.STRIKE_WINDOW}" value="${strikeWindowValue}" placeholder="3 / +3 / -5 / ALL" title="3: around ATM; +3: ATM and higher; -5: ATM and lower; ALL: all strikes" />
@@ -358,6 +358,7 @@ export class UPlotWidgetChart {
     this.UPlot = UPlot;
     this.host = host;
     this.definition = definition || {};
+    if (this.definition.volPoints) this.host.classList.add('widget-chart-host-vol-points');
     this.eventPort = options?.eventPort || null;
     this.onLegendVisibilityChange = options?.onLegendVisibilityChange;
     this.data = {
@@ -393,7 +394,13 @@ export class UPlotWidgetChart {
     this._summary.className = 'widget-gamma-summary';
     this._summary.style.cssText = 'white-space:pre-wrap;font-size:11px;line-height:1.5;padding:4px 8px;max-height:160px;overflow:auto;flex-shrink:0';
     this._summary.hidden = true;
-    this.host.replaceChildren(this._legend, this._summary, this._plotHost);
+    this._chartTitle = document.createElement('div');
+    this._chartTitle.className = 'widget-chart-subtitle';
+    this._chartTitle.hidden = true;
+    this._tooltip = document.createElement('div');
+    this._tooltip.className = 'widget-uplot-tooltip';
+    this._tooltip.hidden = true;
+    this.host.replaceChildren(this._chartTitle, this._legend, this._summary, this._plotHost, this._tooltip);
     this._bindEventInterest();
   }
 
@@ -429,7 +436,7 @@ export class UPlotWidgetChart {
   }
 
   _buildOptions(labels, visible) {
-    const height = this.definition.gammaFlow ? 240 : cssPx(this.host, 240);
+    const height = this.definition.gammaFlow || this.definition.volPoints ? 240 : cssPx(this.host, 240);
     const width = Math.max(100, Math.round(this.host.clientWidth || this.host.getBoundingClientRect().width || 300));
     const hideXAxisValues = Boolean(this.definition?.hideXAxisValues);
     const hasUnderlying = visible.some(({ dataset }) => dataset.yAxisID === 'underlying');
@@ -439,6 +446,12 @@ export class UPlotWidgetChart {
       cursor: { show: false },
       legend: { show: false },
       scales: { x: { time: false },
+        ...(this.definition.showZeroLine ? { y: { range: (_u, min, max) => {
+          const low = Math.min(0, min ?? 0);
+          const high = Math.max(0, max ?? 0);
+          const padding = Math.max(0.1, (high - low) * 0.08);
+          return [low - padding, high + padding];
+        } } } : {}),
         ...(this.definition.gammaFlow ? {
           y: { range: (u, min, max) => this.options.scales?.y?.min != null ? [-1, 1]
             : [Math.min(0, min ?? 0) - Math.max(1, Math.abs(min || 0) * 0.05), Math.max(0, max ?? 0) + Math.max(1, Math.abs(max || 0) * 0.05)] },
@@ -458,12 +471,14 @@ export class UPlotWidgetChart {
           size: hideXAxisValues ? 0 : 24
         },
         {
+          ...(this.definition.volPoints ? { label: 'vol pts',
+            values: (_, vals) => vals.map((v) => Number(v).toFixed(2)) } : {}),
           ...(this.definition.gammaFlow ? { values: (_, vals) => vals.map((v) => new Intl.NumberFormat('en-US', {
             notation: 'compact', maximumFractionDigits: 1
           }).format(v)) } : {}),
           stroke: 'rgba(234,234,240,0.66)',
           grid: { stroke: 'rgba(234,234,240,0.10)', width: 1 },
-          size: 46
+          size: this.definition.volPoints ? 60 : 46
         },
         ...(visible.some(({ dataset }) => dataset.yAxisID === 'ivPressure') ? [{
           scale: 'ivPressure', side: 1, label: 'IV Pressure Z', size: 48,
@@ -481,12 +496,24 @@ export class UPlotWidgetChart {
         ...visible.map(({ dataset }) => ({
           label: dataset?.label || 'Series',
           scale: dataset?.yAxisID || 'y',
-          ...(this.definition.optionFlow ? { points: { show: false }, spanGaps: false } : {}),
+          ...(this.definition.optionFlow || this.definition.showZeroLine ? { points: { show: false }, spanGaps: false } : {}),
           stroke: seriesColor(dataset, this.definition.color),
           width: dataset?.borderWidth ?? 1,
           dash: seriesDash(dataset)
         }))
-      ]
+      ],
+      ...(this.definition.showZeroLine ? { hooks: { draw: [(plot) => {
+        const y = plot.valToPos(0, 'y', true);
+        const { ctx, bbox } = plot;
+        ctx.save();
+        ctx.strokeStyle = 'rgba(234,234,240,0.45)';
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(bbox.left, y);
+        ctx.lineTo(bbox.left + bbox.width, y);
+        ctx.stroke();
+        ctx.restore();
+      }] } } : {})
     };
   }
 
@@ -559,6 +586,21 @@ export class UPlotWidgetChart {
   _bindPlotClick() {
     const over = this._plot?.over;
     if (!over || this._plotClickHandler) return;
+    if (this.definition.hoverTooltip) {
+      this._tooltipMove = (evt) => {
+        const idx = this._plot.posToIdx(evt.clientX - over.getBoundingClientRect().left);
+        const dataset = this._lastBuild.visible.find(({ dataset }) => dataset.tooltipFormatter)?.dataset;
+        const lines = dataset?.tooltipFormatter?.({ dataIndex: idx, dataset }) || [];
+        this._tooltip.textContent = lines.join('\n');
+        this._tooltip.hidden = !lines.length;
+        const rect = this._tooltip.getBoundingClientRect();
+        this._tooltip.style.left = `${Math.max(8, Math.min(evt.clientX + 12, window.innerWidth - rect.width - 8))}px`;
+        this._tooltip.style.top = `${Math.max(8, Math.min(evt.clientY + 12, window.innerHeight - rect.height - 8))}px`;
+      };
+      this._tooltipLeave = () => { this._tooltip.hidden = true; };
+      over.addEventListener('mousemove', this._tooltipMove);
+      over.addEventListener('mouseleave', this._tooltipLeave);
+    }
     if (this.definition.gammaFlow) {
       this._gammaHover = (evt) => {
         if (!this.options.gammaDebug) return;
@@ -579,6 +621,10 @@ export class UPlotWidgetChart {
 
   _unbindPlotClick() {
     const over = this._plot?.over;
+    if (over && this._tooltipMove) over.removeEventListener('mousemove', this._tooltipMove);
+    if (over && this._tooltipLeave) over.removeEventListener('mouseleave', this._tooltipLeave);
+    this._tooltipMove = this._tooltipLeave = null;
+    this._tooltip.hidden = true;
     if (over && this._gammaHover) over.removeEventListener('mousemove', this._gammaHover);
     if (over && this._gammaLeave) over.removeEventListener('mouseleave', this._gammaLeave);
     this._gammaHover = this._gammaLeave = null;
@@ -629,6 +675,9 @@ export class UPlotWidgetChart {
   }
 
   update() {
+    this._chartTitle.hidden = !this.definition.volPoints;
+    this._chartTitle.textContent = this.definition.volPoints
+      ? [this.options.plugins?.title?.text, this.options.skewStatus].filter(Boolean).join(' · ') : '';
     this._summary.hidden = !this.options.gammaDebug || !this.options.gammaSummary;
     this._summary.textContent = this.options.gammaSummary || '';
     const { labels, columns, visible } = this._buildData();

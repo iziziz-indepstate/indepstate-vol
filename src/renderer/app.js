@@ -1470,6 +1470,7 @@ async function renderWidgets() {
     const definition = getWidgetDefinition(target.type);
     const currentValue = target.config[paramName];
     const nextValue = normalizeWidgetParamValue(paramName, rawValue, currentValue, {
+      targetDeltaMax: definition?.controls?.targetDeltaMax,
       strikeInputType: definition?.controls?.strikeInputType === 'text' ? 'text' : 'number'
     });
     target.config[paramName] = nextValue;
