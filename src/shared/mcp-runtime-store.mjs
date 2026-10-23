@@ -1,3 +1,4 @@
+import { sourceForWidget } from './data-sources.mjs';
 export function createMcpRuntimeStore() {
   const byWidget = new Map();
 
@@ -44,6 +45,7 @@ export function serializeWidgetDefinition(definition) {
   if (!definition) return {};
   return {
     type: definition.type || null,
+    providerKey: definition.providerKey ?? null,
     defaultTitle: definition.defaultTitle || definition.type || null,
     mode: definition.mode || 'timeseries',
     metric: definition.metric || null,
@@ -95,6 +97,9 @@ export function createDashboardRuntimeSnapshot({
       title: tab.title || tab.id,
       providerKey: tab.providerKey || null,
       providerConfig: { ...(tab.providerConfig || {}) },
+      dataSources: (tab.dataSources || []).map((source) => ({
+        id: source.id, providerKey: source.providerKey, providerConfig: { ...source.providerConfig }
+      })),
       widgets: (Array.isArray(tab.widgets) ? tab.widgets : []).map((widget) => {
         const runtimeData = getRuntimeData?.(tab.id, widget.id) || null;
         const definition = definitionsByType[widget.type] || {
@@ -104,6 +109,7 @@ export function createDashboardRuntimeSnapshot({
         };
         return {
           id: widget.id,
+          dataSourceId: sourceForWidget(tab, widget, (type) => definitionsByType[type])?.id || null,
           type: widget.type,
           title: widget.title || definition.defaultTitle || widget.type,
           config: { ...(widget.config || {}) },

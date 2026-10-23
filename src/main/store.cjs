@@ -35,7 +35,7 @@ function pickConfigFields(loaded, defaults) {
   return {
     activeTabId: source.activeTabId || defaults.activeTabId,
     tabs: Array.isArray(source.tabs) && source.tabs.length ? source.tabs : defaults.tabs,
-    historyByTab: {}
+    historyBySource: {}
   };
 }
 

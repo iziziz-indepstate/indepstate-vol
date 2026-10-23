@@ -81,6 +81,7 @@ function buildDashboardList(runtime) {
         title: tab.title || tab.id,
         active: tab.id === runtime?.activeTabId,
         provider: providerSummary(tab),
+        dataSources: safeArray(tab.dataSources).map((source) => ({ id: source.id, ...providerSummary(source) })),
         widgetsCount: widgets.length,
         runtimeDataAvailable: widgets.some((widget) => dataStatusFromWidget(widget).status === 'loaded'),
         loadedWidgetsCount: widgets.filter((widget) => dataStatusFromWidget(widget).status === 'loaded').length
@@ -108,10 +109,12 @@ function buildWidgetList(runtime, tabId) {
       id: tab.id,
       title: tab.title || tab.id,
       active: tab.id === runtime?.activeTabId,
-      provider: providerSummary(tab)
+      provider: providerSummary(tab),
+      dataSources: safeArray(tab.dataSources).map((source) => ({ id: source.id, ...providerSummary(source) }))
     },
     widgets: safeArray(tab.widgets).map((widget) => ({
       id: widget.id,
+      dataSourceId: widget.dataSourceId || null,
       type: widget.type,
       title: widget.title || widget.defaultTitle || widget.type,
       config: cloneJson(widget.config || {}),
@@ -155,6 +158,7 @@ function buildWidgetData(runtime, tabId, widgetId) {
       dashboard: { id: tab.id, title: tab.title || tab.id },
       widget: {
         id: widget.id,
+        dataSourceId: widget.dataSourceId || null,
         type: widget.type,
         title: widget.title || widget.defaultTitle || widget.type,
         config: cloneJson(widget.config || {}),
@@ -170,6 +174,7 @@ function buildWidgetData(runtime, tabId, widgetId) {
     dashboard: { id: tab.id, title: tab.title || tab.id },
     widget: {
       id: widget.id,
+      dataSourceId: widget.dataSourceId || null,
       type: widget.type,
       title: widget.title || widget.defaultTitle || widget.type,
       config: cloneJson(widget.config || {}),

@@ -95,3 +95,17 @@ test('chart runtime data serializes labels, datasets, and point metadata', () =>
   assert.equal(data.chart.datasets[0].pointMeta[0].matchedStrike, 5000);
   assert.equal(data.config.targetDelta, 0.25);
 });
+
+
+test('mixed dashboard exposes all sources and resolved widget bindings', () => {
+  const runtime = createDashboardRuntimeSnapshot({
+    state: { activeTabId: 't', tabs: [{ id: 't', dataSources: [
+      { id: 'tv', providerKey: 'tradingview', providerConfig: { ticker: 'AMEX:SPY' } },
+      { id: 'tape', providerKey: 'tape-contract', providerConfig: { root: 'SPY' } }
+    ], widgets: [{ id: 'chain', type: 'chain' }, { id: 'flow', type: 'flow' }, { id: 'derived', type: 'derived' }] }] },
+    widgetDefinitions: [{ type: 'chain', providerKey: 'tradingview' }, { type: 'flow', providerKey: 'tape-contract' }, { type: 'derived', providerKey: null }]
+  });
+  assert.equal(runtime.tabs[0].dataSources.length, 2);
+  assert.deepEqual(runtime.tabs[0].widgets.map((w) => w.dataSourceId), ['tv', 'tape', null]);
+  assert.equal(runtime.tabs[0].widgets[1].definition.providerKey, 'tape-contract');
+});

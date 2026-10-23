@@ -39,7 +39,8 @@ function createDataSourceRuntime(tab, callbacks = {}) {
   let running = Boolean(callbacks.isRunning?.(tab.id));
 
   return {
-    get tabId() { return currentTab.id; },
+    get tabId() { return currentTab.parentTabId || currentTab.id; },
+    get dataSourceId() { return currentTab.parentTabId ? currentTab.id : null; },
     get providerKey() { return currentTab.providerKey; },
     get title() { return currentTab.title; },
     get providerConfig() { return currentTab.providerConfig || {}; },
@@ -49,7 +50,8 @@ function createDataSourceRuntime(tab, callbacks = {}) {
     },
     snapshot() {
       return {
-        tabId: currentTab.id,
+        tabId: this.tabId,
+        dataSourceId: this.dataSourceId,
         providerKey: currentTab.providerKey,
         title: currentTab.title,
         providerConfig: cloneJson(currentTab.providerConfig || {}),
@@ -60,24 +62,24 @@ function createDataSourceRuntime(tab, callbacks = {}) {
       return cloneJson(currentTab.providerConfig || {});
     },
     patchConfig(partial) {
-      return callbacks.patchConfig?.(currentTab.id, partial || {});
+      return callbacks.patchConfig?.(this.tabId, partial || {}, this.dataSourceId);
     },
     isRunning() {
       running = Boolean(callbacks.isRunning?.(currentTab.id));
       return running;
     },
     async start() {
-      const result = await callbacks.command?.(currentTab.id, 'start');
+      const result = await callbacks.command?.(this.tabId, 'start', this.dataSourceId);
       running = result?.running ?? true;
       return result;
     },
     async stop() {
-      const result = await callbacks.command?.(currentTab.id, 'stop');
+      const result = await callbacks.command?.(this.tabId, 'stop', this.dataSourceId);
       running = result?.running ?? false;
       return result;
     },
     async refreshOnce() {
-      const result = await callbacks.command?.(currentTab.id, 'refresh');
+      const result = await callbacks.command?.(this.tabId, 'refresh', this.dataSourceId);
       running = result?.running ?? this.isRunning();
       return result;
     }
@@ -104,7 +106,7 @@ function createDataSourceLifecycleRegistry({ command, patchConfig, isRunning, no
   }
 
   function ensureInstance(runtime, descriptor) {
-    const key = instanceKey(runtime.tabId, descriptor.id);
+    const key = instanceKey(runtime.dataSourceId || runtime.tabId, descriptor.id);
     if (instances.has(key)) return instances.get(key);
     const factory = typeof descriptor.create === 'function'
       ? descriptor.create
@@ -134,7 +136,11 @@ function createDataSourceLifecycleRegistry({ command, patchConfig, isRunning, no
     },
     syncDataSources(tabs) {
       const seenTabIds = new Set();
-      for (const tab of Array.isArray(tabs) ? tabs : []) {
+      const sources = (Array.isArray(tabs) ? tabs : []).flatMap((tab) =>
+        Array.isArray(tab.dataSources) ? tab.dataSources.map((source) => ({
+          ...source, parentTabId: tab.id, title: `${tab.title} / ${source.providerKey}`
+        })) : [tab]);
+      for (const tab of sources) {
         if (!tab?.id) continue;
         seenTabIds.add(tab.id);
         const existing = runtimes.get(tab.id);
@@ -172,7 +178,7 @@ function createDataSourceLifecycleRegistry({ command, patchConfig, isRunning, no
             values: readLifecycleSettings(runtime.snapshot(), descriptor.id, descriptor.controls)
           });
         }
-        result[runtime.tabId] = extensions;
+        result[runtime.dataSourceId || runtime.tabId] = extensions;
       }
       return result;
     },
@@ -185,11 +191,13 @@ function createDataSourceLifecycleRegistry({ command, patchConfig, isRunning, no
           const settings = readLifecycleSettings(dataSource, descriptor.id, descriptor.controls);
           const instance = ensureInstance(runtime, descriptor);
           if (typeof instance?.tick !== 'function') continue;
-          await instance.tick({
+          try { await instance.tick({
             dataSource: runtime,
             settings,
             now: now()
-          });
+          }); } catch (err) {
+            console.warn(`Data source lifecycle failed: ${runtime.dataSourceId || runtime.tabId}`, err);
+          }
         }
       }
     },

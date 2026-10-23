@@ -24,6 +24,10 @@ import { gammaFlowWidget, gammaImbalanceWidget } from './gamma-flow-widget.js';
 import { theBlockWidgets } from './theblock-widgets.js';
 import { appPluginWidgets } from '../../plugins/index.js';
 
+// Provider ownership is part of the widget definition contract.
+const tapeWidgets = new Set([optionFlowTickWidget, optionFlowBalancedTickWidget, gammaFlowWidget, gammaImbalanceWidget]);
+const independentWidgets = new Set([volUpfrontWidget, ivRvWidget, ...appPluginWidgets]);
+
 export const widgetDefinitions = [
   atmStraddleWidget,
   volUpfrontWidget,
@@ -48,7 +52,12 @@ export const widgetDefinitions = [
   ivRvWidget,
   ...appPluginWidgets,
   ...theBlockWidgets
-];
+].map((definition) => Object.assign(definition, {
+  providerKey: definition.providerKey !== undefined ? definition.providerKey
+    : independentWidgets.has(definition) ? null
+      : tapeWidgets.has(definition) ? 'tape-contract'
+        : theBlockWidgets.includes(definition) ? 'theblock' : 'tradingview'
+}));
 
 export const widgetRegistry = Object.fromEntries(widgetDefinitions.map((d) => [d.type, d]));
 

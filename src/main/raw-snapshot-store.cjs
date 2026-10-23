@@ -29,7 +29,9 @@ function rawSnapshotFileName(payload = {}) {
   const ts = timestampPart(snapshot.time);
   const tabPart = safePart(tab.title || tab.id, 'tab');
   const symbolPart = safePart(providerConfig.root || providerConfig.ticker || providerConfig.yahooSymbol, 'snapshot');
-  return `${ts}_${tabPart}_${symbolPart}.json`;
+  const sourcePart = payload.dataSourceId || tab.dataSourceId;
+  const suffix = sourcePart ? `_${safePart(sourcePart, 'source')}_${safePart(tab.providerKey || payload.providerKey, 'provider')}` : '';
+  return `${ts}_${tabPart}_${symbolPart}${suffix}.json`;
 }
 
 function saveRawSnapshot(directory, payload = {}) {

@@ -32,14 +32,11 @@
         </div>
       </div>
       <div id="configBody" class="config-body is-collapsed">
+        <div id="dataSourceStatuses" class="status" aria-live="polite"></div>
         <div id="globalStatus" class="status">ready</div>
         <div class="config-grid">
-          <label>Provider
-            <select id="providerKey">
-              <option value="tradingview">TradingView</option>
-              <option value="theblock">The Block</option>
-              <option value="tape-contract">Tape Contract</option>
-            </select>
+          <label>Data source
+            <select id="dataSourceSelect" aria-label="Data source settings"></select>
           </label>
           <label data-provider-setting="tradingview">API Base
             <input id="apiBase" />
@@ -59,10 +56,10 @@
           <label data-provider-setting="tradingview">Yahoo Symbol
             <input id="yahooSymbol" />
           </label>
-          <label data-provider-setting="tradingview tape-contract">Poll sec
+          <label data-provider-setting="tradingview tape-contract theblock">Poll sec
             <input id="pollSec" type="number" min="1" />
           </label>
-          <label data-provider-setting="tradingview tape-contract">Keep points
+          <label data-provider-setting="tradingview tape-contract theblock">Keep points
             <input id="keepPoints" type="number" min="20" />
           </label>
           <label class="checkbox-field">

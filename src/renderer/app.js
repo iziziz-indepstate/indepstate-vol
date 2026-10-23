@@ -1,3 +1,4 @@
+import { DATA_SOURCE_LABELS, ensureDataSource, normalizeTabDataSources, sourceForWidget, sourceView } from '../shared/data-sources.mjs';
 import { TradingViewProvider } from '../shared/tradingview-provider.js';
 import { TheBlockProvider } from '../shared/theblock-provider.js';
 import { getWidgetDefinition, widgetDefinitions } from './widgets/index.js';
@@ -49,14 +50,19 @@ const providers = {
 const state = {
   activeTabId: null,
   tabs: [],
-  historyByTab: {}
+  historyBySource: {}
 };
 
 const tabTimers = new Map();
-const tabTickInFlight = new Set();
-const tabRefreshInFlight = new Set();
+const tabTickInFlight = new Map();
+const sourceGenerations = new Map();
+const latestBySource = new Map();
+const selectedSourceByTab = new Map();
+const sourceRefreshInFlight = new Set();
 const tabStatus = {};
 const chartInstances = new Map();
+const chartCreations = new Map();
+let chartGeneration = 0;
 const widgetDataStore = new Map();
 const mcpRuntimeStore = createMcpRuntimeStore();
 const widgetEventBus = createWidgetEventBus();
@@ -175,6 +181,50 @@ function activeTab() {
   return state.tabs.find((t) => t.id === state.activeTabId);
 }
 
+function viewForSourceId(sourceId) {
+  for (const tab of state.tabs) {
+    const source = tab.dataSources?.find((item) => item.id === sourceId);
+    if (source) return sourceView(tab, source, getWidgetDefinition);
+  }
+  return null;
+}
+
+function selectedSource(tab = activeTab()) {
+  if (!tab) return null;
+  return tab.dataSources?.find((source) => source.id === selectedSourceByTab.get(tab.id)) || tab.dataSources?.[0] || null;
+}
+
+function selectedSourceView(tab = activeTab()) {
+  return sourceView(tab, selectedSource(tab), getWidgetDefinition);
+}
+
+function widgetHistory(tab, widget) {
+  const source = sourceForWidget(tab, widget, getWidgetDefinition);
+  return source ? state.historyBySource[source.id] || [] : [];
+}
+
+function widgetLatest(tab, widget) {
+  const source = sourceForWidget(tab, widget, getWidgetDefinition);
+  return source ? latestBySource.get(source.id) || widgetHistory(tab, widget).at(-1) || null : null;
+}
+
+function tabIsRunning(tab) {
+  return Boolean(tab?.dataSources?.some((source) => tabTimers.has(source.id)));
+}
+
+function invalidateSource(sourceId) {
+  sourceGenerations.set(sourceId, (sourceGenerations.get(sourceId) || 0) + 1);
+  tabTickInFlight.delete(sourceId);
+}
+
+function showSourceStatuses() {
+  const tab = activeTab();
+  const root = $('dataSourceStatuses');
+  if (root) root.textContent = (tab?.dataSources || []).map((source) =>
+    `${DATA_SOURCE_LABELS[source.providerKey] || source.providerKey}: ${tabStatus[source.id] || 'ready'}`
+  ).join(' | ');
+}
+
 function isActiveTabId(tabId) {
   return Boolean(tabId) && state.activeTabId === tabId;
 }
@@ -214,7 +264,8 @@ function setStatus(text) {
 function setTabStatus(tabId, text) {
   if (!tabId) return;
   tabStatus[tabId] = text;
-  if (state.activeTabId === tabId) setStatus(text);
+  const view = viewForSourceId(tabId);
+  if (state.activeTabId === (view?.tabId || tabId)) { setStatus(text); showSourceStatuses(); }
 }
 
 function formatStatusUpdateTime(value) {
@@ -252,16 +303,20 @@ function setPollState(isRunning) {
 
 function updatePollingControlsForActiveTab() {
   const tab = activeTab();
-  const running = tab ? tabTimers.has(tab.id) : false;
-  const refreshing = tab ? tabRefreshInFlight.has(tab.id) : false;
+  const running = tabIsRunning(tab);
+  const allRunning = Boolean(tab?.dataSources?.length) && tab.dataSources.every((source) => tabTimers.has(source.id));
+  const refreshing = Boolean(tab?.dataSources?.some((source) => sourceRefreshInFlight.has(source.id)));
   const startBtn = $('startBtn');
-  startBtn.disabled = running || refreshing;
+  startBtn.disabled = !tab?.dataSources?.length || allRunning || refreshing;
   startBtn.classList.toggle('is-active', running);
   startBtn.setAttribute('aria-pressed', String(running));
-  $('stopBtn').disabled = !running || refreshing;
-  $('refreshBtn').disabled = refreshing;
-  $('clearSnapshotBtn').disabled = refreshing;
+  $('stopBtn').disabled = !running;
+  $('refreshBtn').disabled = !tab?.dataSources?.length || refreshing;
+  $('clearSnapshotBtn').disabled = !tab?.dataSources?.length;
   setPollState(running || refreshing);
+  $('pollStateDot').classList.toggle('is-partial', running && !allRunning);
+  $('pollStateDot').title = running && !allRunning ? 'Some data sources are running' : allRunning ? 'All data sources are running' : 'Stopped';
+  showSourceStatuses();
 }
 
 function updateLifecycleUiFromResponse(response) {
@@ -286,6 +341,8 @@ async function syncDataSourcesToMain() {
 }
 
 function lifecycleSettingsFor(tab, lifecycleId) {
+  if (tab?.dataSources) tab = selectedSourceView(tab);
+  if (!tab) return {};
   tab.providerConfig ||= {};
   tab.providerConfig.lifecycleSettings ||= {};
   tab.providerConfig.lifecycleSettings[lifecycleId] ||= {};
@@ -348,6 +405,7 @@ function createLifecycleTimeListRow(lifecycleId, controlName, labelText, time, i
 }
 
 function renderDataSourceLifecycleControls(tab) {
+  if (tab?.dataSources) tab = selectedSourceView(tab);
   const root = $('dataSourceLifecycleControls');
   if (!root) return;
   const lifecycles = tab?.id ? (lifecycleUiByTab[tab.id] || []) : [];
@@ -434,18 +492,23 @@ function renderDataSourceLifecycleControls(tab) {
 }
 
 function lifecycleControlFor(tab, lifecycleId, controlName, fallbackType = 'text') {
+  if (tab?.dataSources) tab = selectedSourceView(tab);
+  if (!tab) return {};
   const lifecycle = (lifecycleUiByTab[tab?.id] || []).find((item) => item.id === lifecycleId);
   return (lifecycle?.controls || []).find((item) => item.name === controlName) || { name: controlName, type: fallbackType };
 }
 
 function writeLifecycleSettings(tab, lifecycleId, controlName, value) {
+  if (tab?.dataSources) tab = selectedSourceView(tab);
+  if (!tab) return;
   const control = lifecycleControlFor(tab, lifecycleId, controlName);
   const settings = lifecycleSettingsFor(tab, lifecycleId);
   settings[controlName] = normalizeLifecycleControlValue(control, value);
   persistUiState();
   if (typeof window.appBridge?.updateDataSourceLifecycleSettings !== 'function') return;
   window.appBridge.updateDataSourceLifecycleSettings({
-    tabId: tab.id,
+    tabId: tab.tabId,
+    dataSourceId: tab.id,
     lifecycleId,
     values: { ...settings },
     tabs: state.tabs,
@@ -479,13 +542,13 @@ function persist() {
   window.appBridge.saveState({
     activeTabId: state.activeTabId,
     tabs: state.tabs,
-    historyByTab: state.historyByTab
+    historyBySource: state.historyBySource
   }).catch((err) => {
     console.warn('Failed to persist dashboard state', err);
   }).finally(() => {
     profileDuration('persist:saveState', start, {
       tabs: state.tabs.length,
-      historyPoints: Object.values(state.historyByTab || {}).reduce((acc, rows) => acc + (Array.isArray(rows) ? rows.length : 0), 0)
+      historyPoints: Object.values(state.historyBySource || {}).reduce((acc, rows) => acc + (Array.isArray(rows) ? rows.length : 0), 0)
     });
     persistInFlight = false;
     if (persistQueued) schedulePersist(500);
@@ -521,7 +584,7 @@ function persistHistoryPoint(tabId, point, keep) {
     return;
   }
   const start = performance.now();
-  window.appBridge.appendHistoryPoint({ tabId, point, keep })
+  window.appBridge.appendHistoryPoint({ tabId: viewForSourceId(tabId)?.tabId, dataSourceId: tabId, point, keep })
     .then(() => profileDuration('persist:appendHistoryPoint', start, { tabId, keep }))
     .catch((err) => {
       console.warn('Failed to persist history point', err);
@@ -553,17 +616,21 @@ function tabSupportsHistorySnapshots(tab) {
   return tab.widgets.some((widget) => {
     const type = String(widget?.type || '');
     const definition = getWidgetDefinition(type);
-    return type.startsWith('ndate-skew-') || Boolean(definition?.requiresHistory);
+    return Boolean(definition) && ((definition.mode || 'timeseries') !== 'table' || Boolean(definition.requiresHistory));
   });
 }
 
 function ensureTabHistoryPolicy(tab) {
-  if (!tab?.id) return;
-  if (!tabSupportsHistorySnapshots(tab)) {
-    state.historyByTab[tab.id] = [];
+  if (tab?.dataSources) {
+    for (const source of tab.dataSources) ensureTabHistoryPolicy(sourceView(tab, source, getWidgetDefinition));
     return;
   }
-  if (!Array.isArray(state.historyByTab[tab.id])) state.historyByTab[tab.id] = [];
+  if (!tab?.id) return;
+  if (!tabSupportsHistorySnapshots(tab)) {
+    state.historyBySource[tab.id] = [];
+    return;
+  }
+  if (!Array.isArray(state.historyBySource[tab.id])) state.historyBySource[tab.id] = [];
 }
 
 function normalizeProviderConfig(providerConfig = {}) {
@@ -590,14 +657,29 @@ function updateProviderConfigVisibility(providerKey) {
 }
 
 function trimHistoryForTab(tab) {
-  if (!tab?.id || !Array.isArray(state.historyByTab[tab.id])) return;
+  if (!tab?.id || !Array.isArray(state.historyBySource[tab.id])) return;
   if (!shouldCompactHistorySnapshots(tab)) return;
-  state.historyByTab[tab.id] = state.historyByTab[tab.id].map((snapshot) => trimSnapshotForWidgets(snapshot, tab));
+  state.historyBySource[tab.id] = state.historyBySource[tab.id].map((snapshot) => trimSnapshotForWidgets(snapshot, tab));
 }
 
 function applyTabToForm(tab) {
+  const select = $('dataSourceSelect');
+  select.replaceChildren();
+  for (const source of tab?.dataSources || []) {
+    const option = document.createElement('option');
+    option.value = source.id;
+    option.textContent = DATA_SOURCE_LABELS[source.providerKey] || source.providerKey;
+    select.appendChild(option);
+  }
+  tab = selectedSourceView(tab);
+  select.value = tab?.id || '';
+  select.disabled = !tab;
+  document.querySelectorAll('.config-grid input').forEach((input) => { input.disabled = !tab; });
+  updateProviderConfigVisibility(tab?.providerKey || '');
+  for (const id of ['saveRawSnapshots', 'compactHistorySnapshots']) $(id).closest('label').hidden = !tab;
+  showSourceStatuses();
+  if (!tab) { renderDataSourceLifecycleControls(null); return; }
   tab.providerConfig = normalizeProviderConfig(tab.providerConfig || {});
-  $('providerKey').value = tab.providerKey;
   updateProviderConfigVisibility(tab.providerKey);
   $('apiBase').value = tab.providerConfig.apiBase || '';
   $('ticker').value = tab.providerConfig.ticker || '';
@@ -613,13 +695,15 @@ function applyTabToForm(tab) {
 }
 
 function readFormToTab(tab) {
-  const providerKey = $('providerKey').value;
-  tab.providerKey = providerKey;
+  tab = selectedSource(tab);
+  if (!tab) return;
+  const providerKey = tab.providerKey;
   const nextConfig = {
     ...(tab.providerConfig || {}),
     saveRawSnapshots: $('saveRawSnapshots').checked,
     compactHistorySnapshots: $('compactHistorySnapshots').checked
   };
+  Object.assign(nextConfig, { pollSec: Number($('pollSec').value) || 5, keepPoints: Number($('keepPoints').value) || 200 });
   if (providerKey === 'tradingview') {
     Object.assign(nextConfig, {
       apiBase: $('apiBase').value.trim(),
@@ -734,11 +818,18 @@ function deleteTabById(tabId) {
   const idx = state.tabs.findIndex((x) => x.id === tabId);
   if (idx === -1) return;
 
+  for (const source of state.tabs[idx].dataSources || []) {
+    stopTabPolling(source.id);
+    invalidateSource(source.id);
+    delete state.historyBySource[source.id];
+    latestBySource.delete(source.id);
+    delete tabStatus[source.id];
+  }
+  for (const widget of state.tabs[idx].widgets || []) clearWidgetData(tabId, widget.id);
+  selectedSourceByTab.delete(tabId);
   state.tabs.splice(idx, 1);
-  delete state.historyByTab[tabId];
   delete tabStatus[tabId];
   mcpRuntimeStore.clearTab(tabId);
-  stopTabPolling(tabId);
 
   if (state.activeTabId === tabId) {
     const next = state.tabs[idx] || state.tabs[idx - 1] || state.tabs[0];
@@ -780,6 +871,8 @@ function closeRenameTabModal() {
 }
 
 function destroyCharts() {
+  chartGeneration += 1;
+  chartCreations.clear();
   for (const { chart, definition, widget, eventPort } of chartInstances.values()) {
     if (chart && typeof chart.destroy === 'function') chart.destroy();
     eventPort?.destroy?.();
@@ -841,8 +934,8 @@ function chartRuntimeDataForWidget(tabId, widgetId) {
   if (!tab || tab.id !== tabId || !widgetId) return null;
   const entry = chartInstances.get(widgetId);
   if (!entry?.chart || entry.mode === 'table') return null;
-  const history = state.historyByTab[tab.id] || [];
-  const latest = history[history.length - 1] || null;
+  const history = widgetHistory(tab, entry.widget);
+  const latest = widgetLatest(tab, entry.widget);
   return createChartRuntimeData({
     widget: entry.widget,
     definition: entry.definition,
@@ -965,17 +1058,18 @@ function collectHistoricalComparisons(history, widget) {
 }
 
 function updateWidgetHistoryControls(root, tab) {
-  const history = Array.isArray(state.historyByTab?.[tab?.id]) ? state.historyByTab[tab.id] : [];
-  const latest = history[history.length - 1] || null;
+  const widget = tab.widgets.find((w) => w.id === historySidecarWidgetId);
+  const history = widgetHistory(tab, widget);
+  const latest = history.at(-1) || null;
   const latestTime = String(latest?.time || '');
   const hasComparableHistory = history.length > 1;
-
   root.querySelectorAll('[data-widget-history-toggle-widget-id]').forEach((toggle) => {
-    toggle.disabled = !hasComparableHistory;
-    toggle.classList.toggle('is-empty', !hasComparableHistory);
+    const target = tab.widgets.find((w) => w.id === toggle.dataset.widgetHistoryToggleWidgetId);
+    const available = widgetHistory(tab, target).length > 1;
+    toggle.disabled = !available;
+    toggle.classList.toggle('is-empty', !available);
   });
 
-  const widget = tab.widgets.find((w) => w.id === historySidecarWidgetId);
   const sidecar = root.querySelector('[data-history-sidecar]');
   const sidecarBody = root.querySelector('[data-history-sidecar-body]');
   const sidecarTitle = root.querySelector('[data-history-sidecar-title]');
@@ -1201,6 +1295,15 @@ function mergeChartOptions(target, source) {
 }
 
 async function ensureWidgetChartEntry(widget) {
+  if (chartCreations.has(widget.id)) return chartCreations.get(widget.id);
+  const pending = createWidgetChartEntry(widget);
+  chartCreations.set(widget.id, pending);
+  try { return await pending; }
+  finally { if (chartCreations.get(widget.id) === pending) chartCreations.delete(widget.id); }
+}
+
+async function createWidgetChartEntry(widget) {
+  const generation = chartGeneration;
   const definition = getWidgetDefinition(widget?.type);
   if (!widget?.id || !definition || widget.collapsed) return null;
   if ((definition.mode || 'timeseries') === 'table') return chartInstances.get(widget.id) || null;
@@ -1226,7 +1329,8 @@ async function ensureWidgetChartEntry(widget) {
       persistUiState();
     }
   });
-  if (!chart) {
+  if (!chart || generation !== chartGeneration || !host.isConnected) {
+    chart?.destroy?.();
     eventPort?.destroy();
     return null;
   }
@@ -1265,6 +1369,7 @@ async function renderWidgets() {
   destroyCharts();
   const tab = activeTab();
   const renderTabId = tab?.id || null;
+  const renderGeneration = chartGeneration;
   const root = $('widgetsRoot');
 
   if (!tab) {
@@ -1334,7 +1439,7 @@ async function renderWidgets() {
     }
 
     await ensureWidgetChartEntry(widget);
-    if (!isActiveTabId(renderTabId)) return;
+    if (!isActiveTabId(renderTabId) || renderGeneration !== chartGeneration) return;
   }
 
   root.querySelectorAll('[data-widget-id]').forEach((btn) => {
@@ -1476,7 +1581,7 @@ async function renderWidgets() {
     target.config[paramName] = nextValue;
     if (definition?.gammaFlow && ((paramName === 'gammaStrikeScope' && nextValue === 'anchored'
       && !target.config.gammaAnchorStrikes) || (paramName === 'gammaAnchorAt' && nextValue !== currentValue))) {
-      const history = state.historyByTab[tab.id] || [];
+      const history = widgetHistory(tab, target);
       const at = target.config.gammaAnchorAt || history.at(-1)?.time || new Date().toISOString();
       const anchor = captureGammaAnchor(history, at);
       target.config.gammaAnchorAt = at;
@@ -1668,11 +1773,13 @@ async function renderWidgets() {
     if (!widget) return;
 
     const selected = new Set(getSelectedHistorySnapshotTimes(widget));
-    const history = Array.isArray(state.historyByTab[tab.id]) ? state.historyByTab[tab.id] : [];
+    const history = widgetHistory(tab, widget);
     const latest = history[history.length - 1] || null;
     const latestTime = String(latest?.time || '');
 
-    state.historyByTab[tab.id] = history.filter((snapshot) => {
+    const source = sourceForWidget(tab, widget, getWidgetDefinition);
+    if (!source) return;
+    state.historyBySource[source.id] = history.filter((snapshot) => {
       const time = String(snapshot?.time || '');
       if (!time) return false;
       if (time === latestTime) return true;
@@ -1691,10 +1798,10 @@ async function renderWidgets() {
   });
 }
 
-function createWidgetRefreshContext(tab = activeTab()) {
+function createWidgetRefreshContext(tab = activeTab(), widget) {
   if (!tab) return null;
-  const history = state.historyByTab[tab.id] || [];
-  const latest = history[history.length - 1] || null;
+  const history = widgetHistory(tab, widget);
+  const latest = widgetLatest(tab, widget);
   return {
     tab,
     history,
@@ -1703,7 +1810,7 @@ function createWidgetRefreshContext(tab = activeTab()) {
   };
 }
 
-async function refreshChartEntry(entry, context = createWidgetRefreshContext()) {
+async function refreshChartEntry(entry, context = createWidgetRefreshContext(activeTab(), entry?.widget)) {
   const profileStart = performance.now();
   if (!entry || !context) return;
   const { chart, mode, metric, definition, widget } = entry;
@@ -1969,282 +2076,27 @@ async function refreshChartEntry(entry, context = createWidgetRefreshContext()) 
   });
 }
 
-async function refreshCharts() {
-  const profileStart = performance.now();
+async function refreshCharts(dataSourceId = null) {
+  const generation = chartGeneration;
   const tab = activeTab();
   if (!tab) return;
   const tabId = tab.id;
   await Promise.all(tab.widgets.map((widget) => ensureWidgetChartEntry(widget)));
-  if (!isActiveTabId(tabId)) return;
-
-  const activeWidgetIds = new Set((tab.widgets || []).map((widget) => widget.id));
-  const history = state.historyByTab[tab.id] || [];
-  const latest = history[history.length - 1] || null;
-  const publishChartRuntime = () => {};
-
-  const entries = Array.from(chartInstances.values())
-    .filter((entry) => activeWidgetIds.has(entry?.widget?.id));
-  const producerRenderTasks = [];
-  for (const entry of entries) {
-    const { chart, mode, metric, definition, widget } = entry;
-    if (widget?.collapsed && mode !== 'table') continue;
-    if (mode === 'table' && typeof definition.render === 'function' && !definition.consumesWidgetData) {
-      if (definition.refreshOnDashboardRefresh === false && entry.hasRendered) continue;
-      producerRenderTasks.push(renderTableWidgetEntry(entry, latest, history));
-      continue;
-    }
-    if (mode === 'table') continue;
-
-    if (mode === 'snapshot-series' && typeof definition.buildSnapshotSeries === 'function') {
-      const widgetSnapshot = latest;
-      const historicalComparisons = collectHistoricalComparisons(history, widget);
-
-      const applySeriesToChart = (seriesToApply, widgetForSeries = widget) => {
-        chart.data.labels = seriesToApply?.labels || [];
-
-        if (Array.isArray(seriesToApply?.datasets) && seriesToApply.datasets.length) {
-          chart.data.datasets = seriesToApply.datasets.map((dataset, idx) => ({
-            label: dataset?.label || `Series ${idx + 1}`,
-            data: Array.isArray(dataset?.data) ? dataset.data : [],
-            borderWidth: 1,
-            tension: 0.2,
-            pointRadius: 0,
-            pointHitRadius: 0,
-            pointHoverRadius: 0,
-            borderColor: dataset?.borderColor || definition.color || '#7aa2ff',
-            pointMeta: Array.isArray(dataset?.pointMeta) ? dataset.pointMeta : [],
-            tooltipFormatter: typeof dataset?.tooltipFormatter === 'function' ? dataset.tooltipFormatter : null
-          }));
-        } else {
-          chart.data.datasets = [{
-            label: definition.defaultTitle,
-            data: seriesToApply?.values || [],
-            borderWidth: 1,
-            tension: 0.2,
-            pointRadius: 0,
-            pointHitRadius: 0,
-            pointHoverRadius: 0,
-            borderColor: definition.color || '#7aa2ff'
-          }];
-        }
-
-        const sourceLabels = Array.isArray(chart.data.labels) ? chart.data.labels.map((label) => String(label)) : [];
-        const rangeSpecs = chart.data.datasets.map((dataset) => ({
-          labels: sourceLabels,
-          data: dataset?.data
-        }));
-        const allLabels = new Set(sourceLabels);
-        const historyDatasets = [];
-
-        for (const comparison of historicalComparisons) {
-          const historicalSeries = definition.buildSnapshotSeries(comparison.snapshot, widgetForSeries);
-          if (!Array.isArray(historicalSeries?.labels) || !Array.isArray(historicalSeries?.datasets)) {
-            const baseDataset = chart.data.datasets[0];
-            if (!baseDataset) continue;
-            const historicalLabels = (historicalSeries?.labels || []).map((label) => String(label));
-            historicalLabels.forEach((label) => allLabels.add(label));
-            rangeSpecs.push({
-              labels: historicalLabels,
-              data: Array.isArray(historicalSeries?.values) ? historicalSeries.values : []
-            });
-            historyDatasets.push({
-              label: `${baseDataset.label} • ${comparison.label}`,
-              data: Array.isArray(historicalSeries?.values) ? historicalSeries.values : [],
-              borderWidth: 1,
-              tension: 0.2,
-              pointRadius: 0,
-              pointHitRadius: 0,
-              pointHoverRadius: 0,
-              borderColor: comparison.historyColor || baseDataset.borderColor || definition.color || '#7aa2ff',
-              borderDash: [6, 4],
-              hiddenInLegend: true,
-              sourceLabels: historicalLabels,
-              pointMeta: [],
-              tooltipFormatter: typeof baseDataset?.tooltipFormatter === 'function' ? baseDataset.tooltipFormatter : null
-            });
-            continue;
-          }
-
-          const historicalLabels = (historicalSeries.labels || []).map((label) => String(label));
-          historicalLabels.forEach((label) => allLabels.add(label));
-          for (let idx = 0; idx < chart.data.datasets.length; idx += 1) {
-            const baseDataset = chart.data.datasets[idx];
-            const seriesToUse = historicalSeries.datasets[idx] || historicalSeries.datasets.find((x) => x?.label === baseDataset.label);
-            if (!seriesToUse) continue;
-            rangeSpecs.push({
-              labels: historicalLabels,
-              data: Array.isArray(seriesToUse?.data) ? seriesToUse.data : []
-            });
-            historyDatasets.push({
-              label: `${baseDataset.label} • ${comparison.label}`,
-              data: Array.isArray(seriesToUse?.data) ? seriesToUse.data : [],
-              borderWidth: 1,
-              tension: 0.2,
-              pointRadius: 0,
-              pointHitRadius: 0,
-              pointHoverRadius: 0,
-              borderColor: comparison.historyColor || baseDataset.borderColor || definition.color || '#7aa2ff',
-              borderDash: [6, 4],
-              hiddenInLegend: true,
-              baseDatasetIndex: idx,
-              sourceLabels: historicalLabels,
-              pointMeta: Array.isArray(seriesToUse?.pointMeta) ? seriesToUse.pointMeta : [],
-              tooltipFormatter: typeof baseDataset?.tooltipFormatter === 'function' ? baseDataset.tooltipFormatter : null
-            });
-          }
-        }
-
-        return { allLabels, historyDatasets, rangeSpecs, sourceLabels };
-      };
-
-      let series = definition.buildSnapshotSeries(widgetSnapshot, widget);
-      let built = applySeriesToChart(series);
-      const useCommonStrikeRange = built.historyDatasets.length && shouldUseCommonHistoryStrikeRange(widget);
-      const outerRange = useCommonStrikeRange ? outerNumericRange(built.rangeSpecs) : null;
-      const seriesWidget = outerRange
-        ? { ...widget, config: { ...(widget.config || {}), historyStrikeRangeBounds: outerRange } }
-        : widget;
-
-      if (outerRange) {
-        series = definition.buildSnapshotSeries(widgetSnapshot, seriesWidget);
-        built = applySeriesToChart(series, seriesWidget);
-      }
-
-      const hasMultipleBaseDatasets = chart.data.datasets.length > 1;
-      const historyDatasets = built.historyDatasets;
-      const baseDatasetsCount = chart.data.datasets.length;
-      const sourceLabels = built.sourceLabels;
-      const commonRange = outerRange;
-      const targetLabels = sortChartLabels(Array.from(built.allLabels), sourceLabels)
-        .filter((label) => labelAllowed(label, commonRange));
-      chart.data.labels = targetLabels;
-      chart.data.datasets = chart.data.datasets.map((dataset) => (
-        convertDatasetToPointData(dataset, sourceLabels, commonRange)
-      ));
-      historyDatasets.forEach((dataset) => {
-        const source = Array.isArray(dataset.sourceLabels) ? dataset.sourceLabels : [];
-        delete dataset.sourceLabels;
-        Object.assign(dataset, convertDatasetToPointData(dataset, source, commonRange));
-      });
-
-      chart.data.datasets.push(...historyDatasets);
-
-      if (historyDatasets.length) {
-        for (let idx = 0; idx < baseDatasetsCount; idx += 1) {
-          const linked = [];
-          for (let histIdx = baseDatasetsCount; histIdx < chart.data.datasets.length; histIdx += 1) {
-            const dataset = chart.data.datasets[histIdx];
-            if (dataset?.baseDatasetIndex === idx) linked.push(histIdx);
-          }
-          chart.data.datasets[idx].linkedHistoryIndices = linked;
-        }
-      }
-
-      chart.options.plugins.legend.labels.generateLabels = (legendChart) => (
-        (legendChart.data.datasets || []).map((dataset, datasetIndex) => ({
-          text: dataset?.label || `Series ${datasetIndex + 1}`,
-          datasetIndex,
-          index: datasetIndex,
-          hidden: !legendChart.isDatasetVisible(datasetIndex),
-          strokeStyle: dataset?.borderColor || dataset?.backgroundColor || '#7aa2ff',
-          fillStyle: dataset?.backgroundColor || dataset?.borderColor || '#7aa2ff',
-          lineDash: Array.isArray(dataset?.borderDash) ? dataset.borderDash : []
-        })).filter((item) => !legendChart.data.datasets[item.datasetIndex]?.hiddenInLegend)
-      );
-      chart.options.plugins.legend.display = hasMultipleBaseDatasets;
-      applyHiddenSnapshotSeriesLabels(widget, chart);
-      const baseVisibilityBeforeHideCurrent = chart.data.datasets
-        .slice(0, baseDatasetsCount)
-        .map((_, idx) => chart.isDatasetVisible(idx));
-      if (historyDatasets.length && shouldHideCurrentSnapshotSeries(widget)) {
-        for (let idx = 0; idx < baseDatasetsCount; idx += 1) {
-          const linked = Array.isArray(chart.data.datasets[idx]?.linkedHistoryIndices)
-            ? chart.data.datasets[idx].linkedHistoryIndices
-            : [];
-          linked.forEach((linkedIdx) => {
-            if (!Number.isInteger(linkedIdx)) return;
-            if (linkedIdx < 0 || linkedIdx >= chart.data.datasets.length) return;
-            chart.setDatasetVisibility(linkedIdx, baseVisibilityBeforeHideCurrent[idx] !== false);
-          });
-          chart.setDatasetVisibility(idx, false);
-        }
-      } else {
-        syncLinkedHistoryVisibility(chart);
-      }
-      ensureSingleNDateSnapshotSeriesVisible(widget, definition, chart, baseDatasetsCount);
-      chart.update('none');
-      publishChartRuntime(entry);
-      continue;
-    }
-
-    if (mode === 'timeseries-custom' && typeof definition.buildTimeSeries === 'function') {
-      const series = definition.buildTimeSeries(history, widget);
-      chart.data.labels = Array.isArray(series?.labels) ? series.labels : [];
-      chart.data.datasets = (Array.isArray(series?.datasets) ? series.datasets : []).map((dataset, idx) => ({
-        ...dataset,
-        type: dataset?.type,
-        yAxisID: dataset?.yAxisID,
-        label: dataset?.label || `Series ${idx + 1}`,
-        data: Array.isArray(dataset?.data) ? dataset.data : [],
-        borderWidth: dataset?.borderWidth ?? 1,
-        tension: dataset?.tension ?? 0.2,
-        pointRadius: dataset?.pointRadius ?? 0,
-        pointHitRadius: 0,
-        pointHoverRadius: 0,
-        borderColor: dataset?.borderColor || definition.color || '#7aa2ff',
-        backgroundColor: dataset?.backgroundColor,
-        borderDash: dataset?.borderDash,
-        pointMeta: Array.isArray(dataset?.pointMeta) ? dataset.pointMeta : [],
-        tooltipFormatter: typeof dataset?.tooltipFormatter === 'function' ? dataset.tooltipFormatter : null
-      }));
-      if (series?.chartOptions) mergeChartOptions(chart.options, series.chartOptions);
-      chart.options.plugins.legend.display = chart.data.datasets.length > 1;
-      chart.options.plugins.title ||= {};
-      chart.options.plugins.title.display = Boolean(series?.title);
-      chart.options.plugins.title.text = series?.title || '';
-      applyHiddenSnapshotSeriesLabels(widget, chart);
-      chart.update('none');
-      publishChartRuntime(entry, series?.title || '');
-      continue;
-    }
-
-    if (mode === 'timeseries-custom' && typeof definition.extractTimeSeriesValue === 'function') {
-      chart.data.labels = history.map((x) => new Date(x.time).toLocaleTimeString());
-      chart.data.datasets[0].data = history.map((x) => {
-        const widgetSnapshot = x;
-        return definition.extractTimeSeriesValue(widgetSnapshot, widget);
-      });
-      chart.options.plugins.legend.display = false;
-      chart.update('none');
-      publishChartRuntime(entry);
-      continue;
-    }
-
-    chart.data.labels = history.map((x) => new Date(x.time).toLocaleTimeString());
-    chart.data.datasets[0].data = history.map((x) => x[metric]);
-    chart.options.plugins.legend.display = false;
-    chart.update('none');
-    publishChartRuntime(entry);
-  }
-
-  await Promise.all(producerRenderTasks);
-  if (!isActiveTabId(tabId)) return;
-
-  const consumerRenderTasks = [];
-  for (const entry of entries) {
-    const { mode, definition } = entry;
-    if (mode === 'table' && typeof definition.render === 'function' && definition.consumesWidgetData) {
-      consumerRenderTasks.push(renderTableWidgetEntry(entry, latest, history));
-    }
-  }
-  await Promise.all(consumerRenderTasks);
-  profileDuration('refreshCharts', profileStart, {
-    tabId,
-    entries: entries.length,
-    producers: producerRenderTasks.length,
-    consumers: consumerRenderTasks.length,
-    history: history.length
-  });
+  if (!isActiveTabId(tabId) || generation !== chartGeneration) return;
+  const entries = tab.widgets
+    .filter((widget) => !dataSourceId || sourceForWidget(tab, widget, getWidgetDefinition)?.id === dataSourceId
+      || getWidgetDefinition(widget.type)?.consumesWidgetData)
+    .map((widget) => chartInstances.get(widget.id)).filter(Boolean);
+  const renderEntry = (entry) => {
+    if (entry.definition.refreshOnDashboardRefresh === false && entry.hasRendered) return;
+    const context = createWidgetRefreshContext(tab, entry.widget);
+    return entry.mode === 'table'
+      ? renderTableWidgetEntry(entry, context.latest, context.history)
+      : refreshChartEntry(entry, context);
+  };
+  await Promise.all(entries.filter((entry) => !entry.definition.consumesWidgetData).map(renderEntry));
+  if (!isActiveTabId(tabId) || generation !== chartGeneration) return;
+  await Promise.all(entries.filter((entry) => entry.definition.consumesWidgetData).map(renderEntry));
 }
 
 async function renderTableWidgetEntry(entry, latest, history) {
@@ -2255,6 +2107,10 @@ async function renderTableWidgetEntry(entry, latest, history) {
   const target = document.getElementById(`widget-body-${widget.id}`);
   if (!target) return;
   const tab = activeTab();
+  const source = sourceForWidget(tab, widget, getWidgetDefinition);
+  const generation = sourceGenerations.get(source?.id) || 0;
+  const isCurrent = () => activeTab() === tab && chartInstances.get(widget.id) === entry
+    && generation === (sourceGenerations.get(source?.id) || 0);
   let publishedStructuredData = false;
 
   await definition.render({
@@ -2264,6 +2120,7 @@ async function renderTableWidgetEntry(entry, latest, history) {
     widgets: tab?.widgets || [],
     widgetData: {
       publish: (data) => {
+        if (!isCurrent()) return;
         publishedStructuredData = true;
         publishWidgetData(tab?.id, widget.id, data, latest?.time || null);
       },
@@ -2285,6 +2142,7 @@ async function renderTableWidgetEntry(entry, latest, history) {
       broadcastTableWidgetConfig(widget.id, paramName, value);
     }
   });
+  if (!isCurrent()) return;
   if (!publishedStructuredData) {
     publishMcpWidgetRuntimeData(tab?.id, widget.id, {
       kind: 'table',
@@ -2313,8 +2171,8 @@ async function refreshSingleTableWidget(widgetId) {
   const entry = chartInstances.get(widgetId);
   if (!entry || entry.mode !== 'table') return;
 
-  const history = state.historyByTab[tab.id] || [];
-  const latest = history[history.length - 1] || null;
+  const history = widgetHistory(tab, entry.widget);
+  const latest = widgetLatest(tab, entry.widget);
   if (!isActiveTabId(tabId)) return;
   await renderTableWidgetEntry(entry, latest, history);
 }
@@ -2327,7 +2185,7 @@ async function refreshWidget(widgetId, options = {}) {
   const entry = chartInstances.get(widgetId);
   if (!entry) return;
 
-  const context = createWidgetRefreshContext(tab);
+  const context = createWidgetRefreshContext(tab, entry.widget);
   if (!context) return;
   if (!isActiveTabId(tabId)) return;
 
@@ -2348,13 +2206,9 @@ async function refreshNDateWidgets() {
   if (!tab) return;
   const tabId = tab.id;
 
-  const context = createWidgetRefreshContext(tab);
-  if (!context) return;
-  if (!isActiveTabId(tabId)) return;
-
   const tasks = Array.from(chartInstances.values())
     .filter((entry) => String(entry?.widget?.type || '').startsWith('ndate-skew-'))
-    .map((entry) => refreshChartEntry(entry, context));
+    .map((entry) => refreshChartEntry(entry, createWidgetRefreshContext(tab, entry.widget)));
   await Promise.all(tasks);
 }
 
@@ -2397,11 +2251,13 @@ async function refreshVolUpfrontWidgets() {
 }
 
 function tickTabIfActive(tabId) {
+  const dataSourceId = tabId;
+  tabId = viewForSourceId(tabId)?.tabId || tabId;
   if (!isActiveTabId(tabId)) return;
   const tab = activeTab();
   const root = $('widgetsRoot');
   if (tab && root) updateWidgetHistoryControls(root, tab);
-  refreshCharts();
+  refreshCharts(dataSourceId);
 }
 
 function addWidget(type) {
@@ -2410,6 +2266,19 @@ function addWidget(type) {
   const definition = getWidgetDefinition(type);
   if (!definition) return;
 
+  const wasRunning = tabIsRunning(tab);
+  const previousCount = tab.dataSources.length;
+  const source = ensureDataSource(tab, definition.providerKey, defaultExpiry());
+  if (tab.dataSources.length !== previousCount) {
+    selectedSourceByTab.set(tab.id, source.id);
+    applyTabToForm(tab);
+    $('configBody').classList.remove('is-collapsed');
+    $('toggleConfigBtn').setAttribute('aria-expanded', 'true');
+    $('toggleConfigBtn').textContent = '▴';
+    $('toggleConfigBtn').setAttribute('title', 'Hide config');
+    $('toggleConfigBtn').setAttribute('aria-label', 'Hide config');
+    syncDataSourcesToMain().catch(console.warn);
+  }
   const widgetId = `w-${Date.now()}-${Math.random().toString(16).slice(2, 6)}`;
   tab.widgets.push({
     id: widgetId,
@@ -2417,7 +2286,9 @@ function addWidget(type) {
     title: definition.defaultTitle,
     config: { ...(definition.defaultConfig || {}) }
   });
+  if (wasRunning && tab.dataSources.length !== previousCount) startTabPolling(source.id);
   renderWidgets();
+  updatePollingControlsForActiveTab();
   persistUiState();
 }
 
@@ -2442,6 +2313,7 @@ function addTab() {
     widgets: []
   };
 
+  normalizeTabDataSources(tab, getWidgetDefinition, defaultExpiry());
   state.tabs.push(tab);
   tabStatus[id] = 'ready';
   state.activeTabId = id;
@@ -2455,10 +2327,13 @@ function addTab() {
 
 async function tickTab(tabId) {
   const tickStart = performance.now();
-  const tab = state.tabs.find((x) => x.id === tabId);
+  const tab = viewForSourceId(tabId);
   if (!tab) return;
   if (tabTickInFlight.has(tabId)) return;
-  tabTickInFlight.add(tabId);
+  const request = {};
+  tabTickInFlight.set(tabId, request);
+  const generation = sourceGenerations.get(tabId) || 0;
+  const isCurrent = () => Boolean(viewForSourceId(tabId)) && generation === (sourceGenerations.get(tabId) || 0);
 
   const provider = providers[tab.providerKey];
   if (!provider) {
@@ -2477,6 +2352,7 @@ async function tickTab(tabId) {
       ...tab.providerConfig,
       expiryPlaceholderKeys: collectWidgetExpiryPlaceholderKeys(tab)
     }, skewMetrics));
+    if (!isCurrent()) return;
     if (point?.noop && tab.providerKey === 'tape-contract' && tab.widgets.some((w) => getWidgetDefinition(w.type)?.gammaFlow)) {
       point = { ...point, noop: false, gammaClock: true,
         tape: { records: [], count: 0 }, contract: { records: [], count: 0 } };
@@ -2491,11 +2367,13 @@ async function tickTab(tabId) {
       profileDuration('tick:total', tickStart, { tabId, providerKey: tab.providerKey, noop: true });
       return;
     }
+    latestBySource.set(tab.id, point);
     if (!point.gammaClock && shouldSaveRawSnapshots(tab)) {
       const rawStart = performance.now();
       saveRawSnapshotDeferred({
         tab: {
-          id: tab.id,
+          id: tab.tabId,
+          dataSourceId: tab.id,
           title: tab.title,
           providerKey: tab.providerKey,
           providerConfig: tab.providerConfig
@@ -2529,14 +2407,14 @@ async function tickTab(tabId) {
       compact: shouldCompactHistorySnapshots(tab),
       expiries: storedPoint?.byExpiry ? Object.keys(storedPoint.byExpiry).length : 0
     });
-    state.historyByTab[tab.id].push(storedPoint);
+    state.historyBySource[tab.id].push(storedPoint);
 
     const keepStart = performance.now();
     const keep = Math.max(20, Number(tab.providerConfig.keepPoints) || 200);
-    while (state.historyByTab[tab.id].length > keep) {
-      state.historyByTab[tab.id].shift();
+    while (state.historyBySource[tab.id].length > keep) {
+      state.historyBySource[tab.id].shift();
     }
-    profileDuration('tick:historyKeep', keepStart, { tabId, keep, history: state.historyByTab[tab.id].length });
+    profileDuration('tick:historyKeep', keepStart, { tabId, keep, history: state.historyBySource[tab.id].length });
 
     const renderStart = performance.now();
     tickTabIfActive(tabId);
@@ -2558,17 +2436,18 @@ async function tickTab(tabId) {
     const persistStart = performance.now();
     persistHistoryPoint(tab.id, storedPoint, keep);
     profileDuration('tick:persistHistoryPointEnqueue', persistStart, { tabId });
-    profileDuration('tick:total', tickStart, { tabId, providerKey: tab.providerKey, history: state.historyByTab[tab.id]?.length || 0 });
+    profileDuration('tick:total', tickStart, { tabId, providerKey: tab.providerKey, history: state.historyBySource[tab.id]?.length || 0 });
   } catch (err) {
+    if (!isCurrent()) return;
     setTabStatus(tabId, `error • ${tab.title}: ${err?.message || err}`);
     profileDuration('tick:error', tickStart, { tabId, providerKey: tab.providerKey, message: err?.message || String(err) });
   } finally {
-    tabTickInFlight.delete(tabId);
+    if (tabTickInFlight.get(tabId) === request) tabTickInFlight.delete(tabId);
   }
 }
 
 function startTabPolling(tabId) {
-  const tab = state.tabs.find((x) => x.id === tabId);
+  const tab = viewForSourceId(tabId);
   if (!tab) return;
   stopTabPolling(tabId);
   const poll = Math.max(1, Number(tab.providerConfig.pollSec) || 5);
@@ -2581,29 +2460,26 @@ function stopTabPolling(tabId) {
   const timer = tabTimers.get(tabId);
   if (timer) clearInterval(timer);
   tabTimers.delete(tabId);
-  tabTickInFlight.delete(tabId);
 }
 
-async function executeDataSourceCommand(tabId, command) {
+async function executeDataSourceCommand(tabId, command, dataSourceId) {
   const tab = state.tabs.find((item) => item.id === tabId);
-  if (!tab) return;
+  if (!tab) throw new Error('Unknown tab');
+  const sources = dataSourceId ? tab.dataSources.filter((source) => source.id === dataSourceId) : tab.dataSources;
+  if (dataSourceId && !sources.length) throw new Error('Unknown data source');
   if (command === 'start') {
-    startTabPolling(tab.id);
+    for (const source of sources) if (!tabTimers.has(source.id)) startTabPolling(source.id);
   } else if (command === 'stop') {
-    stopTabPolling(tab.id);
-    setTabStatus(tab.id, 'stopped');
+    for (const source of sources) { stopTabPolling(source.id); setTabStatus(source.id, 'stopped'); }
   } else if (command === 'refresh') {
-    if (tabRefreshInFlight.has(tab.id)) return;
-    tabRefreshInFlight.add(tab.id);
+    const targets = sources.filter((source) => !sourceRefreshInFlight.has(source.id));
+    targets.forEach((source) => sourceRefreshInFlight.add(source.id));
     updatePollingControlsForActiveTab();
-    try {
-      await tickTab(tab.id);
-    } finally {
-      tabRefreshInFlight.delete(tab.id);
-    }
+    try { await Promise.allSettled(targets.map((source) => tickTab(source.id))); }
+    finally { targets.forEach((source) => sourceRefreshInFlight.delete(source.id)); }
   }
   updatePollingControlsForActiveTab();
-  syncDataSourcesToMain().catch((err) => console.warn('Failed to sync datasource command state', err));
+  await syncDataSourcesToMain();
 }
 
 async function requestDataSourceCommand(tabId, command) {
@@ -2614,7 +2490,7 @@ async function requestDataSourceCommand(tabId, command) {
     return result;
   }
   await executeDataSourceCommand(tabId, command);
-  return { ok: true, running: tabTimers.has(tabId) };
+  return { ok: true, running: tabIsRunning(state.tabs.find((tab) => tab.id === tabId)) };
 }
 
 function start() {
@@ -2639,8 +2515,17 @@ function clearActiveTabSnapshot() {
   const tab = activeTab();
   if (!tab) return;
 
-  state.historyByTab[tab.id] = [];
-  refreshCharts();
+  for (const source of tab.dataSources) {
+    invalidateSource(source.id);
+    state.historyBySource[source.id] = [];
+    latestBySource.delete(source.id);
+  }
+  for (const widget of tab.widgets) {
+    clearWidgetData(tab.id, widget.id);
+    if (widget.config) { delete widget.config.historySnapshotTimes; }
+  }
+  mcpRuntimeStore.clearTab(tab.id);
+  renderWidgets();
   setTabStatus(tab.id, `snapshot cleared • ${tab.title}`);
 }
 
@@ -2698,14 +2583,35 @@ function bindEvents() {
     if (evt.target === $('renameTabModal')) closeRenameTabModal();
   });
 
-  ['providerKey', 'apiBase', 'ticker', 'root', 'expiryStart', 'expiryEnd', 'yahooSymbol', 'pollSec', 'keepPoints', 'saveRawSnapshots', 'compactHistorySnapshots'].forEach((id) => {
+  $('dataSourceSelect').addEventListener('change', () => {
+    const tab = activeTab();
+    if (!tab) return;
+    selectedSourceByTab.set(tab.id, $('dataSourceSelect').value);
+    applyTabToForm(tab);
+  });
+
+  ['apiBase', 'ticker', 'root', 'expiryStart', 'expiryEnd', 'yahooSymbol', 'pollSec', 'keepPoints', 'saveRawSnapshots', 'compactHistorySnapshots'].forEach((id) => {
     $(id).addEventListener('change', () => {
       const tab = activeTab();
       if (!tab) return;
       readFormToTab(tab);
-      if (id === 'providerKey') updateProviderConfigVisibility(tab.providerKey);
+      const source = selectedSource(tab);
+      if (!source) return;
+      invalidateSource(source.id);
+      const view = sourceView(tab, source, getWidgetDefinition);
+      if (['apiBase', 'ticker', 'root', 'expiryStart', 'expiryEnd', 'yahooSymbol'].includes(id)) {
+        state.historyBySource[source.id] = [];
+        latestBySource.delete(source.id);
+        for (const widget of view.widgets) clearWidgetData(tab.id, widget.id);
+        renderWidgets();
+      } else {
+        trimHistoryForTab(view);
+        const keep = Math.max(20, Number(source.providerConfig.keepPoints) || 200);
+        state.historyBySource[source.id] = (state.historyBySource[source.id] || []).slice(-keep);
+        refreshCharts(source.id);
+      }
       persistUiState();
-      if (tabTimers.has(tab.id)) startTabPolling(tab.id);
+      if (tabTimers.has(source.id)) startTabPolling(source.id);
       syncDataSourcesToMain().catch((err) => console.warn('Failed to sync datasource config', err));
     });
   });
@@ -2758,30 +2664,35 @@ function bindEvents() {
 function bindDataSourceLifecycleBridge() {
   window.appBridge?.onDataSourceCommand?.(async (message) => {
     try {
-      await executeDataSourceCommand(message?.tabId, message?.command);
+      await executeDataSourceCommand(message?.tabId, message?.command, message?.dataSourceId);
       window.appBridge.sendDataSourceCommandResult?.({
         requestId: message?.requestId,
         ok: true,
-        running: tabTimers.has(message?.tabId)
+        running: message?.dataSourceId ? tabTimers.has(message.dataSourceId) : tabIsRunning(state.tabs.find((tab) => tab.id === message?.tabId)),
+        runningTabIds: runningTabIds()
       });
     } catch (err) {
       window.appBridge.sendDataSourceCommandResult?.({
         requestId: message?.requestId,
         ok: false,
         error: err?.message || String(err),
-        running: tabTimers.has(message?.tabId)
+        running: message?.dataSourceId ? tabTimers.has(message.dataSourceId) : tabIsRunning(state.tabs.find((tab) => tab.id === message?.tabId)),
+        runningTabIds: runningTabIds()
       });
     }
   });
 
   window.appBridge?.onDataSourceConfigPatch?.((message) => {
     const tab = state.tabs.find((item) => item.id === message?.tabId);
-    if (!tab) return;
-    tab.providerConfig = normalizeProviderConfig({
-      ...(tab.providerConfig || {}),
-      ...(message.partial || {})
-    });
-    if (tab.id === state.activeTabId) applyTabToForm(tab);
+    const source = tab?.dataSources.find((item) => item.id === message?.dataSourceId);
+    if (!source) return;
+    source.providerConfig = normalizeProviderConfig({ ...source.providerConfig, ...(message.partial || {}) });
+    invalidateSource(source.id);
+    state.historyBySource[source.id] = [];
+    latestBySource.delete(source.id);
+    for (const widget of sourceView(tab, source, getWidgetDefinition).widgets) clearWidgetData(tab.id, widget.id);
+    if (tab.id === state.activeTabId) { applyTabToForm(tab); renderWidgets(); }
+    if (tabTimers.has(source.id)) startTabPolling(source.id);
     persistUiState();
   });
 
@@ -2801,27 +2712,29 @@ async function init() {
   const loaded = await window.appBridge.loadState();
   state.tabs = loaded.tabs || [];
   state.activeTabId = loaded.activeTabId || state.tabs[0]?.id;
-  state.historyByTab = loaded.historyByTab && typeof loaded.historyByTab === 'object'
-    ? loaded.historyByTab
+  state.historyBySource = loaded.historyBySource && typeof loaded.historyBySource === 'object'
+    ? loaded.historyBySource
     : {};
 
   if (!state.tabs.length) addTab();
 
   for (const tab of state.tabs) {
-    tab.providerConfig = normalizeProviderConfig(tab.providerConfig || {});
-    ensureTabHistoryPolicy(tab);
-    if (!tab.providerConfig.expiryStart) tab.providerConfig.expiryStart = tab.providerConfig.expiry || defaultExpiry();
-    if (tab.providerConfig.expiryEnd == null) tab.providerConfig.expiryEnd = '';
+    const legacyProviderConfig = tab.providerConfig || {};
+    normalizeTabDataSources(tab, getWidgetDefinition, defaultExpiry());
+    for (const source of tab.dataSources) {
+      if (!source.providerConfig.expiryStart && source.providerKey === 'tradingview') source.providerConfig.expiryStart = source.providerConfig.expiry || defaultExpiry();
+      ensureTabHistoryPolicy(sourceView(tab, source, getWidgetDefinition));
+    }
     for (const widget of tab.widgets || []) {
       widget.config ||= {};
       if (widget.type === 'tail-skew-line' && widget.config.tailSteps == null) {
-        widget.config.tailSteps = Math.max(1, Number(tab.providerConfig.tailSteps) || 3);
+        widget.config.tailSteps = Math.max(1, Number(legacyProviderConfig.tailSteps) || 3);
       }
       if (!widget.config.expiryStart && widget.config.expiry) {
         widget.config.expiryStart = widget.config.expiry;
       }
     }
-    trimHistoryForTab(tab);
+    for (const source of tab.dataSources) trimHistoryForTab(sourceView(tab, source, getWidgetDefinition));
   }
 
   if (!state.activeTabId) state.activeTabId = state.tabs[0].id;
@@ -2832,6 +2745,7 @@ async function init() {
   updatePollingControlsForActiveTab();
   setTabStatus(state.activeTabId, 'ready');
   await syncDataSourcesToMain();
+  persistUiState();
   if (profilerEnabled) {
     console.info('[IS-VOL profiler] enabled: window.isVolProfiler.summary(), window.isVolProfiler.export(), window.isVolProfiler.clear()');
   }

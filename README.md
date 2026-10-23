@@ -48,6 +48,8 @@ npm start
 - **Option Flow TICK**: four-line option-flow chart for bought/sold calls and puts from `tape-contract` snapshots, filtered by observed strikes around tape `underlying_price`, with cumulative/trailing MA modes and display-only point window controls. Details: [Tape Contract Datasource](docs/tape-contract-datasource.md).
 - **Option Flow Balanced TICK**: four-line option-flow balance chart for calls, puts, directional balance (`Calls balance - Puts balance`), and imbalance ratio over the same ATM strike window as `Option Flow TICK`, with cumulative/trailing MA modes and display-only point window controls. Details: [Tape Contract Datasource](docs/tape-contract-datasource.md).
 
+Tabs support multiple providers with automatic widget routing and separate source settings. See [Multiple data sources](docs/multiple-data-sources.md).
+
 ## Tests
 
 ```bash

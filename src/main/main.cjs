@@ -81,7 +81,7 @@ const DEFAULT_STATE = {
       ]
     }
   ],
-  historyByTab: {}
+  historyBySource: {}
 };
 
 const SKEW_METRICS = [
@@ -156,19 +156,20 @@ function createWindow() {
   mainWindow = win;
 }
 
-function sendDataSourceCommandToRenderer(tabId, command) {
+function sendDataSourceCommandToRenderer(tabId, command, dataSourceId) {
+  const runningId = dataSourceId || tabId;
   if (!mainWindow || mainWindow.isDestroyed()) {
-    return Promise.resolve({ ok: false, error: 'Renderer window is not available', running: rendererRunningTabIds.has(tabId) });
+    return Promise.resolve({ ok: false, error: 'Renderer window is not available', running: rendererRunningTabIds.has(runningId) });
   }
 
   const requestId = `datasource-command-${Date.now()}-${rendererCommandSeq += 1}`;
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
       pendingRendererCommands.delete(requestId);
-      resolve({ ok: false, error: `Timed out running datasource command: ${command}`, running: rendererRunningTabIds.has(tabId) });
+      resolve({ ok: false, error: `Timed out running datasource command: ${command}`, running: rendererRunningTabIds.has(runningId) });
     }, 30000);
-    pendingRendererCommands.set(requestId, { resolve, timeout, tabId });
-    mainWindow.webContents.send('datasource:command', { requestId, tabId, command });
+    pendingRendererCommands.set(requestId, { resolve, timeout, tabId, dataSourceId });
+    mainWindow.webContents.send('datasource:command', { requestId, tabId, command, dataSourceId });
   });
 }
 
@@ -181,20 +182,19 @@ function syncDataSourcesFromRenderer(payload = {}) {
   return dataSourceLifecycleRegistry?.getUiExtensions() || {};
 }
 
-function patchDataSourceConfig(tabId, partial) {
+function patchDataSourceConfig(tabId, partial, dataSourceId) {
   if (!tabId || !partial || typeof partial !== 'object') return { ok: false, error: 'tabId and partial config are required' };
   const current = persistedState || loadState(app.getPath('userData'), DEFAULT_STATE);
   const tabs = Array.isArray(current.tabs) ? current.tabs : [];
   const tab = tabs.find((item) => item.id === tabId);
   if (!tab) return { ok: false, error: `Unknown datasource tab: ${tabId}` };
-  tab.providerConfig = {
-    ...(tab.providerConfig || {}),
-    ...partial
-  };
+  const source = dataSourceId ? tab.dataSources?.find((item) => item.id === dataSourceId) : tab;
+  if (!source) return { ok: false, error: 'Unknown data source' };
+  source.providerConfig = { ...(source.providerConfig || {}), ...partial };
   persistedState = { ...current, tabs };
   schedulePersistedStateSave({ reason: 'datasource-config-patch', tabId });
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('datasource:config-patch', { tabId, partial });
+    mainWindow.webContents.send('datasource:config-patch', { tabId, dataSourceId, partial });
   }
   return { ok: true };
 }
@@ -255,9 +255,9 @@ app.whenReady().then(async () => {
       ...current,
       activeTabId: state?.activeTabId || current.activeTabId,
       tabs: Array.isArray(state?.tabs) ? state.tabs : current.tabs,
-      historyByTab: state?.historyByTab && typeof state.historyByTab === 'object'
-        ? state.historyByTab
-        : (current.historyByTab || {})
+      historyBySource: state?.historyBySource && typeof state.historyBySource === 'object'
+        ? state.historyBySource
+        : (current.historyBySource || {})
     };
     cancelScheduledStateSave();
     await profiler.measure('state:save', {
@@ -276,7 +276,7 @@ app.whenReady().then(async () => {
     if (!tabId || !['start', 'stop', 'refresh'].includes(command)) {
       return { ok: false, error: 'Invalid datasource command' };
     }
-    return sendDataSourceCommandToRenderer(tabId, command);
+    return sendDataSourceCommandToRenderer(tabId, command, payload?.dataSourceId);
   });
 
   ipcMain.handle('datasource:lifecycle-ui', async () => ({
@@ -294,10 +294,12 @@ app.whenReady().then(async () => {
       tabs: Array.isArray(payload?.tabs) ? payload.tabs : (persistedState || loadState(app.getPath('userData'), DEFAULT_STATE)).tabs
     };
     const tab = (Array.isArray(current.tabs) ? current.tabs : []).find((item) => item.id === tabId);
-    if (tab) {
-      tab.providerConfig ||= {};
-      tab.providerConfig.lifecycleSettings ||= {};
-      tab.providerConfig.lifecycleSettings[lifecycleId] = values;
+    const source = payload?.dataSourceId ? tab?.dataSources?.find((item) => item.id === payload.dataSourceId) : tab;
+    if (!source) return { ok: false, error: 'Unknown data source' };
+    if (source) {
+      source.providerConfig ||= {};
+      source.providerConfig.lifecycleSettings ||= {};
+      source.providerConfig.lifecycleSettings[lifecycleId] = values;
       persistedState = current;
       schedulePersistedStateSave({ reason: 'datasource-lifecycle-settings', tabId, lifecycleId });
     }
@@ -313,8 +315,14 @@ app.whenReady().then(async () => {
     if (!request) return;
     clearTimeout(request.timeout);
     pendingRendererCommands.delete(result.requestId);
-    if (result?.running) rendererRunningTabIds.add(request.tabId);
-    else rendererRunningTabIds.delete(request.tabId);
+    if (Array.isArray(result?.runningTabIds)) {
+      rendererRunningTabIds.clear();
+      for (const id of result.runningTabIds) rendererRunningTabIds.add(id);
+    } else {
+      const id = request.dataSourceId || request.tabId;
+      if (result?.running) rendererRunningTabIds.add(id);
+      else rendererRunningTabIds.delete(id);
+    }
     request.resolve(result || { ok: true, running: rendererRunningTabIds.has(request.tabId) });
   });
 
@@ -333,20 +341,20 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.handle('state:append-history-point', async (_evt, payload) => {
-    const tabId = payload?.tabId;
+    const tabId = payload?.dataSourceId || payload?.tabId;
     if (!tabId) return { ok: false, error: 'tabId is required' };
     const current = persistedState || loadState(app.getPath('userData'), DEFAULT_STATE);
-    const historyByTab = {
-      ...(current.historyByTab || {})
+    const historyBySource = {
+      ...(current.historyBySource || {})
     };
-    const rows = Array.isArray(historyByTab[tabId]) ? [...historyByTab[tabId]] : [];
+    const rows = Array.isArray(historyBySource[tabId]) ? [...historyBySource[tabId]] : [];
     rows.push(payload.point);
     const keep = Math.max(20, Number(payload.keep) || 200);
     while (rows.length > keep) rows.shift();
-    historyByTab[tabId] = rows;
+    historyBySource[tabId] = rows;
     persistedState = {
       ...current,
-      historyByTab
+      historyBySource
     };
     profiler.push({
       name: 'state:append-history-point',

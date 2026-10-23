@@ -47,7 +47,7 @@ test('loads dashboard-config.json when valid and always starts with empty histor
 
   assert.equal(loaded.activeTabId, 'config-tab');
   assert.deepEqual(loaded.tabs, [{ id: 'config-tab', title: 'config-tab', widgets: [] }]);
-  assert.deepEqual(loaded.historyByTab, {});
+  assert.deepEqual(loaded.historyBySource, {});
 });
 
 test('falls back to a valid backup when dashboard-config.json is corrupt', () => {
@@ -58,7 +58,7 @@ test('falls back to a valid backup when dashboard-config.json is corrupt', () =>
   const loaded = loadState(dir, defaults);
 
   assert.equal(loaded.activeTabId, 'backup-tab');
-  assert.deepEqual(loaded.historyByTab, {});
+  assert.deepEqual(loaded.historyBySource, {});
 });
 
 test('falls back to legacy dashboard-state.json when no config exists', () => {
@@ -69,7 +69,7 @@ test('falls back to legacy dashboard-state.json when no config exists', () => {
 
   assert.equal(loaded.activeTabId, 'legacy-tab');
   assert.deepEqual(loaded.tabs, [{ id: 'legacy-tab', title: 'legacy-tab', widgets: [] }]);
-  assert.deepEqual(loaded.historyByTab, {});
+  assert.deepEqual(loaded.historyBySource, {});
 });
 
 test('saves only config fields and never writes historyByTab', async () => {
@@ -78,7 +78,8 @@ test('saves only config fields and never writes historyByTab', async () => {
   await saveUiState(dir, {
     activeTabId: 'saved-tab',
     tabs: [{ id: 'saved-tab', title: 'Saved', widgets: [] }],
-    historyByTab: { 'saved-tab': [{ time: 'must-not-save' }] }
+    historyByTab: { 'saved-tab': [{ time: 'must-not-save' }] },
+    historyBySource: { tv: [{ time: 'must-not-save' }] }
   });
 
   assert.deepEqual(readJson(configPath(dir)), {
@@ -114,4 +115,18 @@ test('corrupt config does not overwrite existing backups during the next save', 
   assert.equal(readJson(configPath(dir)).activeTabId, 'new-config');
   assert.equal(readJson(backupPath(dir, 1)).activeTabId, 'safe-backup');
   assert.equal(fs.existsSync(backupPath(dir, 2)), false);
+});
+
+
+test('round-trips multi-source configs and source lifecycle settings', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'is-vol-multi-source-'));
+  try {
+    const state = { activeTabId: 'mixed', tabs: [{ id: 'mixed', widgets: [{ id: 'w', type: 'atm-straddle' }], dataSources: [
+      { id: 'tv', providerKey: 'tradingview', providerConfig: { pollSec: 3, lifecycleSettings: { auto: { enabled: true } } } },
+      { id: 'tape', providerKey: 'tape-contract', providerConfig: { pollSec: 7 } }
+    ] }] };
+    await saveUiState(dir, state);
+    const loaded = loadState(dir, state);
+    assert.deepEqual(loaded.tabs, state.tabs);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

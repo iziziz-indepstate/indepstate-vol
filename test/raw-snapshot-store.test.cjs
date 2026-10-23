@@ -59,3 +59,12 @@ test('saveRawSnapshot writes the full raw snapshot JSON', () => {
   assert.ok(fs.existsSync(result.file));
   assert.deepEqual(JSON.parse(fs.readFileSync(result.file, 'utf-8')), snapshot);
 });
+
+
+test('raw snapshots distinguish source identities in the same tab and timestamp', () => {
+  const shared = { snapshot: { time: '2026-10-23T12:00:00Z' }, tab: { id: 't', title: 'Mixed', providerConfig: { root: 'SPY' } } };
+  const tv = rawSnapshotFileName({ ...shared, tab: { ...shared.tab, dataSourceId: 't:source:tradingview', providerKey: 'tradingview' } });
+  const tape = rawSnapshotFileName({ ...shared, tab: { ...shared.tab, dataSourceId: 't:source:tape-contract', providerKey: 'tape-contract' } });
+  assert.notEqual(tv, tape);
+  assert.ok(!tv.includes(':'));
+});

@@ -1498,3 +1498,6 @@ select option {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+.poll-dot.is-partial { background: #eab308; box-shadow: 0 0 6px #eab308; }
+#dataSourceStatuses { overflow-wrap: anywhere; }

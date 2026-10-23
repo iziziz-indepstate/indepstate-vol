@@ -99,3 +99,39 @@ test('runtime commands use the configured command bridge and running state', asy
 
   assert.deepEqual(calls, [{ tabId: 'tab-1', command: 'start' }]);
 });
+
+
+test('mixed tab schedules and config patches target individual sources', async () => {
+  const commands = [];
+  const patches = [];
+  const cleaned = [];
+  const registry = createDataSourceLifecycleRegistry({
+    command: async (...args) => { commands.push(args); return { running: true }; },
+    patchConfig: (...args) => patches.push(args),
+    isRunning: (id) => id === 'tv'
+  });
+  registry.registerLifecycle({
+    id: 'matching',
+    controls: [{ name: 'enabled', type: 'checkbox', defaultValue: false }],
+    create: ({ dataSource }) => ({
+      async tick({ settings }) {
+        if (settings.enabled) { await dataSource.start(); dataSource.patchConfig({ checked: true }); }
+      },
+      cleanup() { cleaned.push(dataSource.dataSourceId); }
+    })
+  });
+  const mixed = { id: 'dashboard', title: 'Mixed', dataSources: [
+    { id: 'tv', providerKey: 'tradingview', providerConfig: { lifecycleSettings: { matching: { enabled: true } } } },
+    { id: 'tape', providerKey: 'tape-contract', providerConfig: {} }
+  ] };
+  registry.syncDataSources([mixed]);
+  await registry.tick();
+  assert.deepEqual(commands, [['dashboard', 'start', 'tv']]);
+  assert.deepEqual(patches, [['dashboard', { checked: true }, 'tv']]);
+  assert.equal(registry.runtimes.get('tv').snapshot().running, true);
+  assert.equal(registry.runtimes.get('tape').snapshot().running, false);
+  assert.equal(registry.getUiExtensions().tv[0].values.enabled, true);
+  assert.equal(registry.getUiExtensions().tape[0].values.enabled, false);
+  registry.syncDataSources([]);
+  assert.deepEqual(cleaned.sort(), ['tape', 'tv']);
+});
