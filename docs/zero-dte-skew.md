@@ -1,6 +1,6 @@
-# 0DTE Skew
+# Skew. 0DTE
 
-`0DTE Skew` plots three intraday series for one expiration, using the current tab's TradingView snapshots:
+`Skew. 0DTE` plots three intraday series for one expiration, using the current tab's TradingView snapshots:
 
 - **Skew25** = put IV at −25 delta minus call IV at +25 delta. Positive values mean the put wing has higher IV.
 - **Put25 − ATM** = put IV at −25 delta minus ATM IV.

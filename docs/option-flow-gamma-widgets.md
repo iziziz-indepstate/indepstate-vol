@@ -1,6 +1,6 @@
-# Option Flow Gamma Widgets
+# Flow Gamma Widgets
 
-`Option Flow Gamma Flow` (`option-flow-gamma-flow`) and `Option Flow Gamma Imbalance`
+`Flow. Gamma Flow` (`option-flow-gamma-flow`) and `Flow. Gamma Imbalance`
 (`option-flow-gamma-imbalance`) consume `tape-contract` history. They describe observed
 SPX/SPXW 0DTE transaction flow, not dealer GEX, open positions, or a directional SPX forecast.
 SPX tape is assumed to represent PM-settled SPXW options; do not send AM-settled series under
@@ -264,4 +264,4 @@ Both Gamma widgets offer a `BA` checkbox (saved `showUnderlying` boolean, defaul
 on its own right price axis; Gamma Imbalance keeps its IV Pressure Z axis too.
 No additional forward filling is applied. The X axis now uses local computer
 time in `HH:mm:ss`, with labels thinned to fit the chart width.
-See [shared Option Flow chart behavior](tape-contract-datasource.md#underlying-price-overlay-and-time-axis).
+See [shared Flow chart behavior](tape-contract-datasource.md#underlying-price-overlay-and-time-axis).

@@ -37,7 +37,7 @@ export function subscribeAtmStraddleSnapshot({
     if (typeof appBridge?.saveAtmStraddleSnapshot !== 'function') return;
 
     await appBridge.saveAtmStraddleSnapshot({
-      title: event.payload.title || event.payload.widget?.title || 'Straddle ATM',
+      title: event.payload.title || event.payload.widget?.title || 'Straddle. ATM',
       config: { ...(event.payload.config || event.payload.widget?.config || {}) },
       snapshot: event.payload.snapshot,
       sourceSnapshotTime: event.payload.time

@@ -86,12 +86,12 @@ Formatted market values are accepted, for example `$7,799.8` and `23.73%`. The p
 
 No Yahoo lookup is used for this datasource.
 
-## Option Flow TICK Widget
+## Flow. TICK Widget
 
 The gamma widgets also use this datasource, with additional execution fields and analytical
-quote/calibration records. See [Option Flow Gamma Widgets](option-flow-gamma-widgets.md).
+quote/calibration records. See [Flow Gamma Widgets](option-flow-gamma-widgets.md).
 
-`Option Flow TICK` is the paired chart widget for `tape-contract` history.
+`Flow. TICK` is the paired chart widget for `tape-contract` history.
 
 It renders four cumulative lines:
 
@@ -144,9 +144,9 @@ Tooltips and runtime chart data include per-point metadata:
 - per-series increments
 - cumulative totals and displayed totals
 
-## Option Flow Balanced TICK Widget
+## Flow. Balanced TICK Widget
 
-`Option Flow Balanced TICK` uses the same `tape-contract` history, ATM selection, observed strike-window filtering, and `size_contracts` metric as `Option Flow TICK`.
+`Flow. Balanced TICK` uses the same `tape-contract` history, ATM selection, observed strike-window filtering, and `size_contracts` metric as `Flow. TICK`.
 
 It renders four balance lines:
 
@@ -155,9 +155,9 @@ It renders four balance lines:
 - `Directional balance`: calls balance minus puts balance
 - `Imbalance`: directional balance divided by total bought/sold call/put contracts
 
-The widget controls `ATM`, `Flow`, `From`, and `Last` match `Option Flow TICK`. In Linear mode, balances and imbalance are derived from the individual snapshot increments; imbalance is zero when total snapshot volume is zero. In MA modes, balances and imbalance are derived from trailing timestamp-window sums instead of cumulative totals.
+The widget controls `ATM`, `Flow`, `From`, and `Last` match `Flow. TICK`. In Linear mode, balances and imbalance are derived from the individual snapshot increments; imbalance is zero when total snapshot volume is zero. In MA modes, balances and imbalance are derived from trailing timestamp-window sums instead of cumulative totals.
 
-Tooltips and runtime chart data include the same per-point metadata as `Option Flow TICK`, plus cumulative and displayed `balances` for the rendered lines.
+Tooltips and runtime chart data include the same per-point metadata as `Flow. TICK`, plus cumulative and displayed `balances` for the rendered lines.
 
 ## Runtime Data
 
@@ -195,7 +195,7 @@ npm test
 
 ## Underlying price overlay and time axis
 
-All four Option Flow widgets (TICK, Balanced TICK, Gamma Flow and Gamma Imbalance)
+All four Flow widgets (TICK, Balanced TICK, Gamma Flow and Gamma Imbalance)
 provide a `BA` checkbox backed by `config.showUnderlying` (boolean, default `false`).
 The setting is saved separately for each widget. When enabled, runtime datasets
 append an `Underlying` series (`seriesKey: "underlying"`, `yAxisID: "underlying"`)

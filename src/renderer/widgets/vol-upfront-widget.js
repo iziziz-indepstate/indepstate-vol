@@ -115,9 +115,9 @@ export const volUpfrontWidget = {
         title: widget?.title || volUpfrontWidget.defaultTitle,
         points: [],
         segments: [],
-        errors: ['Add at least two Straddle ATM widgets to calculate forward vol.']
+        errors: ['Add at least two Straddle. ATM widgets to calculate forward vol.']
       });
-      container.innerHTML = '<div class="vol-upfront-content"><div class="vol-upfront-empty">Add at least two Straddle ATM widgets to calculate forward vol.</div></div>';
+      container.innerHTML = '<div class="vol-upfront-content"><div class="vol-upfront-empty">Add at least two Straddle. ATM widgets to calculate forward vol.</div></div>';
       return;
     }
 
@@ -125,7 +125,7 @@ export const volUpfrontWidget = {
     const errors = [];
     for (const output of straddleOutputs) {
       if (output.status !== 'ok') {
-        errors.push(`${output.title || 'Straddle ATM'}: ${output.error || 'unavailable'}`);
+        errors.push(`${output.title || 'Straddle. ATM'}: ${output.error || 'unavailable'}`);
         continue;
       }
 
@@ -153,7 +153,7 @@ export const volUpfrontWidget = {
     if (points.length < 2 || !segments.length) {
       container.innerHTML = `
         <div class="vol-upfront-content">
-          <div class="vol-upfront-empty">Need at least two valid Straddle ATM readings.</div>
+          <div class="vol-upfront-empty">Need at least two valid Straddle. ATM readings.</div>
           ${errors.length ? `<div class="vol-upfront-warning">${errors.map(esc).join('<br>')}</div>` : ''}
         </div>
       `;

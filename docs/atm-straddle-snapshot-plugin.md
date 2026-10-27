@@ -1,6 +1,6 @@
 # ATM Straddle Snapshot Plugin
 
-The `atm-straddle-snapshot` plugin saves selected `Straddle ATM` widget outputs to daily JSON files.
+The `atm-straddle-snapshot` plugin saves selected `Straddle. ATM` widget outputs to daily JSON files.
 
 The widget still owns only the ATM straddle calculation and its normal `atm-straddle` structured output. Snapshot persistence is an optional plugin side effect triggered by the widget's point event.
 The plugin also provides read-only display widgets for the saved daily files.
@@ -52,7 +52,7 @@ Legacy widget configs are soft-migrated:
 
 ## Save Event
 
-`Straddle ATM` emits `atm-straddle:point` for graph-eligible points in its straddle price history that have not yet been emitted during the current renderer session. This includes reconstructed history points, so inactive-tab gaps can be backfilled when the widget renders again.
+`Straddle. ATM` emits `atm-straddle:point` for graph-eligible points in its straddle price history that have not yet been emitted during the current renderer session. This includes reconstructed history points, so inactive-tab gaps can be backfilled when the widget renders again.
 
 Event payload:
 
@@ -90,7 +90,7 @@ Wrong widget types, disabled widgets, and incomplete point events are ignored.
 
 ## Published Widget Output Contract
 
-`Straddle ATM` still publishes its normal structured widget data output:
+`Straddle. ATM` still publishes its normal structured widget data output:
 
 ```ts
 type AtmStraddleWidgetOutput = {
@@ -258,7 +258,7 @@ Daily upsert behavior:
 
 The plugin exposes two widget definitions through its renderer manifest. They are registered in the app's normal widget registry alongside built-in renderer widgets.
 
-### Straddle Daily Price
+### Straddle. Daily Price
 
 Type: `straddle-daily-price`
 
@@ -294,7 +294,7 @@ type StraddleDailyPriceConfig = {
 
 Legacy `{ tenor, time }` configs are read as a single line and are replaced by `lines[]` after line edits.
 
-### Straddle Dynamics
+### Straddle. Dynamics
 
 Type: `straddle-dynamics`
 

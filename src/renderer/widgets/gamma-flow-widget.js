@@ -55,7 +55,7 @@ function build(history, widget, imbalance) {
 function definition(imbalance) {
   return {
     type: imbalance ? 'option-flow-gamma-imbalance' : 'option-flow-gamma-flow',
-    defaultTitle: imbalance ? 'Option Flow Gamma Imbalance' : 'Option Flow Gamma Flow',
+    defaultTitle: imbalance ? 'Flow. Gamma Imbalance' : 'Flow. Gamma Flow',
     mode: 'timeseries-custom', chartRuntime: 'uplot', gridSpan: 3, requiresHistory: true,
     gammaFlow: true, optionFlow: true, hideXAxisValues: false, color: '#38bdf8',
     defaultConfig: { ...GAMMA_DEFAULTS, showUnderlying: false }, controls: { showUnderlying: true, gammaFlow: true, gammaAnalysis: imbalance },

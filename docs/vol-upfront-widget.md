@@ -1,12 +1,12 @@
 # Vol Upfront Widget
 
-`Vol Upfront` calculates implied forward volatility between adjacent `Straddle ATM` expiries on the same tab.
+`Vol Upfront` calculates implied forward volatility between adjacent `Straddle. ATM` expiries on the same tab.
 
 ## Data Source
 
-The widget does not fetch market data directly. It reads published `Straddle ATM` widget outputs from the current tab, sorts those readings by DTE, and calculates one forward-vol segment for each adjacent pair.
+The widget does not fetch market data directly. It reads published `Straddle. ATM` widget outputs from the current tab, sorts those readings by DTE, and calculates one forward-vol segment for each adjacent pair.
 
-At least two valid `Straddle ATM` readings are required.
+At least two valid `Straddle. ATM` readings are required.
 
 ## Calculation
 
@@ -39,4 +39,4 @@ The widget renders:
 - source straddle readings: label, DTE, ATM IV
 - segment table with DTE range, total variance, forward variance, forward vol, and status
 
-`Vol Upfront` refreshes when a source `Straddle ATM` widget republishes its output.
+`Vol Upfront` refreshes when a source `Straddle. ATM` widget republishes its output.

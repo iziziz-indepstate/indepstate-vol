@@ -1,6 +1,6 @@
-# Straddle ATM Widget
+# Straddle. ATM Widget
 
-The `Straddle ATM` widget is a compact widget for reading the current price of movement in a selected symbol expiry before analyzing skew, OTM bid premium, or wing velocity.
+The `Straddle. ATM` widget is a compact widget for reading the current price of movement in a selected symbol expiry before analyzing skew, OTM bid premium, or wing velocity.
 
 ## Product Goal
 

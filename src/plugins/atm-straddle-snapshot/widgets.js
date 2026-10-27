@@ -109,7 +109,7 @@ export function buildDailyPriceSeries(documents = [], config = {}) {
   labels.sort();
 
   return {
-    title: 'Straddle Daily Price',
+    title: 'Straddle. Daily Price',
     labels,
     datasets: datasets.map((dataset) => ({
       label: dataset.label,
@@ -161,7 +161,7 @@ export function buildDynamicsSeries(documents = [], config = {}) {
 
   labels.sort();
   return {
-    title: 'Straddle Dynamics',
+    title: 'Straddle. Dynamics',
     labels,
     datasets: datasets.map((dataset) => {
       const valuesByMeta = new Map((dataset.pointMeta || [])
@@ -570,7 +570,7 @@ export const straddleDailyPriceWidget = {
   type: 'straddle-daily-price',
   mode: 'table',
   gridSpan: 3,
-  defaultTitle: 'Straddle Daily Price',
+  defaultTitle: 'Straddle. Daily Price',
   defaultConfig: {
     lines: [{ tenor: '0DTE', time: '16:45' }]
   },
@@ -582,7 +582,7 @@ export const straddleDynamicsWidget = {
   type: 'straddle-dynamics',
   mode: 'table',
   gridSpan: 3,
-  defaultTitle: 'Straddle Dynamics',
+  defaultTitle: 'Straddle. Dynamics',
   defaultConfig: {
     tenor: '0DTE',
     startDate: '',

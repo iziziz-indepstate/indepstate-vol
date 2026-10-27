@@ -17,7 +17,7 @@ This keeps responsibilities clean:
 
 ## Current Pattern
 
-`Straddle ATM` publishes one output per widget instance:
+`Straddle. ATM` publishes one output per widget instance:
 
 ```ts
 {
@@ -33,7 +33,7 @@ This keeps responsibilities clean:
 }
 ```
 
-`Vol Upfront` consumes published `Straddle ATM` outputs from the current tab and calculates forward volatility from their `snapshot.dte` and `snapshot.atmIv` fields. It does not recalculate straddles.
+`Vol Upfront` consumes published `Straddle. ATM` outputs from the current tab and calculates forward volatility from their `snapshot.dte` and `snapshot.atmIv` fields. It does not recalculate straddles.
 
 `SPX IV / RV` publishes its aligned implied-vs-realized volatility dataset after the widget renders:
 
@@ -148,7 +148,7 @@ The first implementation calculates this output in the renderer from history and
 `mode: "premium"` means cells display `IV minus ATM`; `mode: "iv"` means cells display absolute IV. Colors are calculated from the selected value's change versus the previous available column in the same row.
 When `showBA` is enabled, the renderer draws a compact spot-price overlay from root `snapshot.px`; `baSeries.y` is normalized for plotting and uses `0.5` for flat finite price ranges.
 
-`Option Flow TICK` is a `timeseries-custom` chart widget backed by the `tape-contract` datasource. It publishes through the chart runtime path rather than the table widget data store:
+`Flow. TICK` is a `timeseries-custom` chart widget backed by the `tape-contract` datasource. It publishes through the chart runtime path rather than the table widget data store:
 
 ```ts
 {
@@ -205,7 +205,7 @@ For both option flow widgets, `strikeWindow` is a nonnegative number for a symme
 
 The series are cumulative `size_contracts` totals by default. In Linear mode, each point displays only its own snapshot increments; Balanced TICK derives balances and imbalance from those increments, with zero imbalance when gross volume is zero. Cumulative metadata is retained in every mode; `flowWindowMinutes` is `null` for Linear and Cum. In MA display modes they are trailing timestamp-window sums of per-snapshot increments for tape rows whose `call_put` is `CALL` or `PUT`, whose `aggressor_buy_sell` is `BUY` or `SELL`, and whose strike is selected by the widget's `ATM` strike window (`ALL` does not require an underlying price). `displayPointOffset` and `displayPointLimit` trim rendered points after calculation and do not alter metric values. Details: [Tape Contract Datasource](tape-contract-datasource.md).
 
-`Option Flow Balanced TICK` uses the same source rows and strike filtering, but publishes four balance datasets:
+`Flow. Balanced TICK` uses the same source rows and strike filtering, but publishes four balance datasets:
 
 ```ts
 {
@@ -278,13 +278,13 @@ Option-side balances are calculated as bought contracts minus sold contracts for
 - `publishWidgetData` notifies plugin data subscribers after updating the widget data store and MCP runtime store.
 - Widget data subscriber failures are caught and logged; they must not break widget rendering.
 - Full dashboard refresh renders producer table widgets before widget-data consumers.
-- When a `Straddle ATM` config changes, dependent `Vol Upfront` widgets are refreshed after the source output is republished.
+- When a `Straddle. ATM` config changes, dependent `Vol Upfront` widgets are refreshed after the source output is republished.
 - Exact persistence of widget outputs is intentionally not implemented yet; outputs are recalculated from current snapshots and widget configs.
 
 
-## Option Flow underlying series
+## Flow underlying series
 
-All four Option Flow widgets accept `config.showUnderlying` (boolean, default
+All four Flow widgets accept `config.showUnderlying` (boolean, default
 `false`). When enabled, runtime data appends an `Underlying` dataset with
 `seriesKey: "underlying"` and `yAxisID: "underlying"`; existing dataset indices
 remain stable. Its `data` and `pointMeta` align with the displayed flow points,

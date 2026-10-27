@@ -171,7 +171,7 @@ function makeWidget(spec) {
 export const theBlockCmeBtcOptionsWidget = makeWidget({
   type: 'theblock-cme-btc-options',
   chartId: 'cmeBtcOptionsVolumeOi',
-  title: 'Volume and OI of CME Bitcoin Options',
+  title: 'BTC. Volume and OI of CME Bitcoin Options',
   defaultRange: '6M',
   datasets: [
     { series: 'CME Volume', type: 'bar', yAxisID: 'y', color: '#5b8ee6', backgroundColor: 'rgba(91,142,230,0.82)', format: 'currency' },
@@ -183,7 +183,7 @@ export const theBlockCmeBtcOptionsWidget = makeWidget({
 export const theBlockBtcDvolVolOfVolWidget = makeWidget({
   type: 'theblock-btc-dvol-vol-of-vol',
   chartId: 'btcDvolVolOfVol',
-  title: 'BTC DVol Index Vol of Vol',
+  title: 'BTC. DVol Index Vol of Vol',
   datasets: [
     { series: 'Vol of Vol', yAxisID: 'y', color: '#2f7dff', digits: 0 },
     { series: 'DVol Index', yAxisID: 'y1', color: '#ff4b4b', digits: 0 }
@@ -194,7 +194,7 @@ export const theBlockBtcDvolVolOfVolWidget = makeWidget({
 export const theBlockBtcDvolVariancePremiumWidget = makeWidget({
   type: 'theblock-btc-dvol-variance-premium',
   chartId: 'btcDvolVariancePremium',
-  title: 'BTC DVol Index Variance Premium',
+  title: 'BTC. DVol Index Variance Premium',
   datasets: [
     { series: 'Parkinson 30-day HV', color: '#2f7dff', digits: 1 },
     { series: 'DVol Index', color: '#ff4b4b', digits: 1 },
@@ -206,7 +206,7 @@ export const theBlockBtcDvolVariancePremiumWidget = makeWidget({
 export const theBlockBtcAtmIvWidget = makeWidget({
   type: 'theblock-btc-atm-iv',
   chartId: 'btcAtmImpliedVolatility',
-  title: 'BTC ATM Implied Volatility',
+  title: 'BTC. ATM Implied Volatility',
   datasets: [
     { series: '1 week', label: 'ATM 7', color: '#2f7dff', format: 'percent', digits: 1 },
     { series: '1 month', label: 'ATM 30', color: '#ff4b4b', format: 'percent', digits: 1 },
@@ -227,7 +227,7 @@ const skewDatasetSpecs = [
 export const theBlockBtcOptionSkewDelta5Widget = makeWidget({
   type: 'theblock-btc-option-skew-delta-5',
   chartId: 'btcOptionSkewDelta5',
-  title: 'BTC Option Skew Delta 5',
+  title: 'BTC. Option Skew Delta 5',
   datasets: skewDatasetSpecs,
   chartOptions: { scales: singleScale({ digits: 1 }) }
 });
@@ -235,7 +235,7 @@ export const theBlockBtcOptionSkewDelta5Widget = makeWidget({
 export const theBlockBtcOptionSkewDelta25Widget = makeWidget({
   type: 'theblock-btc-option-skew-delta-25',
   chartId: 'btcOptionSkewDelta25',
-  title: 'BTC Option Skew Delta 25',
+  title: 'BTC. Option Skew Delta 25',
   datasets: skewDatasetSpecs,
   chartOptions: { scales: singleScale({ digits: 1 }) }
 });

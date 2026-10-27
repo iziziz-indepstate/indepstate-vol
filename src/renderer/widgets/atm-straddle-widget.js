@@ -351,7 +351,7 @@ function renderCompact(snapshot, priceHistory) {
   const deltaStrad = snapshot.comparison?.deltaStraddlePct;
   return `
     <div class="straddle-compact">
-      <div class="straddle-compact-title">Straddle ATM | ${esc(snapshot.symbol)} ${esc(snapshot.tenor)}</div>
+      <div class="straddle-compact-title">Straddle. ATM | ${esc(snapshot.symbol)} ${esc(snapshot.tenor)}</div>
       <div>K ${fmt(snapshot.atmStrike, 0)} | DTE ${fmt(snapshot.dte, 1)} | S ${fmt(snapshot.referencePrice)}</div>
       <div class="straddle-compact-value">${fmt(snapshot.straddle.mid)} pts / ${fmtPct(snapshot.straddle.impliedMovePct)}</div>
       ${renderPriceSparkline(priceHistory)}
@@ -395,7 +395,7 @@ export const atmStraddleWidget = {
   wide: false,
   eventContracts: [ATM_STRADDLE_POINT_EVENT],
   requiresHistory: true,
-  defaultTitle: 'Straddle ATM',
+  defaultTitle: 'Straddle. ATM',
   defaultConfig: {
     symbol: 'SPX',
     tenor: '1W',

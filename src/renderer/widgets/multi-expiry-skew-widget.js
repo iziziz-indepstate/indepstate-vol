@@ -26,7 +26,7 @@ export function destroyMultiExpirySkewWidget(container) {
 }
 
 export const multiExpirySkewWidget = {
-  type: 'multi-expiry-skew', defaultTitle: 'Multi-Expiry Skew', mode: 'table', gridSpan: 3, heightUnits: 2, requiresHistory: true,
+  type: 'multi-expiry-skew', defaultTitle: 'Skew. Multi-Expiry', mode: 'table', gridSpan: 3, heightUnits: 2, requiresHistory: true,
   defaultConfig: { targetDelta: 0.25, expirations: [], startDate: '', endDate: '' },
   destroy: destroyMultiExpirySkewWidget,
   async render({ container, source, snapshot, history, widget, widgetData, onConfigChange, isCurrent = () => true }) {

@@ -19,7 +19,7 @@ export function zeroDteSkewTooltip({ dataset, dataIndex }) {
 }
 
 export const zeroDteSkewWidget = {
-  type: 'zero-dte-skew', defaultTitle: '0DTE Skew',
+  type: 'zero-dte-skew', defaultTitle: 'Skew. 0DTE',
   mode: 'timeseries-custom', chartRuntime: 'uplot', gridSpan: 3, requiresHistory: true,
   color: '#a78bfa', volPoints: true, showZeroLine: true, hoverTooltip: true,
   defaultConfig: { targetDelta: 0.25, expiration: 'today' },
@@ -37,7 +37,7 @@ export const zeroDteSkewWidget = {
       chartPoints.push(p);
     });
     return {
-      title: `0DTE Skew · ${Math.round(delta * 100)}Δ · ${points.at(-1)?.expiration || cfg.expiration}`,
+      title: `Skew. 0DTE · ${Math.round(delta * 100)}Δ · ${points.at(-1)?.expiration || cfg.expiration}`,
       labels: chartPoints.map((p) => p.boundary ? '' : new Date(p.timestamp).toLocaleTimeString()),
       datasets: [
         ['skew', `Skew${Math.round(delta * 100)}`, '#a78bfa'],

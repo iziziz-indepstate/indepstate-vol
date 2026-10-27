@@ -2,6 +2,7 @@ import { DATA_SOURCE_LABELS, ensureDataSource, normalizeTabDataSources, sourceFo
 import { TradingViewProvider } from '../shared/tradingview-provider.js';
 import { TheBlockProvider } from '../shared/theblock-provider.js';
 import { getWidgetDefinition, widgetDefinitions } from './widgets/index.js';
+import { migrateWidgetTitles } from './widget-title-migrations.mjs';
 import { createWidgetCard, createWidgetChartForDefinition } from './widgets/widget-renderers.js';
 import { skewMetrics } from './widgets/metrics.js';
 import { skewHistorySession } from './skew-history.js';
@@ -248,7 +249,10 @@ function populateWidgetTypeSelect() {
   const prev = select.value;
   select.innerHTML = '';
 
-  for (const definition of widgetDefinitions) {
+  const sortedDefinitions = [...widgetDefinitions].sort((a, b) => (
+    (a.defaultTitle || a.type).localeCompare(b.defaultTitle || b.type, 'en', { sensitivity: 'base', numeric: true })
+  ));
+  for (const definition of sortedDefinitions) {
     const option = document.createElement('option');
     option.value = definition.type;
     option.textContent = definition.defaultTitle || definition.type;
@@ -2723,6 +2727,7 @@ async function init() {
   bindEvents();
   const loaded = await window.appBridge.loadState();
   state.tabs = loaded.tabs || [];
+  migrateWidgetTitles(state.tabs);
   state.activeTabId = loaded.activeTabId || state.tabs[0]?.id;
   state.historyBySource = loaded.historyBySource && typeof loaded.historyBySource === 'object'
     ? loaded.historyBySource

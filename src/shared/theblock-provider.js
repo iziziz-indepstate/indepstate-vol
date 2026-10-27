@@ -1,32 +1,32 @@
 export const THE_BLOCK_CHARTS = Object.freeze({
   cmeBtcOptionsVolumeOi: {
     id: 'cmeBtcOptionsVolumeOi',
-    title: 'Volume and OI of CME Bitcoin Options',
+    title: 'BTC. Volume and OI of CME Bitcoin Options',
     url: 'https://data.tbstat.com/dashboard/markets_options_volumeofcmebitcoinoptions_monthly_coinglass.json'
   },
   btcDvolVolOfVol: {
     id: 'btcDvolVolOfVol',
-    title: 'BTC DVol Index Vol of Vol',
+    title: 'BTC. DVol Index Vol of Vol',
     url: 'https://data.tbstat.com/dashboard/markets_options_btcdvolvolofvol_daily_other.json'
   },
   btcDvolVariancePremium: {
     id: 'btcDvolVariancePremium',
-    title: 'BTC DVol Index Variance Premium',
+    title: 'BTC. DVol Index Variance Premium',
     url: 'https://data.tbstat.com/dashboard/markets_options_btcdvolvariancepremium_daily_other.json'
   },
   btcAtmImpliedVolatility: {
     id: 'btcAtmImpliedVolatility',
-    title: 'BTC ATM Implied Volatility',
+    title: 'BTC. ATM Implied Volatility',
     url: 'https://data.tbstat.com/dashboard/markets_options_btcatmimpliedvolatility_daily_other.json'
   },
   btcOptionSkewDelta5: {
     id: 'btcOptionSkewDelta5',
-    title: 'BTC Option Skew Delta 5',
+    title: 'BTC. Option Skew Delta 5',
     url: 'https://data.tbstat.com/dashboard/markets_options_btcfivedeltaoptionskew_daily_other.json'
   },
   btcOptionSkewDelta25: {
     id: 'btcOptionSkewDelta25',
-    title: 'BTC Option Skew Delta 25',
+    title: 'BTC. Option Skew Delta 25',
     url: 'https://data.tbstat.com/dashboard/markets_options_btctwentyfivedeltaoptionskew_daily_other.json'
   }
 });

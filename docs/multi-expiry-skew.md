@@ -1,6 +1,6 @@
-# Multi-Expiry Skew
+# Skew. Multi-Expiry
 
-`Multi-Expiry Skew` plots put-minus-call IV skew for several fixed expiration dates on a chronological time axis. It uses the selected tab's TradingView datasource and does not request chains outside that datasource's configured expiry range.
+`Skew. Multi-Expiry` plots put-minus-call IV skew for several fixed expiration dates on a chronological time axis. It uses the selected tab's TradingView datasource and does not request chains outside that datasource's configured expiry range.
 
 ## Controls and calculation
 
@@ -10,7 +10,7 @@
 
 Each expiration plots only `IV put(−D) − IV call(+D)`, in volatility points. For example, 24% put IV minus 20% call IV gives +4 vol pts. There are no separate wing-minus-ATM lines; an ATM pair is not required. The chart includes a zero line and a clickable legend with values on hover. Detailed contract information is retained in the archive without a text dump beneath the chart.
 
-Quote validation, strictly OTM contract selection and interpolation reuse [0DTE Skew](zero-dte-skew.md). There is no extrapolation or fallback to another expiration. Missing data and New York trading-day boundaries break the lines. Expired dates remain available for viewing their recorded history.
+Quote validation, strictly OTM contract selection and interpolation reuse [Skew. 0DTE](zero-dte-skew.md). There is no extrapolation or fallback to another expiration. Missing data and New York trading-day boundaries break the lines. Expired dates remain available for viewing their recorded history.
 
 ## Recording and recovery
 
@@ -42,4 +42,4 @@ loadSkewHistory({ identity, startDate?, endDate? })
 
 IPC channels are `skew-history:save` and `skew-history:load`. The widget publishes structured output with config, series and warnings. Stale asynchronous renders are discarded; charts and resize observers are disposed when replaced or removed.
 
-Tests cover calculations, compact history, gaps, identity isolation, concurrent writes, recovery, retries and recording from inactive tabs. Existing 0DTE Skew behavior is unchanged.
+Tests cover calculations, compact history, gaps, identity isolation, concurrent writes, recovery, retries and recording from inactive tabs. Existing Skew. 0DTE behavior is unchanged.

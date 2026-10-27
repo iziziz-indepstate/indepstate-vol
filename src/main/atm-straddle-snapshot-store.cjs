@@ -105,7 +105,7 @@ function buildDocument(payload = {}, existing = null) {
     date,
     identity,
     summary: {
-      title: payload.title || 'Straddle ATM',
+      title: payload.title || 'Straddle. ATM',
       expiry: snapshot.expiry || identity.expiry,
       dte: Number.isFinite(Number(snapshot.dte)) ? Number(snapshot.dte) : null,
       atmSelectionMethod: snapshot.atmSelectionMethod || null
