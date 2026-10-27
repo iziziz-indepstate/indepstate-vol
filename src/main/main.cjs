@@ -7,6 +7,7 @@ const { createTradingCalendarProvider } = require('./trading-calendar-provider.c
 const { startAutoUpdater } = require('./auto-updater.cjs');
 const { startMcpServer } = require('./mcp-server.cjs');
 const { defaultRawSnapshotDir, saveRawSnapshotAsync } = require('./raw-snapshot-store.cjs');
+const { defaultSkewHistoryDir, saveSkewHistory, loadSkewHistory } = require('./skew-history-store.cjs');
 const {
   defaultAtmStraddleSnapshotDir,
   loadAtmStraddleSnapshotsAsync,
@@ -382,6 +383,9 @@ app.whenReady().then(async () => {
       expiry: payload?.snapshot?.expiry
     }, () => saveAtmStraddleSnapshotAsync(defaultAtmStraddleSnapshotDir(app), payload || {}));
   });
+
+  ipcMain.handle('skew-history:save', (_evt, payload) => saveSkewHistory(defaultSkewHistoryDir(app), payload));
+  ipcMain.handle('skew-history:load', (_evt, params) => loadSkewHistory(defaultSkewHistoryDir(app), params));
 
   ipcMain.handle('atm-straddle-snapshot:load', async (_evt, params) => {
     return profiler.measure('atm-straddle-snapshot:load', {

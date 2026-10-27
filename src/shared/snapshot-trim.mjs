@@ -1,6 +1,7 @@
 import { selectAtmPair, selectExpiry } from './atm-straddle-calculations.mjs';
 import { resolveExpiryToken } from './expiry-placeholders.mjs';
 import { resolveSkewExpiration } from './zero-dte-skew-calculations.mjs';
+import { normalizeSkewExpirations } from './multi-expiry-skew.mjs';
 import { findStrikesAroundPrice, resolveConfiguredStrike, resolveStrikeSelection } from './option-chain-utils.js';
 
 export const SNAPSHOT_TRIM_VERSION = 1;
@@ -341,6 +342,9 @@ function collectNeeds(snapshot, tab) {
     if (type === 'zero-dte-skew') {
       const expiry = resolveSkewExpiration(snapshot, widget?.config?.expiration);
       if (expiry) addNeed(needs, expiry, { allQuotes: true });
+    }
+    else if (type === 'multi-expiry-skew') {
+      for (const expiry of normalizeSkewExpirations(widget?.config?.expirations)) addNeed(needs, expiry, { allQuotes: true });
     }
     else if (type === 'n-delta-iv') addNDeltaNeed(snapshot, needs, widget);
     else if (type === 'iv-dynamics') addIvDynamicsNeed(snapshot, needs, widget);

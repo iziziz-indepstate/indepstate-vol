@@ -40,6 +40,7 @@ export async function ensureUPlotRuntime() {
 export function createWidgetCard(widget, definition, options = {}) {
   const card = document.createElement('article');
   card.className = 'widget-card';
+  if (definition?.heightUnits === 2) card.dataset.heightUnits = '2';
   if (definition?.gammaFlow) card.classList.add('widget-card-gamma');
   if (widget.collapsed) card.classList.add('widget-card-collapsed');
   if (definition?.mode === 'table' && definition?.wide !== false) card.classList.add('widget-card-wide');

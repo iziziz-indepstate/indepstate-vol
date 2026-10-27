@@ -7,6 +7,7 @@ import * as sources from '../src/shared/data-sources.mjs';
 import { getWidgetDefinition, widgetDefinitions } from '../src/renderer/widgets/index.js';
 import { createMcpRuntimeStore } from '../src/shared/mcp-runtime-store.mjs';
 import { trimSnapshotForWidgets } from '../src/shared/snapshot-trim.mjs';
+import { createSkewHistorySession } from '../src/renderer/skew-history.js';
 
 function harness(fetchers = {}) {
   const timers = new Map();
@@ -22,6 +23,7 @@ function harness(fetchers = {}) {
   let seq = 0;
   const context = vm.createContext({
     ...sources, getWidgetDefinition, widgetDefinitions, createMcpRuntimeStore, trimSnapshotForWidgets,
+    skewHistorySession: createSkewHistorySession(() => bridge),
     createWidgetEventBus: () => ({}), createWidgetDataPublishBus: () => ({}),
     window: { appBridge: bridge }, console, performance, skewMetrics: [], collectExpiryPlaceholderKeys,
     document: { getElementById: () => ({ classList: { remove() {} }, setAttribute() {} }) },
@@ -70,6 +72,25 @@ test('tab commands poll all providers independently and route each snapshot to i
   await h.executeDataSourceCommand('tab', 'refresh');
   assert.equal(h.calls.length, 6);
   assert.equal(h.tabTimers.size, 0);
+});
+
+test('Skew points are captured on an inactive tab before compact history is trimmed', async () => {
+  const saves = [];
+  const quotes = [
+    { type: 'put', strike: 90, delta: -0.25, iv: 0.24, bid: 1, ask: 2 },
+    { type: 'call', strike: 110, delta: 0.25, iv: 0.2, bid: 1, ask: 2 }
+  ];
+  const h = harness({
+    getTradingViewSnapshot: async () => ({ time: '2026-10-26T15:00:00Z', px: 100, byExpiry: { '20261030': { px: 100, optionQuotes: quotes } } }),
+    saveSkewHistory: async (payload) => { saves.push(payload); return { ok: true }; }
+  });
+  h.tab.widgets.push({ id: 'skew', type: 'multi-expiry-skew', config: { expirations: ['20261030'], targetDelta: 0.25 } });
+  h.state.activeTabId = 'another-tab';
+  await h.tickTab(h.tab.dataSources.find((s) => s.providerKey === 'tradingview').id);
+  assert.equal(saves.length, 1);
+  assert.ok(Math.abs(saves[0].points[0].skew - 0.04) < 1e-9);
+  assert.equal(saves[0].identity.expiration, '20261030');
+  assert.equal(h.widgetHistory(h.tab, h.tab.widgets.at(-1))[0].byExpiry['20261030'].optionQuotes.length, 2);
 });
 
 test('provider failure leaves other sources usable', async () => {

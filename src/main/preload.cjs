@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld('appBridge', {
   saveUiState: (uiState) => ipcRenderer.invoke('state:save-ui', uiState),
   appendHistoryPoint: (payload) => ipcRenderer.invoke('state:append-history-point', payload),
   saveRawSnapshot: (payload) => ipcRenderer.invoke('raw-snapshot:save', payload),
+  saveSkewHistory: (payload) => ipcRenderer.invoke('skew-history:save', payload),
+  loadSkewHistory: (params) => ipcRenderer.invoke('skew-history:load', params),
   saveAtmStraddleSnapshot: (payload) => ipcRenderer.invoke('atm-straddle-snapshot:save', payload),
   loadAtmStraddleSnapshots: (params) => ipcRenderer.invoke('atm-straddle-snapshot:load', params),
   loadLocalMarketSeries: (source) => ipcRenderer.invoke('market-data:load-local-series', source),

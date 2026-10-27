@@ -4,6 +4,8 @@ import { TheBlockProvider } from '../shared/theblock-provider.js';
 import { getWidgetDefinition, widgetDefinitions } from './widgets/index.js';
 import { createWidgetCard, createWidgetChartForDefinition } from './widgets/widget-renderers.js';
 import { skewMetrics } from './widgets/metrics.js';
+import { skewHistorySession } from './skew-history.js';
+import { mountWidgetGridLayout } from './widget-grid-layout.js';
 import { createWidgetEventBus } from './widget-event-bus.js';
 import { createWidgetDataPublishBus } from './widget-data-publish-bus.js';
 import { activateAppPlugins, appPluginManifests } from '../plugins/index.js';
@@ -63,6 +65,7 @@ const tabStatus = {};
 const chartInstances = new Map();
 const chartCreations = new Map();
 let chartGeneration = 0;
+let disposeWidgetGridLayout = null;
 const widgetDataStore = new Map();
 const mcpRuntimeStore = createMcpRuntimeStore();
 const widgetEventBus = createWidgetEventBus();
@@ -1366,6 +1369,8 @@ function updateWidgetCollapsedCard(card, widget) {
 
 async function renderWidgets() {
   const profileStart = performance.now();
+  disposeWidgetGridLayout?.();
+  disposeWidgetGridLayout = null;
   destroyCharts();
   const tab = activeTab();
   const renderTabId = tab?.id || null;
@@ -1413,6 +1418,7 @@ async function renderWidgets() {
   `;
 
   root.replaceChildren(sidecar, grid);
+  disposeWidgetGridLayout = mountWidgetGridLayout(grid);
 
   for (const widget of tab.widgets) {
     const definition = getWidgetDefinition(widget.type);
@@ -2115,6 +2121,8 @@ async function renderTableWidgetEntry(entry, latest, history) {
 
   await definition.render({
     container: target,
+    source,
+    isCurrent,
     snapshot: latest,
     history,
     widgets: tab?.widgets || [],
@@ -2368,6 +2376,10 @@ async function tickTab(tabId) {
       return;
     }
     latestBySource.set(tab.id, point);
+    if (tab.providerKey === 'tradingview') {
+      await skewHistorySession.capture(tab, tab.widgets, [point]);
+      if (!isCurrent()) return;
+    }
     if (!point.gammaClock && shouldSaveRawSnapshots(tab)) {
       const rawStart = performance.now();
       saveRawSnapshotDeferred({

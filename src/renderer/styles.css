@@ -5,6 +5,11 @@
   --border: rgba(255,255,255,0.12);
   --text: #eaeaf0;
   --muted: rgba(234,234,240,0.72);
+  --widget-padding: 10px;
+  --widget-title-height: 28px;
+  --widget-title-margin: 8px;
+  --widget-chart-height: 240px;
+  --widget-standard-height: calc(2 * var(--widget-padding) + 2px + var(--widget-title-height) + var(--widget-title-margin) + var(--widget-chart-height));
 }
 
 * { box-sizing: border-box; }
@@ -394,10 +399,17 @@ select option {
 }
 
 .widget-grid {
+  --widget-grid-gap: 10px;
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   align-items: start;
-  gap: 10px;
+  gap: var(--widget-grid-gap);
+}
+
+.widget-grid-compact {
+  grid-auto-rows: 1px;
+  grid-auto-flow: row dense;
+  row-gap: 0;
 }
 
 .widget-card {
@@ -484,7 +496,7 @@ select option {
   border: 1px solid var(--border);
   background: var(--panel2);
   border-radius: 12px;
-  padding: 10px;
+  padding: var(--widget-padding);
   transition: border-color 120ms ease, opacity 120ms ease;
 }
 
@@ -497,12 +509,12 @@ select option {
 }
 
 .widget-title {
-  margin: 0 0 8px;
+  margin: 0 0 var(--widget-title-margin);
   display: flex;
   align-items: center;
   gap: 8px;
   color: var(--muted);
-  min-height: 28px;
+  min-height: var(--widget-title-height);
   padding-right: 30px;
   cursor: grab;
   user-select: none;
@@ -526,13 +538,13 @@ select option {
 
 .widget-chart-host > canvas {
   width: 100% !important;
-  height: 240px !important;
+  height: var(--widget-chart-height) !important;
 }
 
 .widget-chart-host {
   width: 100%;
-  height: 240px;
-  min-height: 240px;
+  height: var(--widget-chart-height);
+  min-height: var(--widget-chart-height);
 }
 
 .widget-uplot-host,
@@ -1086,6 +1098,56 @@ select option {
   color: #fbbf24;
   margin-top: 6px;
 }
+
+.multi-skew-expirations {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.multi-skew-expiry {
+  display: flex;
+  align-items: end;
+  gap: 4px;
+}
+
+.multi-skew-expiry label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.multi-skew-expiry input {
+  min-width: 120px;
+  padding: 4px 6px;
+  color: inherit;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  color-scheme: dark;
+}
+
+.widget-card[data-height-units="2"]:not(.widget-card-collapsed) {
+  height: calc(2 * var(--widget-standard-height) + var(--widget-grid-gap, 10px));
+  display: flex;
+  flex-direction: column;
+}
+.widget-card[data-height-units="2"]:not(.widget-card-collapsed) > .widget-title { flex-shrink: 0; }
+.widget-card[data-height-units="2"]:not(.widget-card-collapsed) > .widget-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.widget-card[data-height-units="2"] .widget-body > :not(.multi-skew-chart) { flex-shrink: 0; }
+.multi-skew-chart { height: 300px; min-height: 120px; flex: 1; position: relative; }
+.multi-skew-chart .u-legend { color: var(--text); font-size: 11px; }
+.multi-skew-status { font-size: 11px; color: var(--muted); margin: 6px 0; overflow-wrap: anywhere; }
 
 .straddle-controls {
   display: grid;

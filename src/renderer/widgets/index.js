@@ -18,6 +18,7 @@ import { atmStraddleWidget } from './atm-straddle-widget.js';
 import { volUpfrontWidget } from './vol-upfront-widget.js';
 import { nDeltaIVWidget } from './n-delta-iv-widget.js';
 import { zeroDteSkewWidget } from './zero-dte-skew-widget.js';
+import { multiExpirySkewWidget } from './multi-expiry-skew-widget.js';
 import { ivDynamicsWidget } from './iv-dynamics-widget.js';
 import { optionFlowBalancedTickWidget, optionFlowTickWidget } from './option-flow-tick-widget.js';
 import { gammaFlowWidget, gammaImbalanceWidget } from './gamma-flow-widget.js';
@@ -33,6 +34,7 @@ export const widgetDefinitions = [
   volUpfrontWidget,
   nDeltaIVWidget,
   zeroDteSkewWidget,
+  multiExpirySkewWidget,
   ivDynamicsWidget,
   optionFlowTickWidget,
   optionFlowBalancedTickWidget,

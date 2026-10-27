@@ -43,12 +43,15 @@ npm start
 - **IV Current**: time series for IV at a selected strike. The `S` control accepts an exact strike or `ATM`.
 - **IV Dynamics**: heatmap widget for intraday changes in IV or IV minus ATM across configurable put/call deltas.
 - **0DTE Skew**: intraday put-minus-call IV skew and both wings relative to ATM, with configurable symmetric delta. Details: [0DTE Skew](docs/zero-dte-skew.md).
+- **Multi-Expiry Skew**: skew lines for fixed expiration dates with shared delta and automatic history persistence across restarts and datasource resets. Details: [Multi-Expiry Skew](docs/multi-expiry-skew.md).
 - **Spread Optimizer**: table widget that ranks candidate vertical spreads by configurable risk, liquidity, and regime inputs.
 - **SPX IV / RV**: standalone table and chart widget for implied-vs-realized volatility comparisons.
 - **Option Flow TICK**: four-line option-flow chart for bought/sold calls and puts from `tape-contract` snapshots, filtered by observed strikes around tape `underlying_price`, with cumulative/trailing MA modes and display-only point window controls. Details: [Tape Contract Datasource](docs/tape-contract-datasource.md).
 - **Option Flow Balanced TICK**: four-line option-flow balance chart for calls, puts, directional balance (`Calls balance - Puts balance`), and imbalance ratio over the same ATM strike window as `Option Flow TICK`, with cumulative/trailing MA modes and display-only point window controls. Details: [Tape Contract Datasource](docs/tape-contract-datasource.md).
 
 Tabs support multiple providers with automatic widget routing and separate source settings. See [Multiple data sources](docs/multiple-data-sources.md).
+
+Widgets automatically fill free space beside taller cards while retaining their existing widths. On narrow screens they form one column; drag order sets placement priority, and later cards may move up to fill gaps.
 
 ## Tests
 
