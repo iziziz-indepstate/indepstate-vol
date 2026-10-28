@@ -41,6 +41,28 @@ test('underlying config is boolean, refreshes and restores through saved widget 
   } finally { globalThis.document = oldDocument; }
 });
 
+test('flag filter is boolean and all four widget cards restore the saved checkbox', () => {
+  for (const [raw, expected] of [[true, true], [false, false], ['true', true], ['false', false], [undefined, false]]) {
+    assert.equal(normalizeWidgetParamValue('excludeFlaggedTrades', raw), expected);
+  }
+  assert.equal(shouldRefreshOnWidgetParamChange('excludeFlaggedTrades'), true);
+  const oldDocument = globalThis.document;
+  globalThis.document = { createElement: () => ({ dataset: {}, classList: { add() {} } }) };
+  try {
+    for (const definition of definitions) {
+      assert.equal(definition.defaultConfig.excludeFlaggedTrades, false);
+      for (const enabled of [false, true]) {
+        const widget = JSON.parse(JSON.stringify({ id: 'flow', type: definition.type, config: { excludeFlaggedTrades: enabled } }));
+        const card = createWidgetCard(widget, definition);
+        const checkbox = card.innerHTML.match(/<input type="checkbox"[^>]*data-widget-param-name="excludeFlaggedTrades"[^>]*>/)?.[0];
+        assert.ok(checkbox);
+        assert.equal(checkbox.includes('checked'), enabled);
+        assert.match(card.innerHTML, /Exclude flagged trades/);
+      }
+    }
+  } finally { globalThis.document = oldDocument; }
+});
+
 test('all flow widgets append aligned raw prices without changing flow datasets', () => {
   for (const definition of definitions) {
     for (const flowDisplayMode of ['cumulative', 'linear', 'ma-1m']) {

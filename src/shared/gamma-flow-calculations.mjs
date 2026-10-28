@@ -3,7 +3,7 @@ export const GAMMA_DEFAULTS = Object.freeze({
   gammaMode: 'executed', gammaOptionTypes: 'total', gammaStrikeScope: 'dynamic',
   gammaWidth: 3, gammaStrikes: '', gammaAnchorAt: '', gammaAnchorStrike: '', gammaAnchorStrikes: '',
   gammaWindow: 'session', gammaMinutes: 5, gammaStart: '', gammaQuality: 'all',
-  gammaAnalysis: 'iv', gammaQuoteMaxAgeSeconds: 60, gammaDebug: false
+  gammaAnalysis: 'iv', gammaQuoteMaxAgeSeconds: 60, gammaDebug: false, excludeFlaggedTrades: false
 });
 const SEGMENTS = ['downside', 'atm', 'upside'];
 export function normalizeGammaParam(name, value, current) {
@@ -99,8 +99,10 @@ export function parseGammaStrikes(value) {
 }
 export function gammaScopeKey(config) {
   const c = { ...GAMMA_DEFAULTS, ...config };
-  return JSON.stringify([c.gammaStrikeScope, Number(c.gammaWidth), c.gammaStrikes,
-    c.gammaAnchorAt, c.gammaAnchorStrike, c.gammaAnchorStrikes, c.gammaQuality]);
+  const scope = [c.gammaStrikeScope, Number(c.gammaWidth), c.gammaStrikes,
+    c.gammaAnchorAt, c.gammaAnchorStrike, c.gammaAnchorStrikes, c.gammaQuality];
+  if (c.excludeFlaggedTrades === true) scope.push('excludeFlaggedTrades');
+  return JSON.stringify(scope);
 }
 export function captureGammaAnchor(history, at = new Date().toISOString()) {
   const ms = absoluteMs(at);
@@ -268,6 +270,7 @@ export function calculateGammaFlow(history, config = {}, checkpoint = null) {
       // Even an execution without usable gamma/aggressor may update the underlying price.
       const tapeSpot = number(row.underlying_price);
       if (tapeSpot > 0) tapeSpots.push({ ms, spot: tapeSpot });
+      if (cfg.excludeFlaggedTrades === true && String(row.condition_flag ?? '').trim()) { reject('condition_flag'); continue; }
       if (row.expiration !== dateAt(ms)) { reject('not_0dte'); continue; }
       if (!['CALL', 'PUT'].includes(row.call_put) || !(number(row.strike) > 0)) { reject('contract'); continue; }
       if (cfg.gammaQuality === 'reliable' && row.classification_quality !== 'reliable') { reject('classification_quality'); continue; }

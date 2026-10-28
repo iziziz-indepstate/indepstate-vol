@@ -78,6 +78,10 @@ export function createWidgetCard(widget, definition, options = {}) {
   const controls = Object.keys(controlsConfig).length || extensionControls
     ? `<div class="widget-controls widget-controls-inline">
         ${controlsConfig.gammaFlow ? gammaFlowControls(widget, controlsConfig.gammaAnalysis) : ''}
+        ${controlsConfig.excludeFlaggedTrades ? `<label class="widget-control widget-control-checkbox" title="Exclude trades with a non-empty condition_flag">
+          <input type="checkbox" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.EXCLUDE_FLAGGED_TRADES}" ${(widget?.config?.excludeFlaggedTrades ?? definition?.defaultConfig?.excludeFlaggedTrades) === true ? 'checked' : ''} />
+          <span>Exclude flagged trades</span>
+        </label>` : ''}
         ${controlsConfig.showUnderlying ? `<label class="widget-control widget-control-checkbox" title="Underlying price on a separate axis">
           <input type="checkbox" data-widget-param-widget-id="${widget.id}" data-widget-param-name="${WIDGET_PARAM_NAMES.SHOW_UNDERLYING}" ${(widget?.config?.showUnderlying ?? definition?.defaultConfig?.showUnderlying) === true ? 'checked' : ''} />
           <span>BA</span>

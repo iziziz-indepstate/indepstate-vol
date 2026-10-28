@@ -77,6 +77,20 @@ Compacted tape records keep:
 - call/put side and aggressor buy/sell side
 - `size_contracts`, `premium`, `underlying_price`, `delta`
 - `trade_id_sequence` and `_dedupeKey`
+- `condition_flag` (preserved for the optional Flow trade filter)
+
+## Flagged trade filter
+
+All four `Flow.` widgets offer an **Exclude flagged trades** checkbox, stored independently
+in each widget's `excludeFlaggedTrades` configuration (default: `false`). When enabled,
+trades with a non-empty `String(condition_flag ?? '').trim()` are excluded from flow
+calculations. Missing values, `null`, empty strings and whitespace-only strings pass.
+Any other value is excluded; condition codes and `complex_order_id` are not interpreted.
+
+Toggling the checkbox recalculates available history, including cumulative, Linear and MA
+modes. Underlying prices and observed strikes still use all source records. Older compact
+history that did not retain `condition_flag` passes the filter as missing data; the original
+flags cannot be recovered from that history.
 
 ## ATM Price
 

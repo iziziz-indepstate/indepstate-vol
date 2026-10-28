@@ -36,6 +36,42 @@ export function calibration(segment, overrides = {}, cfg = {}) {
 }
 const last = (history, cfg) => calculateGammaFlow(history, cfg).at(-1);
 
+test('flag filtering survives compaction and incremental toggling for both Gamma widgets', () => {
+  const rows = [undefined, null, '', '  ', 'X', 0, false].map((condition_flag, i) => tape(String(i), { condition_flag }));
+  const h = [snap(start), snap(time, rows)];
+  const cfg = { excludeFlaggedTrades: true };
+  const run = createGammaFlowCalculator();
+  assert.equal(run(h).at(-1).net, 700);
+  assert.equal(run(h, cfg).at(-1).net, 400);
+  assert.equal(run(h, cfg).at(-1).excluded.condition_flag, 3);
+  h.push(snap(at(2), [tape('later', { executed_at: at(2) }), tape('flagged', { executed_at: at(2), condition_flag: 'Y', underlying_price: 105 })]));
+  assert.deepEqual(run(h, cfg), calculateGammaFlow(h, cfg));
+  assert.equal(run(h, cfg).at(-1).currentSpot, 105);
+  assert.deepEqual(run(h), calculateGammaFlow(h));
+  assert.deepEqual(run(h, cfg), calculateGammaFlow(h, cfg));
+  const compact = h.map((s) => trimSnapshotForWidgets(s, { widgets: [] }));
+  assert.deepEqual(calculateGammaFlow(compact, cfg), calculateGammaFlow(h, cfg));
+  for (const definition of [gammaFlowWidget, gammaImbalanceWidget]) {
+    assert.equal(definition.buildTimeSeries(h, { config: cfg }).datasets[0].pointMeta.at(-1).net, 500);
+    assert.equal(definition.buildTimeSeries(h, { config: { excludeFlaggedTrades: false } }).datasets[0].pointMeta.at(-1).net, 900);
+  }
+  const flaggedStrike = [snap(time, [tape('flag', { strike: 105, condition_flag: 'X', underlying_price: 105 }), tape('plain', { underlying_price: 105 })])];
+  assert.equal(last(flaggedStrike, { ...cfg, gammaWidth: 0 }).net, null);
+  assert.deepEqual(captureGammaAnchor(flaggedStrike, time).strikes, [100, 105]);
+});
+
+test('Gamma calibration scopes isolate flagged filtering and preserve the legacy default key', () => {
+  assert.equal(gammaScopeKey(), JSON.stringify(['dynamic', 3, '', '', '', '', 'all']));
+  assert.equal(gammaScopeKey({ excludeFlaggedTrades: false }), gammaScopeKey());
+  const cfg = { excludeFlaggedTrades: true };
+  assert.notEqual(gammaScopeKey(cfg), gammaScopeKey());
+  const h = [snap(start), snap(time, [tape('a')], [quote()], [calibration('atm')])];
+  assert.equal(last(h, cfg).Z, null);
+  h[1].calibration.records = [calibration('atm', {}, cfg)];
+  assert.equal(last(h, cfg).Z, 1);
+  assert.equal(last(h).Z, null);
+});
+
 test('equal gamma purchases and sales cancel; bought calls and puts have the same sign', () => {
   let p = last([snap(time, [tape('a'), tape('b', { aggressor_buy_sell: 'SELL' })])]);
   assert.equal(p.net, 0); assert.equal(p.B, 0); assert.equal(p.gross, 200);

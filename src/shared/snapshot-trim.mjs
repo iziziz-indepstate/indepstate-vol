@@ -479,6 +479,7 @@ function compactTapeContractSnapshot(snapshot) {
     executed_at: record?.executed_at ?? '',
     classification_quality: record?.classification_quality ?? 'unknown',
     complex_order_id: record?.complex_order_id ?? '',
+    condition_flag: record?.condition_flag ?? '',
     iv: record?.iv ?? '',
     _sentAt: record?._sentAt ?? '',
     _receivedAt: record?._receivedAt ?? '',

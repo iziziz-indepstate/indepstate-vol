@@ -139,6 +139,7 @@ function calculateFlowPoints(history, config = {}) {
     let matchedRecords = 0;
 
     for (const record of records) {
+      if (config.excludeFlaggedTrades === true && String(record?.condition_flag ?? '').trim()) continue;
       const bucket = recordBucket(record, allowedStrikes);
       if (!bucket) continue;
       const size = toNumber(record.size_contracts);

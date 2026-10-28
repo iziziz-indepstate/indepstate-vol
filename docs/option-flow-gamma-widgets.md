@@ -8,6 +8,16 @@ this contract. There is no cross-tab join to TradingView or another chain.
 
 ## Controls and time
 
+**Exclude flagged trades** is an optional per-widget checkbox (default: off). It removes
+trades whose `String(condition_flag ?? '').trim()` is non-empty from all Gamma metrics,
+including revalued and imbalance modes. Exclusions are reported as `condition_flag` in
+diagnostics. Observed strike ladders, anchors and underlying prices still use all records.
+See [the shared filter rules and history compatibility](tape-contract-datasource.md#flagged-trade-filter).
+
+Gamma calibration scope keys preserve the legacy format when the filter is off. When on,
+`gammaScopeKey` appends `"excludeFlaggedTrades"` to its JSON array. Calibrations must match
+this filtered scope; unfiltered calibrations cannot confirm filtered flow.
+
 Defaults: Executed Gamma, Total, Dynamic ATM ±3 observed strikes, Session from 09:30
 America/New_York, and all signed trade gamma. The chart time axis uses New York time.
 Runtime timestamps and time-anchor inputs use absolute ISO timestamps with `Z` or a UTC offset.

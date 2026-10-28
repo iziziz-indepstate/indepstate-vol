@@ -9,6 +9,38 @@ import {
   optionFlowTickWidget
 } from '../src/renderer/widgets/option-flow-tick-widget.js';
 import { createWidgetCard } from '../src/renderer/widgets/widget-renderers.js';
+import { trimSnapshotForWidgets } from '../src/shared/snapshot-trim.mjs';
+
+test('flag filtering recalculates both TICK widgets across display modes and preserves market context', () => {
+  const rows = [undefined, null, '', '   ', 'SPREAD', 0, false].map((condition_flag, i) =>
+    record('CALL', 'BUY', 1, 100, { condition_flag, underlying_price: 100, trade_id_sequence: String(i) }));
+  // A flagged trade remains the source of the nearest observed strike and spot.
+  const context = record('PUT', 'BUY', 50, 105, { condition_flag: 'X', underlying_price: 105 });
+  const h = [snapshot('2026-10-12T10:00:00Z', [...rows, context]),
+    snapshot('2026-10-12T10:00:30Z', [record('CALL', 'BUY', 2, 100)])];
+  const compact = h.map((s) => trimSnapshotForWidgets(s, { widgets: [] }));
+  assert.equal(compact[0].tape.records[4].condition_flag, 'SPREAD');
+  for (const definition of [optionFlowTickWidget, optionFlowBalancedTickWidget]) {
+    for (const flowDisplayMode of ['cumulative', 'linear', 'ma-1m', 'ma-3m', 'ma-5m', 'ma-15m']) {
+      const config = { strikeWindow: 'ALL', flowDisplayMode, excludeFlaggedTrades: true };
+      const filtered = definition.buildTimeSeries(h, { config });
+      const meta = filtered.datasets[0].pointMeta;
+      assert.equal(meta[0].increments.boughtCalls, 4);
+      assert.equal(meta[0].increments.boughtPuts, 0);
+      assert.equal(meta[0].matchedRecords, 4);
+      assert.deepEqual(meta[0].allowedStrikes, [100, 105]);
+      assert.equal(meta[1].totals.boughtCalls, 6);
+      assert.deepEqual(definition.buildTimeSeries(compact, { config }), filtered);
+      assert.equal(definition.buildTimeSeries(h, { config: { ...config, excludeFlaggedTrades: false } }).datasets[0].pointMeta[0].increments.boughtCalls, 7);
+      assert.deepEqual(definition.buildTimeSeries(h, { config }), filtered);
+    }
+  }
+  const contextOnly = snapshot(h[0].time, [context, ...rows], null);
+  const point = buildOptionFlowTickSeries([contextOnly], { strikeWindow: 0, excludeFlaggedTrades: true }).datasets[0].pointMeta[0];
+  assert.equal(point.px, 105);
+  assert.deepEqual(point.allowedStrikes, [105]);
+  assert.equal(point.matchedRecords, 0);
+});
 
 test('both widget cards restore signed and ALL values into a text ATM control', () => {
   const originalDocument = globalThis.document;

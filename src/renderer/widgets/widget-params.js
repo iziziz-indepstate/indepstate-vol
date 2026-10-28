@@ -14,6 +14,7 @@ export const WIDGET_PARAM_NAMES = Object.freeze({
   STRIKE_WINDOW: 'strikeWindow',
   FLOW_DISPLAY_MODE: 'flowDisplayMode',
   SHOW_UNDERLYING: 'showUnderlying',
+  EXCLUDE_FLAGGED_TRADES: 'excludeFlaggedTrades',
   DISPLAY_POINT_OFFSET: 'displayPointOffset',
   DISPLAY_POINT_LIMIT: 'displayPointLimit',
   EXPIRATION: 'expiration',
@@ -70,6 +71,7 @@ export function normalizeWidgetParamValue(paramName, rawValue, currentValue, opt
       return FLOW_DISPLAY_MODES.has(str) ? str : (currentValue || 'cumulative');
 
     case WIDGET_PARAM_NAMES.SHOW_UNDERLYING:
+    case WIDGET_PARAM_NAMES.EXCLUDE_FLAGGED_TRADES:
       return rawValue === true || rawValue === 'true';
 
     case WIDGET_PARAM_NAMES.MIRROR_X:
@@ -95,6 +97,7 @@ export function shouldRefreshOnWidgetParamChange(paramName) {
     || paramName === WIDGET_PARAM_NAMES.TARGET_DELTA
     || paramName === WIDGET_PARAM_NAMES.STRIKE_WINDOW
     || paramName === WIDGET_PARAM_NAMES.SHOW_UNDERLYING
+    || paramName === WIDGET_PARAM_NAMES.EXCLUDE_FLAGGED_TRADES
     || paramName === WIDGET_PARAM_NAMES.FLOW_DISPLAY_MODE
     || paramName === WIDGET_PARAM_NAMES.DISPLAY_POINT_OFFSET
     || paramName === WIDGET_PARAM_NAMES.DISPLAY_POINT_LIMIT

@@ -109,6 +109,7 @@ export const optionFlowTickWidget = {
   hideXAxisValues: false,
   optionFlow: true,
   defaultConfig: {
+    excludeFlaggedTrades: false,
     showUnderlying: false,
     strikeWindow: 3,
     flowDisplayMode: 'cumulative',
@@ -116,6 +117,7 @@ export const optionFlowTickWidget = {
     displayPointLimit: ''
   },
   controls: {
+    excludeFlaggedTrades: true,
     showUnderlying: true,
     strikeWindow: true,
     flowDisplayMode: true,
@@ -151,6 +153,7 @@ export const optionFlowBalancedTickWidget = {
   hideXAxisValues: false,
   optionFlow: true,
   defaultConfig: {
+    excludeFlaggedTrades: false,
     showUnderlying: false,
     strikeWindow: 3,
     flowDisplayMode: 'cumulative',
@@ -158,6 +161,7 @@ export const optionFlowBalancedTickWidget = {
     displayPointLimit: ''
   },
   controls: {
+    excludeFlaggedTrades: true,
     showUnderlying: true,
     strikeWindow: true,
     flowDisplayMode: true,
