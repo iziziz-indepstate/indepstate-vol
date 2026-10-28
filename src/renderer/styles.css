@@ -1149,6 +1149,22 @@ select option {
 .multi-skew-chart .u-legend { color: var(--text); font-size: 11px; }
 .multi-skew-status { font-size: 11px; color: var(--muted); margin: 6px 0; overflow-wrap: anywhere; }
 
+.widget-card-straddle-compact:not(.widget-card-collapsed) {
+  height: var(--widget-standard-height);
+  display: flex;
+  flex-direction: column;
+}
+
+.widget-card-straddle-compact:not(.widget-card-collapsed) > .widget-title {
+  flex-shrink: 0;
+}
+
+.widget-card-straddle-compact:not(.widget-card-collapsed) > .widget-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
 .straddle-controls {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));

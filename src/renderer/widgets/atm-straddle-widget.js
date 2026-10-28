@@ -413,6 +413,7 @@ export const atmStraddleWidget = {
     renderVersions.set(container, renderVersion);
     destroySparklineChart(container);
     const cfg = { ...atmStraddleWidget.defaultConfig, ...(widget.config || {}) };
+    container.closest('.widget-card')?.classList.toggle('widget-card-straddle-compact', Boolean(cfg.compact));
     container.innerHTML = `${renderControls(cfg)}<div class="straddle-status">Loading...</div>`;
     bindControls(container, widget, onConfigChange, onConfigBroadcast);
 
