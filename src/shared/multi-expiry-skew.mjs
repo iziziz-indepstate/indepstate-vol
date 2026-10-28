@@ -34,11 +34,40 @@ export function calculateMultiExpiryPoints(history, config) {
     })) }));
 }
 
+export function normalizeSkewSmoothing(value) {
+  return value === 'ma5' || value === 'ma15' ? value : 'linear';
+}
+
+export function skewRangeTime(value) {
+  return /^(?:[01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(value || '') ? (value.length === 5 ? `${value}:00` : value) : '';
+}
+
+export function skewDisplayRange(config = {}) {
+  const boundary = (date, time, end) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return end ? Infinity : -Infinity;
+    const normalizedTime = skewRangeTime(time);
+    if (normalizedTime || !end) return new Date(`${date}T${normalizedTime || '00:00:00'}`).getTime();
+    // Advance the calendar day in local time, including days with DST changes.
+    const nextDay = new Date(`${date}T00:00:00`);
+    nextDay.setDate(nextDay.getDate() + 1);
+    return nextDay.getTime() - 1;
+  };
+  const start = boundary(config.startDate, config.startTime, false);
+  const end = boundary(config.endDate, config.endTime, true);
+  // Archive files use New York dates; local boundaries can fall in adjacent files.
+  return { start, end, archive: {
+    startDate: Number.isFinite(start) ? skewSessionDate(start) : '',
+    endDate: Number.isFinite(end) ? skewSessionDate(end) : ''
+  } };
+}
+
 export function buildMultiExpirySeries(lines, config = {}) {
+  const smoothing = normalizeSkewSmoothing(config.smoothing);
+  const windowSize = smoothing === 'ma5' ? 5 : smoothing === 'ma15' ? 15 : 1;
+  const { start, end } = skewDisplayRange(config);
   const filtered = lines.map((line) => ({ ...line, points: mergeSkewPoints(line.points).filter((p) => {
-    const date = skewSessionDate(p.timestamp);
-    return (!config.startDate || date >= config.startDate.replaceAll('-', ''))
-      && (!config.endDate || date <= config.endDate.replaceAll('-', ''));
+    const timestamp = Date.parse(p.timestamp);
+    return timestamp >= start && timestamp <= end;
   }) }));
   const times = [...new Set(filtered.flatMap((l) => l.points.map((p) => Date.parse(p.timestamp))))].sort((a, b) => a - b);
   const x = times.map((t) => t / 1000);
@@ -46,8 +75,15 @@ export function buildMultiExpirySeries(lines, config = {}) {
     const byTime = new Map(line.points.map((p) => [Date.parse(p.timestamp) / 1000, p]));
     // Other expirations' timestamps do not create artificial gaps in this line.
     const meta = x.map((t) => byTime.get(t) || null);
-    return { expiration: line.expiration, meta, data: x.map((t, i) => byTime.has(t)
-      ? (Number.isFinite(meta[i].skew) ? meta[i].skew * 100 : null)
-      : undefined) };
+    const window = [];
+    const data = meta.map((point) => {
+      if (!point) return undefined;
+      if (!Number.isFinite(point.skew)) return null;
+      // Only valid observations from this expiration consume the trailing window.
+      window.push(point.skew * 100);
+      if (window.length > windowSize) window.shift();
+      return window.reduce((sum, value) => sum + value, 0) / window.length;
+    });
+    return { expiration: line.expiration, meta, data };
   }) };
 }

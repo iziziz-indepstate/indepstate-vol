@@ -5,10 +5,17 @@
 ## Controls and calculation
 
 - `D`: shared absolute delta, default `0.25`, range `0.01–0.49`.
-- `Expirations`: add or remove fixed dates. A new widget starts with no dates. Duplicate dates produce one series.
-- `From / To`: inclusive trading-date filters; empty bounds show all saved history. Trading dates use `America/New_York`, while chart times and tooltips use the computer's local timezone.
+- `Settings`: contains the `From / To` date/time filters and expiration dates. The section remembers whether it is expanded or collapsed across refreshes and app restarts. `D` and `Smoothing` remain above it.
+- Expiration dates: add or remove fixed dates. A new widget starts with no dates. Duplicate dates produce one series.
+- `From / To`: inclusive date filters in the computer's local timezone, matching chart times and tooltips. Empty bounds show all saved history.
+- Each date has an optional local time field (including seconds), with daylight saving handled automatically. Time restricts only its corresponding boundary date; without a date it has no effect. Empty times include the whole local boundary day. Boundaries are inclusive; `15:30` means exactly `15:30:00`. Date/time selections are saved per widget, affect display before smoothing and do not delete archived points. Existing saved date/time values are now interpreted as local chart time. Archive files continue using New York trading dates; loading converts the local bounds to archive dates so observations near midnight are retained.
+- `Smoothing`: `Linear` (default) shows original values; `Moving average 5 points` and `Moving average 15 points` average the current and previous valid observations independently for each expiration. The selection is saved per widget.
+
+Moving averages use up to 5 or 15 valid points, with partial windows at the beginning and no future observations. Missing values remain missing and do not consume the window. Smoothing starts at the first point within the selected `From / To` range and continues across trading-day boundaries. Chart lines, hover values and published series use the smoothed values; archived observations and series metadata retain the original values. Unknown smoothing settings fall back to `Linear`.
 
 Each expiration plots only `IV put(−D) − IV call(+D)`, in volatility points. For example, 24% put IV minus 20% call IV gives +4 vol pts. There are no separate wing-minus-ATM lines; an ATM pair is not required. The Y axis fits the plotted values with a small margin, without anchoring to zero or drawing a dedicated zero line. The chart includes a clickable legend with values on hover. Detailed contract information is retained in the archive without a text dump beneath the chart.
+
+Legend visibility is saved per widget and expiration date, so hidden lines remain hidden after updates, reordering expirations and app restarts. Hidden lines continue recording and remain included in published series data.
 
 Quote validation, strictly OTM contract selection and interpolation reuse [Skew. 0DTE](zero-dte-skew.md). There is no extrapolation or fallback to another expiration. Lines connect available values across missing observations and New York trading-day boundaries without generating replacement values. Expired dates remain available for viewing their recorded history.
 
