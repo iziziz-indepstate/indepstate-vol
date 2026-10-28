@@ -1,6 +1,6 @@
 # Skew. Multi-Expiry
 
-`Skew. Multi-Expiry` plots put-minus-call IV skew for several fixed expiration dates on a chronological time axis. It uses the selected tab's TradingView datasource and does not request chains outside that datasource's configured expiry range.
+`Skew. Multi-Expiry` plots put-minus-call IV skew for several fixed expiration dates in chronological order. Observations are spaced evenly along the X axis, compressing pauses, overnight gaps and weekends. Axis labels and hover times use the actual observation timestamps. It uses the selected tab's TradingView datasource and does not request chains outside that datasource's configured expiry range.
 
 ## Controls and calculation
 
@@ -8,9 +8,9 @@
 - `Expirations`: add or remove fixed dates. A new widget starts with no dates. Duplicate dates produce one series.
 - `From / To`: inclusive trading-date filters; empty bounds show all saved history. Trading dates use `America/New_York`, while chart times and tooltips use the computer's local timezone.
 
-Each expiration plots only `IV put(−D) − IV call(+D)`, in volatility points. For example, 24% put IV minus 20% call IV gives +4 vol pts. There are no separate wing-minus-ATM lines; an ATM pair is not required. The chart includes a zero line and a clickable legend with values on hover. Detailed contract information is retained in the archive without a text dump beneath the chart.
+Each expiration plots only `IV put(−D) − IV call(+D)`, in volatility points. For example, 24% put IV minus 20% call IV gives +4 vol pts. There are no separate wing-minus-ATM lines; an ATM pair is not required. The Y axis fits the plotted values with a small margin, without anchoring to zero or drawing a dedicated zero line. The chart includes a clickable legend with values on hover. Detailed contract information is retained in the archive without a text dump beneath the chart.
 
-Quote validation, strictly OTM contract selection and interpolation reuse [Skew. 0DTE](zero-dte-skew.md). There is no extrapolation or fallback to another expiration. Missing data and New York trading-day boundaries break the lines. Expired dates remain available for viewing their recorded history.
+Quote validation, strictly OTM contract selection and interpolation reuse [Skew. 0DTE](zero-dte-skew.md). There is no extrapolation or fallback to another expiration. Lines connect available values across missing observations and New York trading-day boundaries without generating replacement values. Expired dates remain available for viewing their recorded history.
 
 ## Recording and recovery
 
@@ -24,7 +24,7 @@ Documents/IS-VOL/Data/Skew
 
 History identity is `{ dataSourceId, symbol, expiration, targetDelta }`. The symbol comes from the datasource ticker (or root when no ticker is set). Widget IDs are excluded, so equivalent widgets share history without duplicating points. Different datasources, symbols, expirations and deltas are isolated. Returning to a previous delta restores its history; only still-available snapshots can be recalculated for a new delta.
 
-Each document stores its kind (`multi-expiry-skew-history`), version (`1`), New York trading date, identity, update timestamp and compact points. Points contain timestamp, expiration, session date, target delta, skew, put/call IV and interpolation contracts, plus any missing-data warning. Full option chains are not archived. Missing observations are retained as null-skew gap markers; they cannot replace valid points at the same timestamp.
+Each document stores its kind (`multi-expiry-skew-history`), version (`1`), New York trading date, identity, update timestamp and compact points. Points contain timestamp, expiration, session date, target delta, skew, put/call IV and interpolation contracts, plus any missing-data warning. Full option chains are not archived. Missing observations are retained as null-skew records with warnings even though the plotted lines span them; they cannot replace valid points at the same timestamp.
 
 Files are updated atomically with writes serialized per file. Points are sorted and deduplicated by timestamp; a later valid calculation can update an existing valid point. Datasource resets, history limits and removing widgets or expiration rows do not delete the archive. Reloading the app restores matching files and merges them with current points.
 

@@ -90,18 +90,15 @@ export const multiExpirySkewWidget = {
       const options = {
         ...chartSize(),
         cursor: { drag: { x: false, y: false } }, legend: { show: true },
-        scales: { x: { time: true }, y: { range: (_u, min, max) => {
-          const low = Math.min(0, min), high = Math.max(0, max), pad = Math.max((high - low) * 0.1, 0.1);
-          return [low - pad, high + pad];
+        // Ordinal spacing compresses time gaps while labels/hover keep the actual timestamps.
+        scales: { x: { time: true, distr: 2 }, y: { range: (_u, min, max) => {
+          const pad = Math.max((max - min) * 0.1, 0.1);
+          return [min - pad, max + pad];
         } } },
         axes: [{ stroke: '#a1a1aa', grid: { show: false } }, { stroke: '#a1a1aa', size: 55, label: 'Skew (vol pts)',
           values: (_u, ticks) => ticks.map((v) => `${v.toFixed(2)}`), grid: { stroke: '#ffffff18' } }],
         series: [{}, ...series.lines.map((line, i) => ({ label: line.expiration, stroke: colors[i % colors.length], width: 1.5,
-          spanGaps: false, points: { show: line.data.filter(Number.isFinite).length === 1, size: 4 } }))],
-        hooks: {
-          draw: [(u) => { const y = u.valToPos(0, 'y', true); u.ctx.save(); u.ctx.strokeStyle = '#a1a1aa'; u.ctx.setLineDash([5, 5]);
-            u.ctx.beginPath(); u.ctx.moveTo(u.bbox.left, y); u.ctx.lineTo(u.bbox.left + u.bbox.width, y); u.ctx.stroke(); u.ctx.restore(); }]
-        }
+          spanGaps: true, points: { show: line.data.filter(Number.isFinite).length === 1, size: 4 } }))]
       };
       state.chart = new UPlot(options, [series.x, ...series.lines.map((line) => line.data)], host);
       state.chart.setSize(chartSize());

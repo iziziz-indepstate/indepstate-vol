@@ -49,17 +49,43 @@ test('multiple expirations share delta, retain quotes in compact history and sho
   assert.equal(calculateMultiExpiryPoints([compact], { ...config, targetDelta: 0.01 })[0].points[0].skew, null);
 });
 
-test('missing data and New York session boundaries are gaps and range uses market date', () => {
+test('missing values retain metadata without synthetic session gaps and range uses market date', () => {
   const a = snapshot(), missing = snapshot('2026-10-26T15:05:00Z'), b = snapshot('2026-10-27T15:00:00Z');
   delete missing.byExpiry['20261030'];
   const series = buildMultiExpirySeries(calculateMultiExpiryPoints([a, missing, b], config));
-  assert.equal(series.x.length, 4);
+  assert.deepEqual(series.x, [a, missing, b].map((s) => Date.parse(s.time) / 1000));
   assert.equal(series.lines[0].data[1], null);
-  assert.equal(series.lines[0].data[2], null);
+  assert.ok(Number.isFinite(series.lines[0].data[2]));
+  assert.ok(series.lines[0].meta[1].warning);
   assert.ok(Number.isFinite(series.lines[1].data[1]));
   const filtered = buildMultiExpirySeries(calculateMultiExpiryPoints([a, b], config), { startDate: '2026-10-27', endDate: '2026-10-27' });
   assert.equal(filtered.x.length, 1);
   assert.equal(mergeSkewPoints([point()], [point(undefined, null)])[0].skew, 0.04);
+});
+
+test('six-hour, overnight and weekend pauses retain only actual timestamps across expirations', () => {
+  const timestamps = ['2026-10-23T14:00:00Z', '2026-10-23T20:00:00Z', '2026-10-24T14:00:00Z', '2026-10-26T14:00:00Z'];
+  const points = timestamps.map((timestamp, i) => point(timestamp, (i + 1) / 100));
+  const series = buildMultiExpirySeries([
+    { expiration: '20261030', points: [points[3], points[0], points[1]] },
+    { expiration: '20261106', points: [points[2], { ...points[1], skew: null, warning: 'Missing quotes' }, points[3]] }
+  ]);
+  assert.deepEqual(series.x, timestamps.map((t) => Date.parse(t) / 1000));
+  assert.deepEqual(series.lines[0].data, [1, 2, undefined, 4]);
+  assert.deepEqual(series.lines[1].data, [undefined, null, 3, 4]);
+  assert.deepEqual(series.lines[0].meta.map((p) => p?.timestamp ?? null), [timestamps[0], timestamps[1], null, timestamps[3]]);
+  assert.equal(series.lines[1].meta[1].warning, 'Missing quotes');
+});
+
+test('empty, single-point and filtered series preserve alignment and New York trading dates', () => {
+  assert.deepEqual(buildMultiExpirySeries([]), { x: [], lines: [] });
+  const points = [point('2026-10-27T01:00:00Z'), point('2026-10-27T15:00:00Z')];
+  const filtered = buildMultiExpirySeries([{ expiration: '20261030', points }], { startDate: '2026-10-26', endDate: '2026-10-26' });
+  assert.deepEqual(filtered.x, [Date.parse(points[0].timestamp) / 1000]);
+  assert.deepEqual(filtered.lines[0].data, [4]);
+  assert.deepEqual(filtered.lines[0].meta, [points[0]]);
+  const empty = buildMultiExpirySeries([{ expiration: '20261030', points }], { startDate: '2026-10-28' });
+  assert.deepEqual(empty, { x: [], lines: [{ expiration: '20261030', meta: [], data: [] }] });
 });
 
 test('store survives new sessions, upserts concurrently, separates identities and protects valid points', async (t) => {

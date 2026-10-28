@@ -41,18 +41,13 @@ export function buildMultiExpirySeries(lines, config = {}) {
       && (!config.endDate || date <= config.endDate.replaceAll('-', ''));
   }) }));
   const times = [...new Set(filtered.flatMap((l) => l.points.map((p) => Date.parse(p.timestamp))))].sort((a, b) => a - b);
-  const timeSet = new Set(times);
-  const x = [];
-  times.forEach((t, i) => {
-    if (i && skewSessionDate(t) !== skewSessionDate(times[i - 1])) x.push((t + times[i - 1]) / 2000);
-    x.push(t / 1000);
-  });
+  const x = times.map((t) => t / 1000);
   return { x, lines: filtered.map((line) => {
     const byTime = new Map(line.points.map((p) => [Date.parse(p.timestamp) / 1000, p]));
     // Other expirations' timestamps do not create artificial gaps in this line.
     const meta = x.map((t) => byTime.get(t) || null);
     return { expiration: line.expiration, meta, data: x.map((t, i) => byTime.has(t)
       ? (Number.isFinite(meta[i].skew) ? meta[i].skew * 100 : null)
-      : timeSet.has(t * 1000) ? undefined : null) };
+      : undefined) };
   }) };
 }
