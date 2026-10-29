@@ -884,6 +884,12 @@ select option {
   margin-top: 7px;
 }
 
+.straddle-snapshot-session-hint {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
 .straddle-snapshot-line {
   display: grid;
   grid-template-columns: minmax(72px, 1fr) minmax(82px, 1fr) 28px;

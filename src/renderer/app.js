@@ -3,6 +3,7 @@ import { TradingViewProvider } from '../shared/tradingview-provider.js';
 import { TheBlockProvider } from '../shared/theblock-provider.js';
 import { getWidgetDefinition, widgetDefinitions } from './widgets/index.js';
 import { migrateWidgetTitles } from './widget-title-migrations.mjs';
+import { migrateDailyPriceWidgetConfig } from '../shared/straddle-daily-config.mjs';
 import { createWidgetCard, createWidgetChartForDefinition } from './widgets/widget-renderers.js';
 import { skewMetrics } from './widgets/metrics.js';
 import { skewHistorySession } from './skew-history.js';
@@ -1393,6 +1394,7 @@ async function renderWidgets() {
     const definition = getWidgetDefinition(widget.type);
     if (!definition) continue;
 
+    if (migrateDailyPriceWidgetConfig(widget)) persistUiState();
     if (definition.defaultConfig) {
       widget.config ||= {};
       Object.entries(definition.defaultConfig).forEach(([k, v]) => {
@@ -2728,6 +2730,9 @@ async function init() {
   const loaded = await window.appBridge.loadState();
   state.tabs = loaded.tabs || [];
   migrateWidgetTitles(state.tabs);
+  for (const tab of state.tabs) {
+    for (const widget of tab.widgets || []) migrateDailyPriceWidgetConfig(widget);
+  }
   state.activeTabId = loaded.activeTabId || state.tabs[0]?.id;
   state.historyBySource = loaded.historyBySource && typeof loaded.historyBySource === 'object'
     ? loaded.historyBySource

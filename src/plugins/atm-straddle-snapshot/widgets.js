@@ -1,8 +1,21 @@
 import { ensureUPlotRuntime } from '../../renderer/widgets/widget-renderers.js';
+import { migrateDailyPriceWidgetConfig, normalizeDailyLines, parseSessionOffset } from '../../shared/straddle-daily-config.mjs';
+export { normalizeDailyLines } from '../../shared/straddle-daily-config.mjs';
 
 const TENOR_OPTIONS = ['0DTE', '1D', '1W', '2W', '1M', '2M', '3M', '6M'];
 const SERIES_COLORS = ['#7aa2ff', '#22c55e', '#f97316', '#d946ef', '#06b6d4', '#eab308', '#fb7185'];
 const chartInstances = new WeakMap();
+const sessionTimeFormatter = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+});
+
+function sessionMinute(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  const parts = Object.fromEntries(sessionTimeFormatter.formatToParts(date).map(({ type, value }) => [type, value]));
+  return { time: `${parts.hour}:${parts.minute}`, offsetMinutes: Number(parts.hour) * 60 + Number(parts.minute) - 570 };
+}
 
 function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
@@ -49,17 +62,6 @@ function localMinute(value) {
   return `${String(dt.getHours()).padStart(2, '0')}:${String(dt.getMinutes()).padStart(2, '0')}`;
 }
 
-export function normalizeDailyLines(config = {}) {
-  const lines = Array.isArray(config.lines) ? config.lines : [];
-  const sourceLines = lines.length
-    ? lines
-    : [{ tenor: config.tenor || '0DTE', time: config.time || '16:45' }];
-  return sourceLines.map((line) => ({
-    tenor: String(line?.tenor || '0DTE').trim() || '0DTE',
-    time: normalizeTime(line?.time)
-  }));
-}
-
 function pointMeta(document, point) {
   return {
     date: document.date,
@@ -82,7 +84,7 @@ export function buildDailyPriceSeries(documents = [], config = {}) {
     for (const document of Array.isArray(documents) ? documents : []) {
       if (String(document?.identity?.tenor || '') !== line.tenor) continue;
       const match = (Array.isArray(document?.points) ? document.points : [])
-        .find((point) => localMinute(point?.time) === line.time);
+        .find((point) => sessionMinute(point?.time)?.offsetMinutes === line.offsetMinutes);
       if (!match) continue;
       if (!labelSet.has(document.date)) {
         labelSet.add(document.date);
@@ -91,13 +93,18 @@ export function buildDailyPriceSeries(documents = [], config = {}) {
       points.push({
         x: document.date,
         y: Number(match.straddlePts),
-        meta: pointMeta(document, match)
+        meta: {
+          ...pointMeta(document, match),
+          offsetMinutes: line.offsetMinutes,
+          sessionTime: sessionMinute(match.time).time,
+          sessionTimezone: 'America/New_York'
+        }
       });
     }
 
     const pointByDate = new Map(points.map((point) => [point.x, point]));
     return {
-      label: `${line.tenor} @ ${line.time}`,
+      label: `${line.tenor} @ +${line.offsetMinutes} min`,
       _pointByDate: pointByDate,
       borderColor: SERIES_COLORS[lineIdx % SERIES_COLORS.length],
       pointRadius: 3,
@@ -185,13 +192,14 @@ function controlsMarkup(config, mode) {
           ${TENOR_OPTIONS.map((option) => `<option value="${esc(option)}" ${option === line.tenor ? 'selected' : ''}>${esc(option)}</option>`).join('')}
         </select>
       </label>
-      <label>Time
-        <input data-straddle-snapshot-line-param="time" data-straddle-snapshot-line-index="${idx}" type="text" value="${esc(line.time)}" placeholder="16:45" />
+      <label>Minutes from open
+        <input data-straddle-snapshot-line-param="offsetMinutes" data-straddle-snapshot-line-index="${idx}" type="number" min="0" step="1" value="${line.offsetMinutes}" placeholder="15" />
       </label>
       <button type="button" class="icon-btn straddle-snapshot-line-remove" data-straddle-snapshot-line-remove="${idx}" title="Remove line" aria-label="Remove line">x</button>
     </div>`).join('');
     return `<details class="straddle-snapshot-controls straddle-snapshot-settings">
       <summary>Lines</summary>
+      <div class="straddle-snapshot-session-hint">Session open: 09:30 America/New_York</div>
       <div class="straddle-snapshot-lines">${rows}</div>
       <button type="button" class="secondary-btn straddle-snapshot-line-add" data-straddle-snapshot-line-add>Add line</button>
     </details>`;
@@ -223,7 +231,11 @@ function bindControls(container, widget, onConfigChange) {
     control.addEventListener('change', (evt) => {
       const index = Number(evt.target.dataset.straddleSnapshotLineIndex);
       const name = evt.target.dataset.straddleSnapshotLineParam;
-      if (writeSnapshotWidgetLineConfigValue(widget, index, name, evt.target.value)) onConfigChange?.();
+      if (writeSnapshotWidgetLineConfigValue(widget, index, name, evt.target.value)) {
+        onConfigChange?.();
+      } else if (name === 'offsetMinutes') {
+        evt.target.value = String(normalizeDailyLines(widget.config)[index]?.offsetMinutes ?? 15);
+      }
     });
   });
   container.querySelector('[data-straddle-snapshot-line-add]')?.addEventListener('click', () => {
@@ -255,14 +267,15 @@ export function writeSnapshotWidgetConfigValue(widget, name, value) {
 }
 
 export function writeSnapshotWidgetLineConfigValue(widget, index, name, value) {
-  if (!widget || !Number.isInteger(index) || !['tenor', 'time'].includes(name)) return false;
+  if (!widget || !Number.isInteger(index) || !['tenor', 'offsetMinutes'].includes(name)) return false;
+  if (name === 'offsetMinutes' && parseSessionOffset(value) === null) return false;
   widget.config ||= {};
   widget.config.lines = normalizeDailyLines(widget.config);
   if (!widget.config.lines[index]) return false;
   widget.config.lines[index] = {
     ...widget.config.lines[index],
-    [name]: name === 'time'
-      ? normalizeTime(value)
+    [name]: name === 'offsetMinutes'
+      ? parseSessionOffset(value)
       : (String(value || '0DTE').trim() || '0DTE')
   };
   delete widget.config.tenor;
@@ -274,7 +287,7 @@ export function addSnapshotWidgetLine(widget) {
   if (!widget) return false;
   widget.config ||= {};
   const lines = normalizeDailyLines(widget.config);
-  const lastLine = lines[lines.length - 1] || { tenor: '0DTE', time: '16:45' };
+  const lastLine = lines[lines.length - 1] || { tenor: '0DTE', offsetMinutes: 15 };
   widget.config.lines = [...lines, { ...lastLine }];
   delete widget.config.tenor;
   delete widget.config.time;
@@ -320,6 +333,7 @@ function chartTooltipPlugin(host, mode = 'daily') {
             ? rows.map((row) => `<span>${esc(row.date)} - ${esc(row.localMinute)} - ${fmt(row.straddlePts)} pts</span>`).join('')
             : `
               <strong>${esc(meta.date)} ${esc(meta.localMinute)}</strong>
+              <span>+${esc(meta.offsetMinutes)} min | ${esc(meta.sessionTime)} ${esc(meta.sessionTimezone)}</span>
               <span>Straddle ${fmt(meta.straddlePts)} pts</span>
               <span>ATM ${fmt(meta.atmStrike, 0)} | Spot ${fmt(meta.spot, 2)}</span>
               <span>${esc(meta.sourceFile || '')}</span>
@@ -525,6 +539,7 @@ async function loadDailyDocuments(config) {
 
 async function renderSnapshotChartWidget({ container, widget, widgetData, onConfigChange, mode }) {
   widget.config ||= {};
+  if (mode === 'daily') migrateDailyPriceWidgetConfig(widget);
   const defaultConfig = mode === 'daily' ? straddleDailyPriceWidget.defaultConfig : straddleDynamicsWidget.defaultConfig;
   const config = { ...defaultConfig, ...widget.config };
   if (mode === 'daily') config.lines = normalizeDailyLines(config);
@@ -572,7 +587,7 @@ export const straddleDailyPriceWidget = {
   gridSpan: 3,
   defaultTitle: 'Straddle. Daily Price',
   defaultConfig: {
-    lines: [{ tenor: '0DTE', time: '16:45' }]
+    lines: [{ tenor: '0DTE', offsetMinutes: 15 }]
   },
   render: (context) => renderSnapshotChartWidget({ ...context, mode: 'daily' }),
   destroy: destroyStraddleSnapshotWidget

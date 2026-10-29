@@ -265,20 +265,23 @@ Type: `straddle-daily-price`
 Controls:
 
 - collapsible `Lines` settings panel
-- each line has `Tenor` and `Time`
-- the default line is `0DTE @ 16:45`
+- each line has `Tenor` and a numeric `Minutes from open` input (integer, minimum 0)
+- session open is fixed at `09:30 America/New_York`, independent of the first saved point
+- the default line is `0DTE @ +15 min` (09:45 New York time)
 - `Add line` duplicates the last configured line
 - at least one line is kept
-- time values are plain `HH:mm` text fields
+- invalid offset edits restore the previous value; 0 selects the opening minute
 
 Behavior:
 
 - loads saved daily snapshot documents for the unique tenors used by configured lines
-- matches each line's documents by local `HH:mm`, ignoring seconds and milliseconds
+- matches each point's New York minute minus 09:30 against the configured offset, ignoring seconds and milliseconds
+- uses `America/New_York` explicitly, so US daylight saving time is handled independently of the computer's timezone and its clock changes
 - draws one dataset per configured line
 - each dataset draws one point per matched day with x = document date and y = `straddlePts`
-- skips any day/line without an exact local minute match
-- tooltip metadata includes point time, ATM strike, spot, straddle points, source file, and date
+- skips any day/line without an exact session minute match; never substitutes a later point when recording starts late
+- selects the first saved point when multiple points match the same minute
+- tooltip metadata includes point time, ATM strike, spot, straddle points, source file, date, `offsetMinutes`, `sessionTime` (New York HH:mm), and `sessionTimezone` (`America/New_York`)
 - publishes structured widget output with `type: "straddle-daily-price"`, config, warning list, document count, and rendered series
 
 Config:
@@ -287,12 +290,12 @@ Config:
 type StraddleDailyPriceConfig = {
   lines: Array<{
     tenor: string
-    time: string
+    offsetMinutes: number
   }>
 }
 ```
 
-Legacy `{ tenor, time }` configs are read as a single line and are replaced by `lines[]` after line edits.
+Legacy `{ tenor, time }` configs and `lines[].time` are migrated to `offsetMinutes: 15`, preserving tenor, line order, and count. Valid existing offsets (including 0) are retained. Obsolete `time` fields and top-level `tenor` are removed. The normalized config is stored in widget settings and saved through the normal dashboard persistence path, and is also used in the published widget output. `Add line` copies the last line's tenor and offset. Saved snapshot JSON files are unchanged; Dynamics retains its local-time controls.
 
 ### Straddle. Dynamics
 
