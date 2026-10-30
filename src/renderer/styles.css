@@ -10,6 +10,7 @@
   --widget-title-margin: 8px;
   --widget-chart-height: 240px;
   --widget-standard-height: calc(2 * var(--widget-padding) + 2px + var(--widget-title-height) + var(--widget-title-margin) + var(--widget-chart-height));
+  --straddle-compact-height: 380px;
 }
 
 * { box-sizing: border-box; }
@@ -1156,7 +1157,7 @@ select option {
 .multi-skew-status { font-size: 11px; color: var(--muted); margin: 6px 0; overflow-wrap: anywhere; }
 
 .widget-card-straddle-compact:not(.widget-card-collapsed) {
-  height: var(--widget-standard-height);
+  height: var(--straddle-compact-height);
   display: flex;
   flex-direction: column;
 }
@@ -1169,6 +1170,12 @@ select option {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.widget-card-straddle-compact:not(.widget-card-collapsed) > .widget-body::-webkit-scrollbar {
+  display: none;
 }
 
 .straddle-controls {

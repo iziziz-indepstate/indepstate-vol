@@ -19,7 +19,7 @@ The widget answers:
 - `Spot S`: optional manual reference price. It accepts a number or explicit `Auto`. When empty or set to `Auto`, the widget uses spot from the datasource (`snapshot.px`). When set to a number, this value drives ATM selection, implied move percent, and expected range.
 - `Pick`: expiry selection mode: `nearest`, `at_or_after`, or `at_or_before`.
 - `Compare`: `previous_close`, `previous_snapshot`, or `none`. The app uses stored option-chain snapshots from the current tab. If comparison data is unavailable, the widget still renders the current value and shows comparison unavailable.
-- `Compact`: dashboard-card layout with headline values only. The card keeps the standard widget height (currently 298 px) during loading, errors, and data updates. Overflow scrolls inside the body while the header stays visible. Turning Compact off restores content-based height; collapsing the card by double-clicking its header still uses the collapsed layout.
+- `Compact`: dashboard-card layout with headline values only. The card keeps a fixed height of 380 px during loading, errors, and data updates, leaving room for the usual values, price chart, and status badges. Overflow scrolls inside the body with the mouse wheel or touchpad; scrollbars are hidden and the header stays visible. Turning Compact off restores content-based height; collapsing the card by double-clicking its header still uses the collapsed layout.
 
 Optional snapshot saving is not a widget-owned body control. It is provided by the `atm-straddle-snapshot` renderer plugin as a widget header extension. Details: [ATM Straddle Snapshot Plugin](atm-straddle-snapshot-plugin.md).
 
