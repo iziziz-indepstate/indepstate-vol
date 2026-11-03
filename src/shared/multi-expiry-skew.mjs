@@ -1,5 +1,17 @@
 import { calculateZeroDteSkewPoint, normalizeSkewDelta, skewSessionDate } from './zero-dte-skew-calculations.mjs';
 
+const rthTime = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York', weekday: 'short', hour: '2-digit', minute: '2-digit',
+  second: '2-digit', fractionalSecondDigits: 3, hourCycle: 'h23'
+});
+
+function isRth(timestamp) {
+  const parts = Object.fromEntries(rthTime.formatToParts(timestamp).map(({ type, value }) => [type, value]));
+  const seconds = Number(parts.hour) * 3600 + Number(parts.minute) * 60 + Number(parts.second)
+    + Number(parts.fractionalSecond) / 1000;
+  return parts.weekday !== 'Sat' && parts.weekday !== 'Sun' && seconds >= 9.5 * 3600 && seconds <= 16 * 3600;
+}
+
 export function normalizeSkewExpirations(values) {
   return [...new Set((Array.isArray(values) ? values : []).map((v) => String(v).replaceAll('-', ''))
     .filter((v) => {
@@ -67,7 +79,7 @@ export function buildMultiExpirySeries(lines, config = {}) {
   const { start, end } = skewDisplayRange(config);
   const filtered = lines.map((line) => ({ ...line, points: mergeSkewPoints(line.points).filter((p) => {
     const timestamp = Date.parse(p.timestamp);
-    return timestamp >= start && timestamp <= end;
+    return timestamp >= start && timestamp <= end && (config.rthOnly !== true || isRth(timestamp));
   }) }));
   const times = [...new Set(filtered.flatMap((l) => l.points.map((p) => Date.parse(p.timestamp))))].sort((a, b) => a - b);
   const x = times.map((t) => t / 1000);

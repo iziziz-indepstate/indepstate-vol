@@ -122,6 +122,110 @@ test('MA skips gaps independently per expiration and restarts at the selected da
   }
 });
 
+test('RTH boundaries follow New York DST independently of the computer timezone', () => {
+  const moduleUrl = new URL('../src/shared/multi-expiry-skew.mjs', import.meta.url).href;
+  for (const timezone of ['UTC', 'Asia/Nicosia']) {
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
+      import assert from 'node:assert/strict';
+      import { buildMultiExpirySeries } from ${JSON.stringify(moduleUrl)};
+      for (const [date, offset] of [
+        ['2026-03-06', '-05:00'], ['2026-03-09', '-04:00'],
+        ['2026-03-30', '-04:00'], ['2026-07-06', '-04:00'],
+        ['2026-10-23', '-04:00'], ['2026-10-26', '-04:00'], ['2026-11-02', '-05:00']
+      ]) {
+        const points = ['00:00:00', '09:29:59.999', '09:30:00', '12:00:00', '16:00:00', '16:00:00.001', '23:59:59']
+          .map((time) => ({ timestamp: new Date(date + 'T' + time + offset).toISOString(), skew: 0.04 }));
+        const lines = [{ expiration: '20261218', points }];
+        const series = buildMultiExpirySeries(lines, { rthOnly: true });
+        assert.deepEqual(series.lines[0].meta, points.slice(2, 5), date);
+        assert.deepEqual(series.x, points.slice(2, 5).map((p) => Date.parse(p.timestamp) / 1000));
+        assert.equal(buildMultiExpirySeries(lines).x.length, points.length);
+        assert.deepEqual(buildMultiExpirySeries(lines, { rthOnly: false }), buildMultiExpirySeries(lines));
+      }
+      const weekends = ['2026-10-24T12:00:00-04:00', '2026-10-25T12:00:00-04:00']
+        .map((timestamp) => ({ timestamp, skew: 0.04 }));
+      assert.deepEqual(buildMultiExpirySeries([{ expiration: '20261218', points: weekends }], { rthOnly: true }),
+        { x: [], lines: [{ expiration: '20261218', data: [], meta: [] }] });
+    `], { env: { ...process.env, TZ: timezone }, encoding: 'utf8' });
+    assert.equal(result.status, 0, `${timezone}: ${result.stderr || result.error || result.stdout}`);
+  }
+});
+
+test('RTH intersects local bounds before smoothing and preserves alignment and raw observations', () => {
+  const points = [
+    point('2026-10-23T13:29:59Z', 99), point('2026-10-23T13:30:00Z', 1),
+    point('2026-10-23T20:00:00Z', 3), point('2026-10-23T20:00:00.001Z', 99),
+    point('2026-10-24T14:00:00Z', 99), point('2026-10-26T13:30:00Z', 5)
+  ];
+  const lines = [
+    { expiration: '20261030', points },
+    { expiration: '20261106', points: [points[0], points[2], points[5]] }
+  ];
+  const original = structuredClone(lines);
+  for (const smoothing of ['ma5', 'ma15']) {
+    const series = buildMultiExpirySeries(lines, { rthOnly: true, smoothing });
+    assert.deepEqual(series.x, [points[1], points[2], points[5]].map((p) => Date.parse(p.timestamp) / 1000));
+    assert.deepEqual(series.lines.map((l) => l.data), [[100, 200, 300], [undefined, 300, 400]]);
+    const localStart = new Date(points[2].timestamp);
+    const pad = (n) => String(n).padStart(2, '0');
+    const cut = buildMultiExpirySeries(lines, { rthOnly: true, smoothing,
+      startDate: `${localStart.getFullYear()}-${pad(localStart.getMonth() + 1)}-${pad(localStart.getDate())}`,
+      startTime: `${pad(localStart.getHours())}:${pad(localStart.getMinutes())}:${pad(localStart.getSeconds())}` });
+    assert.deepEqual(cut.lines.map((l) => l.data), [[300, 400], [300, 400]]);
+  }
+  assert.deepEqual(lines, original);
+  assert.equal(buildMultiExpirySeries(lines, { rthOnly: false }).x.length, points.length);
+});
+
+test('RTH checkbox saves booleans and restores independently per widget', async () => {
+  let onChange;
+  let saved;
+  const checkbox = { dataset: { skewSetting: 'rthOnly' }, value: 'on', checked: false,
+    addEventListener: (_event, handler) => { onChange = handler; } };
+  const container = {
+    innerHTML: '',
+    querySelectorAll: (selector) => selector === '[data-skew-setting]' ? [checkbox] : [],
+    querySelector: () => ({ addEventListener() {}, textContent: '' })
+  };
+  const instance = { config: {} };
+  const render = (widget = instance) => multiExpirySkewWidget.render({ container, widget,
+    onConfigChange: () => { saved = JSON.stringify(widget.config); } });
+  const markup = (checked) => `data-skew-setting="rthOnly" type="checkbox"${checked ? ' checked' : ''} />`;
+  assert.equal(multiExpirySkewWidget.defaultConfig.rthOnly, false);
+  await render();
+  assert.ok(container.innerHTML.includes(markup(false)));
+  assert.ok(container.innerHTML.includes('Mon–Fri, 09:30–16:00 America/New_York'));
+  for (const checked of [true, false, true]) {
+    checkbox.checked = checked;
+    onChange();
+    assert.equal(JSON.parse(saved).rthOnly, checked);
+    instance.config = JSON.parse(saved);
+    await render();
+    assert.ok(container.innerHTML.includes(markup(checked)));
+  }
+  await render({ config: {} });
+  assert.ok(container.innerHTML.includes(markup(false)));
+  await render();
+  assert.ok(container.innerHTML.includes(markup(true)));
+  multiExpirySkewWidget.destroy(container);
+});
+
+test('RTH display filtering retains all recorded and archived points', async (t) => {
+  const directory = await temporary(t);
+  const session = createSkewHistorySession(() => ({ saveSkewHistory: (payload) => store.saveSkewHistory(directory, payload) }));
+  const observations = ['2026-10-26T13:00:00Z', '2026-10-26T13:30:00Z', '2026-10-26T20:00:00.001Z'].map(snapshot);
+  await session.capture(source, [{ ...widget, config: { ...config, rthOnly: true } }], observations);
+  for (const expiration of config.expirations) {
+    const key = skewIdentity(source, expiration, config.targetDelta);
+    const archived = (await store.loadSkewHistory(directory, { identity: key })).documents.flatMap((d) => d.points);
+    assert.deepEqual(archived.map((p) => p.timestamp), observations.map((s) => new Date(s.time).toISOString()));
+    assert.deepEqual(session.points(key), archived);
+    const lines = [{ expiration, points: archived }];
+    assert.equal(buildMultiExpirySeries(lines, { rthOnly: true }).x.length, 1);
+    assert.equal(buildMultiExpirySeries(lines, { rthOnly: false }).x.length, 3);
+  }
+});
+
 test('smoothing control persists changes through the config callback and restores the selected option', async () => {
   let onChange;
   let saved;

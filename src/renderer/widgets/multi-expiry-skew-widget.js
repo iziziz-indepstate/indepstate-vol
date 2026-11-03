@@ -42,6 +42,7 @@ function controls(config) {
     ].map(([value, label]) => `<option value="${value}"${config.smoothing === value ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
     </div><details data-skew-expirations${config.expirationsExpanded !== false ? ' open' : ''}><summary>Settings</summary>
     <div class="straddle-controls">
+    <label class="straddle-checkbox" title="Mon–Fri, 09:30–16:00 America/New_York"><input data-skew-setting="rthOnly" type="checkbox"${config.rthOnly ? ' checked' : ''} /> RTH only</label>
     <label>From <input data-skew-setting="startDate" type="date" value="${esc(config.startDate)}" />
       <input data-skew-setting="startTime" type="time" step="1" aria-label="From time (local)" title="Local chart time; requires From date" value="${esc(config.startTime)}" /></label>
     <label>To <input data-skew-setting="endDate" type="date" value="${esc(config.endDate)}" />
@@ -60,7 +61,7 @@ export function destroyMultiExpirySkewWidget(container) {
 
 export const multiExpirySkewWidget = {
   type: 'multi-expiry-skew', defaultTitle: 'Skew. Multi-Expiry', mode: 'table', gridSpan: 3, heightUnits: 2, requiresHistory: true,
-  defaultConfig: { targetDelta: 0.25, expirations: [], hiddenExpirations: [], expirationsExpanded: true, startDate: '', endDate: '', startTime: '', endTime: '', smoothing: 'linear' },
+  defaultConfig: { targetDelta: 0.25, expirations: [], hiddenExpirations: [], expirationsExpanded: true, startDate: '', endDate: '', startTime: '', endTime: '', smoothing: 'linear', rthOnly: false },
   destroy: destroyMultiExpirySkewWidget,
   async render({ container, source, snapshot, history, widget, widgetData, onConfigChange, isCurrent = () => true }) {
     destroyMultiExpirySkewWidget(container);
@@ -72,6 +73,7 @@ export const multiExpirySkewWidget = {
     config.hiddenExpirations = normalizeSkewExpirations(config.hiddenExpirations);
     config.targetDelta = normalizeSkewDelta(config.targetDelta);
     config.smoothing = normalizeSkewSmoothing(config.smoothing);
+    config.rthOnly = config.rthOnly === true;
     container.innerHTML = `${controls(config)}<div data-skew-status class="multi-skew-status">Loading history…</div><div data-skew-chart class="multi-skew-chart"></div>`;
     const change = () => { widget.config = { ...config }; onConfigChange?.(); };
     const expirationDetails = container.querySelector('[data-skew-expirations]');
@@ -82,7 +84,7 @@ export const multiExpirySkewWidget = {
     });
     container.querySelectorAll('[data-skew-setting]').forEach((input) => input.addEventListener('change', () => {
       const key = input.dataset.skewSetting;
-      config[key] = key === 'targetDelta' ? normalizeSkewDelta(input.value) : input.value;
+      config[key] = key === 'rthOnly' ? input.checked : key === 'targetDelta' ? normalizeSkewDelta(input.value) : input.value;
       change();
     }));
     container.querySelectorAll('[data-skew-expiry]').forEach((input) => input.addEventListener('change', () => {
