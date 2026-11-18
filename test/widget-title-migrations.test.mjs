@@ -4,6 +4,8 @@ import { migrateWidgetTitles } from '../src/renderer/widget-title-migrations.mjs
 import { getWidgetDefinition } from '../src/renderer/widgets/index.js';
 
 const renames = [
+  ['realized-correlation', 'Realized Correlation', 'COR. Realized Correlation'],
+  ['correlation-har', 'Correlation HAR', 'COR. Correlation HAR'],
   ['zero-dte-skew', '0DTE Skew', 'Skew. 0DTE'],
   ['multi-expiry-skew', 'Multi-Expiry Skew', 'Skew. Multi-Expiry'],
   ['atm-straddle', 'Straddle ATM', 'Straddle. ATM'],

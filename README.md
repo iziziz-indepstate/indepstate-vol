@@ -4,6 +4,8 @@ Electron dashboard for volatility analytics with pluggable data providers and pl
 
 The standalone `SPX IV / RV` widget supports interchangeable local, FRED, Cboe, and Yahoo market-data providers. It can run in local, remote, or hybrid cached mode for VIX9D vs SPX RV 9D, VIX vs SPX RV 30D, and custom horizons.
 
+`COR. Correlation HAR` forecasts the next 21 sessions of realized correlation using RC5, RC10, RC21 and EWMA10, with persistent issued forecasts and subsequent outcomes. See [COR. Correlation HAR](docs/correlation-har.md).
+
 ## Run
 
 ```bash
@@ -46,7 +48,7 @@ npm start
 - **Skew. Multi-Expiry**: skew lines for fixed expiration dates with shared delta and automatic history persistence across restarts and datasource resets. Details: [Skew. Multi-Expiry](docs/multi-expiry-skew.md).
 - **Spread Optimizer**: table widget that ranks candidate vertical spreads by configurable risk, liquidity, and regime inputs.
 - **SPX IV / RV**: standalone table and chart widget for implied-vs-realized volatility comparisons.
-- **Realized Correlation**: standalone RC5/RC10/RC21 and configurable EWMA charts for the current Top 50 IVV basket, with COR1M and correlation spread. Details: [Realized Correlation](docs/realized-correlation.md).
+- **COR. Realized Correlation**: standalone RC5/RC10/RC21 and configurable EWMA charts for the current Top 50 IVV basket, with COR1M and correlation spread. Details: [COR. Realized Correlation](docs/realized-correlation.md).
 - **Flow. TICK**: four-line option-flow chart for bought/sold calls and puts from `tape-contract` snapshots, filtered by observed strikes around tape `underlying_price`, with cumulative/trailing MA modes and display-only point window controls. Details: [Tape Contract Datasource](docs/tape-contract-datasource.md).
 - **Flow. Balanced TICK**: four-line option-flow balance chart for calls, puts, directional balance (`Calls balance - Puts balance`), and imbalance ratio over the same ATM strike window as `Flow. TICK`, with cumulative/trailing MA modes and display-only point window controls. Details: [Tape Contract Datasource](docs/tape-contract-datasource.md).
 

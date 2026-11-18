@@ -1,6 +1,6 @@
-# Realized Correlation
+# COR. Realized Correlation
 
-`Realized Correlation` is an independent widget with its own daily market data. Add it from the dashboard widget picker; it does not require a TradingView, The Block, or Tape Contract datasource.
+`COR. Realized Correlation` is an independent widget with its own daily market data. Add it from the dashboard widget picker; it does not require a TradingView, The Block, or Tape Contract datasource.
 
 ## Display and controls
 

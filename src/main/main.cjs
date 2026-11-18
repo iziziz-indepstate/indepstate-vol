@@ -4,6 +4,7 @@ const { loadState, saveUiState } = require('./store.cjs');
 const { loadLocalMarketSeries } = require('./local-market-data.cjs');
 const { createMarketDataService } = require('./market-data-providers.cjs');
 const { createRealizedCorrelationService } = require('./realized-correlation-provider.cjs');
+const { createCorrelationHarService, createHarScheduler } = require('./correlation-har-service.cjs');
 const { createTradingCalendarProvider } = require('./trading-calendar-provider.cjs');
 const { startAutoUpdater } = require('./auto-updater.cjs');
 const { startMcpServer } = require('./mcp-server.cjs');
@@ -27,6 +28,7 @@ let scheduledStateSavePromise = Promise.resolve();
 let dataSourceLifecycleRegistry = null;
 let dataSourceLifecycleTimer = null;
 let mainPluginCleanup = null;
+let harScheduler = null;
 let rendererCommandSeq = 0;
 const pendingRendererCommands = new Map();
 const rendererRunningTabIds = new Set();
@@ -107,6 +109,7 @@ function profilerEnabledFromLaunch() {
 
 function savePersistedStateNow(detail = {}) {
   if (!persistedState) return Promise.resolve();
+  harScheduler?.sync();
   return profiler.measure('state:save-scheduled', detail, () => saveUiState(app.getPath('userData'), persistedState));
 }
 
@@ -243,6 +246,11 @@ app.whenReady().then(async () => {
   const tradingCalendarProvider = createTradingCalendarProvider({
     cacheDir: path.join(app.getPath('userData'), 'trading-calendar-cache')
   });
+  const harService = createCorrelationHarService({ directory: path.join(app.getPath('documents'), 'IS-VOL', 'Data', 'Correlation-HAR'),
+    getMarketHolidays: (date) => tradingCalendarProvider.getMarketHolidays(date) });
+  harScheduler = createHarScheduler({ service: harService,
+    getTabs: () => (persistedState || loadState(app.getPath('userData'), DEFAULT_STATE)).tabs });
+  harScheduler.sync();
   dataSourceLifecycleRegistry = createDataSourceLifecycleRegistry({
     command: sendDataSourceCommandToRenderer,
     patchConfig: patchDataSourceConfig,
@@ -265,6 +273,7 @@ app.whenReady().then(async () => {
         : (current.historyBySource || {})
     };
     cancelScheduledStateSave();
+    harScheduler.sync();
     await profiler.measure('state:save', {
       tabs: Array.isArray(persistedState?.tabs) ? persistedState.tabs.length : 0
     }, () => saveUiState(app.getPath('userData'), persistedState));
@@ -339,6 +348,7 @@ app.whenReady().then(async () => {
       tabs: Array.isArray(uiState?.tabs) ? uiState.tabs : current.tabs
     };
     cancelScheduledStateSave();
+    harScheduler.sync();
     await profiler.measure('state:save-ui', {
       tabs: Array.isArray(persistedState?.tabs) ? persistedState.tabs.length : 0
     }, () => saveUiState(app.getPath('userData'), persistedState));
@@ -416,6 +426,7 @@ app.whenReady().then(async () => {
       startDate: params?.startDate, endDate: params?.endDate
     }, () => correlationService.getInputs(params || {}));
   });
+  ipcMain.handle('market-data:get-correlation-har-state', (_evt, params) => harService.getState({ refresh: params?.refresh === true }));
 
   ipcMain.handle('tradingview:get-snapshot', async (_evt, params) => {
     const { TradingViewProvider } = await import('../shared/tradingview-provider.js');
@@ -455,6 +466,7 @@ app.whenReady().then(async () => {
 });
 
 app.on('before-quit', (event) => {
+  harScheduler?.stop();
   if (scheduledStateSaveTimer) {
     event.preventDefault();
     flushScheduledStateSave()

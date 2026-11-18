@@ -59,7 +59,7 @@ function dataset(label, values, color) {
 
 export const realizedCorrelationWidget = {
   type: 'realized-correlation',
-  defaultTitle: 'Realized Correlation',
+  defaultTitle: 'COR. Realized Correlation',
   mode: 'table',
   gridSpan: 6,
   refreshOnDashboardRefresh: false,

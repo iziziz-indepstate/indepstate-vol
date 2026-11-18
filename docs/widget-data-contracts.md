@@ -274,7 +274,7 @@ Option-side balances are calculated as bought contracts minus sold contracts for
 
 ## Implementation Notes
 
-`Realized Correlation` publishes its current-basket RC5/RC10/RC21, configurable RC EWMA (`rcEwma`, default half-life 10 sessions), aligned COR1M and spread series, dated weights, EWMA method parameters and source metadata. Its type is `realized-correlation`; status is `ok`, `partial` or `error`. See the complete [calculation and data contract](realized-correlation.md#ipc-and-published-output).
+`COR. Realized Correlation` publishes its current-basket RC5/RC10/RC21, configurable RC EWMA (`rcEwma`, default half-life 10 sessions), aligned COR1M and spread series, dated weights, EWMA method parameters and source metadata. Its type is `realized-correlation`; status is `ok`, `partial` or `error`. See the complete [calculation and data contract](realized-correlation.md#ipc-and-published-output).
 
 - The widget data store is local to the renderer runtime.
 - `publishWidgetData` notifies plugin data subscribers after updating the widget data store and MCP runtime store.
@@ -298,3 +298,7 @@ Renderer hints are `drawOrder: -1`, `hiddenInLegend: true` and `alwaysVisible: t
 the checkbox controls the background line and its independent right axis.
 Original point timestamps remain unchanged; local `HH:mm:ss` labels are a
 presentation concern. See [chart behavior](tape-contract-datasource.md#underlying-price-overlay-and-time-axis).
+
+## COR. Correlation HAR
+
+`COR. Correlation HAR` publishes its latest issued 21-session forecast, archived predictions, subsequent facts, OLS parameters and data-source status as `correlation-har`. See [COR. Correlation HAR](correlation-har.md#ipc-and-widget-output).
