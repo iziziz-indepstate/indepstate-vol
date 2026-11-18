@@ -17,6 +17,7 @@ function dateOf(timestamp) {
 }
 function validPoint(p) {
   return p && Number.isFinite(Date.parse(p.timestamp)) && (p.skew === null || Number.isFinite(p.skew))
+    && ['atmIV', 'atmStrike', 'putWing', 'callWing'].every((key) => p[key] == null || Number.isFinite(p[key]))
     && ['put', 'call'].every((side) => p[side] == null ||
       ((p[side].iv === null || Number.isFinite(p[side].iv)) && Array.isArray(p[side].contracts)
         && p[side].contracts.every((q) => q && ['delta', 'strike', 'iv'].every((key) => Number.isFinite(q[key])))));
@@ -26,6 +27,7 @@ function validDocument(document) {
     && Array.isArray(document.points) && document.points.every((p) => validPoint(p) && dateOf(p.timestamp) === document.date);
 }
 async function saveSkewHistory(directory, payload) {
+  const { mergeSkewPoint } = await import('../shared/multi-expiry-skew.mjs');
   const identity = identityOf(payload.identity);
   const groups = new Map();
   for (const point of payload.points || []) {
@@ -46,7 +48,7 @@ async function saveSkewHistory(directory, payload) {
       const merged = new Map((existing?.points || []).map((p) => [Date.parse(p.timestamp), p]));
       for (const p of points) {
         const t = Date.parse(p.timestamp);
-        if (!merged.has(t) || Number.isFinite(p.skew) || !Number.isFinite(merged.get(t).skew)) merged.set(t, p);
+        merged.set(t, mergeSkewPoint(merged.get(t), p));
       }
       const document = { kind, version: 1, date, identity, updatedAt: new Date().toISOString(),
         points: [...merged.values()].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp)) };

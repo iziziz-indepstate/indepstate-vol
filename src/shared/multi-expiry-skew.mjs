@@ -5,11 +5,16 @@ const rthTime = new Intl.DateTimeFormat('en-US', {
   second: '2-digit', fractionalSecondDigits: 3, hourCycle: 'h23'
 });
 
-function isRth(timestamp) {
+export function normalizeRthStartOffset(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(390, Math.max(0, Math.trunc(number))) : 0;
+}
+
+function isRth(timestamp, startOffset = 0) {
   const parts = Object.fromEntries(rthTime.formatToParts(timestamp).map(({ type, value }) => [type, value]));
   const seconds = Number(parts.hour) * 3600 + Number(parts.minute) * 60 + Number(parts.second)
     + Number(parts.fractionalSecond) / 1000;
-  return parts.weekday !== 'Sat' && parts.weekday !== 'Sun' && seconds >= 9.5 * 3600 && seconds <= 16 * 3600;
+  return parts.weekday !== 'Sat' && parts.weekday !== 'Sun' && seconds >= 9.5 * 3600 + startOffset * 60 && seconds <= 16 * 3600;
 }
 
 export function normalizeSkewExpirations(values) {
@@ -26,12 +31,41 @@ export function skewIdentity(source, expiration, targetDelta) {
     expiration, targetDelta: normalizeSkewDelta(targetDelta) };
 }
 
+export function normalizeSkewSide(value) {
+  return ['put', 'call', 'both', 'spread'].includes(value) ? value : 'spread';
+}
+
+export function migrateMultiExpirySkewConfig(widget) {
+  if (widget?.type !== 'multi-expiry-skew') return false;
+  widget.config ||= {};
+  let changed = false;
+  if (widget.config.side == null) { widget.config.side = 'spread'; changed = true; }
+  if (!Array.isArray(widget.config.hiddenSeries)) {
+    widget.config.hiddenSeries = normalizeSkewExpirations(widget.config.hiddenExpirations).map((expiry) => `${expiry}:spread`);
+    changed = true;
+  }
+  return changed;
+}
+
+// Preserve each valid measurement independently when backfilling partial snapshots.
+export function mergeSkewPoint(previous, incoming) {
+  if (!previous) return incoming;
+  const merged = { ...previous, ...incoming };
+  for (const key of ['skew', 'atmIV', 'atmStrike', 'putWing', 'callWing']) {
+    if (!Number.isFinite(incoming[key]) && Number.isFinite(previous[key])) merged[key] = previous[key];
+  }
+  for (const side of ['put', 'call']) {
+    if (!Number.isFinite(incoming[side]?.iv) && Number.isFinite(previous[side]?.iv)) merged[side] = previous[side];
+  }
+  return merged;
+}
+
 export function mergeSkewPoints(...groups) {
   const points = new Map();
   for (const p of groups.flat()) {
     const time = Date.parse(p?.timestamp);
     if (!Number.isFinite(time)) continue;
-    if (!points.has(time) || Number.isFinite(p.skew) || !Number.isFinite(points.get(time).skew)) points.set(time, p);
+    points.set(time, mergeSkewPoint(points.get(time), p));
   }
   return [...points.values()].sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
 }
@@ -39,10 +73,10 @@ export function mergeSkewPoints(...groups) {
 export function calculateMultiExpiryPoints(history, config) {
   return normalizeSkewExpirations(config.expirations).map((expiration) => ({ expiration,
     points: mergeSkewPoints((history || []).map((s) => {
-      const { timestamp, sessionDate, targetDelta, skew, put, call, warning } = calculateZeroDteSkewPoint(s, { expiration, targetDelta: config.targetDelta });
+      const { timestamp, sessionDate, targetDelta, skew, put, call, atmIV, atmStrike, putWing, callWing, warning } = calculateZeroDteSkewPoint(s, { expiration, targetDelta: config.targetDelta });
       return { timestamp: Number.isFinite(new Date(timestamp ?? '').getTime()) ? new Date(timestamp).toISOString() : null,
-        expiration, sessionDate, targetDelta, skew, put, call,
-        warning: warning.split('; ').filter((message) => message !== 'No valid ATM pair').join('; ') };
+        expiration, sessionDate, targetDelta, skew, put, call, atmIV, atmStrike, putWing, callWing,
+        warning };
     })) }));
 }
 
@@ -64,8 +98,9 @@ export function skewDisplayRange(config = {}) {
     nextDay.setDate(nextDay.getDate() + 1);
     return nextDay.getTime() - 1;
   };
-  const start = boundary(config.startDate, config.startTime, false);
-  const end = boundary(config.endDate, config.endTime, true);
+  // RTH uses a daily offset from the New York opening; dates bound local calendar days.
+  const start = boundary(config.startDate, config.rthOnly === true ? '' : config.startTime, false);
+  const end = boundary(config.endDate, config.rthOnly === true ? '' : config.endTime, true);
   // Archive files use New York dates; local boundaries can fall in adjacent files.
   return { start, end, archive: {
     startDate: Number.isFinite(start) ? skewSessionDate(start) : '',
@@ -77,25 +112,31 @@ export function buildMultiExpirySeries(lines, config = {}) {
   const smoothing = normalizeSkewSmoothing(config.smoothing);
   const windowSize = smoothing === 'ma5' ? 5 : smoothing === 'ma15' ? 15 : 1;
   const { start, end } = skewDisplayRange(config);
+  const startOffset = normalizeRthStartOffset(config.rthStartOffsetMinutes);
   const filtered = lines.map((line) => ({ ...line, points: mergeSkewPoints(line.points).filter((p) => {
     const timestamp = Date.parse(p.timestamp);
-    return timestamp >= start && timestamp <= end && (config.rthOnly !== true || isRth(timestamp));
+    if (timestamp < start || timestamp > end) return false;
+    if (config.rthOnly !== true) return true;
+    return isRth(timestamp, startOffset);
   }) }));
   const times = [...new Set(filtered.flatMap((l) => l.points.map((p) => Date.parse(p.timestamp))))].sort((a, b) => a - b);
   const x = times.map((t) => t / 1000);
-  return { x, lines: filtered.map((line) => {
+  const side = normalizeSkewSide(config.side);
+  const metrics = side === 'both' ? ['put', 'call'] : [side];
+  return { x, lines: filtered.flatMap((line) => metrics.map((metric) => {
     const byTime = new Map(line.points.map((p) => [Date.parse(p.timestamp) / 1000, p]));
     // Other expirations' timestamps do not create artificial gaps in this line.
     const meta = x.map((t) => byTime.get(t) || null);
     const window = [];
     const data = meta.map((point) => {
       if (!point) return undefined;
-      if (!Number.isFinite(point.skew)) return null;
+      const value = point[metric === 'spread' ? 'skew' : `${metric}Wing`];
+      if (!Number.isFinite(value)) return null;
       // Only valid observations from this expiration consume the trailing window.
-      window.push(point.skew * 100);
+      window.push(value * 100);
       if (window.length > windowSize) window.shift();
       return window.reduce((sum, value) => sum + value, 0) / window.length;
     });
-    return { expiration: line.expiration, meta, data };
-  }) };
+    return { id: `${line.expiration}:${metric}`, metric, expiration: line.expiration, meta, data };
+  })) };
 }

@@ -1,6 +1,6 @@
 import { ensureUPlotRuntime } from './widget-renderers.js';
 import { normalizeSkewDelta } from '../../shared/zero-dte-skew-calculations.mjs';
-import { buildMultiExpirySeries, mergeSkewPoints, normalizeSkewExpirations, normalizeSkewSmoothing, skewIdentity, skewDisplayRange } from '../../shared/multi-expiry-skew.mjs';
+import { buildMultiExpirySeries, mergeSkewPoints, normalizeSkewExpirations, normalizeSkewSmoothing, skewIdentity, skewDisplayRange, normalizeSkewSide, migrateMultiExpirySkewConfig, normalizeRthStartOffset } from '../../shared/multi-expiry-skew.mjs';
 import { skewHistorySession } from '../skew-history.js';
 
 const states = new WeakMap();
@@ -10,9 +10,14 @@ const dateInput = (v) => /^\d{8}$/.test(v || '') ? `${v.slice(0, 4)}-${v.slice(4
 
 export function multiExpiryVisibilityOptions(lines, config, change, current = () => true) {
   let pending = false;
+  const hiddenSeries = () => config.hiddenSeries || (config.hiddenExpirations || []).map((expiry) => `${expiry}:spread`);
+  const id = (line) => line.id || `${line.expiration}:${line.metric || 'spread'}`;
+  const expirations = [...new Set(lines.map((line) => line.expiration))];
   return {
-    series: [{}, ...lines.map((line, i) => ({ label: line.expiration, stroke: colors[i % colors.length], width: 1.5,
-      show: !config.hiddenExpirations.includes(line.expiration),
+    series: [{}, ...lines.map((line) => ({ label: `${line.expiration} ${ { put: 'Put', call: 'Call', spread: 'Put − Call' }[line.metric || 'spread']}`,
+      stroke: colors[expirations.indexOf(line.expiration) % colors.length], width: 1.5,
+      dash: line.metric === 'call' ? [6, 4] : [],
+      show: !hiddenSeries().includes(id(line)),
       spanGaps: true, points: { show: line.data.filter(Number.isFinite).length === 1, size: 4 } }))],
     hooks: { setSeries: [(plot, _index, options) => {
       if (typeof options.show !== 'boolean' || pending || !current()) return;
@@ -21,13 +26,13 @@ export function multiExpiryVisibilityOptions(lines, config, change, current = ()
       queueMicrotask(() => {
         pending = false;
         if (!current()) return;
-        const hidden = new Set(config.hiddenExpirations);
+        const hidden = new Set(hiddenSeries());
         lines.forEach((line, i) => {
-          if (plot.series[i + 1].show === false) hidden.add(line.expiration);
-          else hidden.delete(line.expiration);
+          if (plot.series[i + 1].show === false) hidden.add(id(line));
+          else hidden.delete(id(line));
         });
-        if (hidden.size === config.hiddenExpirations.length && config.hiddenExpirations.every((expiry) => hidden.has(expiry))) return;
-        config.hiddenExpirations = [...hidden];
+        if (hidden.size === hiddenSeries().length && hiddenSeries().every((key) => hidden.has(key))) return;
+        config.hiddenSeries = [...hidden];
         change();
       });
     }] }
@@ -37,16 +42,20 @@ export function multiExpiryVisibilityOptions(lines, config, change, current = ()
 function controls(config) {
   return `<div class="straddle-controls">
     <label>D <input data-skew-setting="targetDelta" type="number" min="0.01" max="0.49" step="0.01" value="${config.targetDelta}" /></label>
+    <label>Side <select data-skew-setting="side">${[
+      ['put', 'Put'], ['call', 'Call'], ['both', 'Both'], ['spread', 'Put − Call']
+    ].map(([value, label]) => `<option value="${value}"${config.side === value ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
     <label>Smoothing <select data-skew-setting="smoothing">${[
       ['linear', 'Linear'], ['ma5', 'Moving average 5 points'], ['ma15', 'Moving average 15 points']
     ].map(([value, label]) => `<option value="${value}"${config.smoothing === value ? ' selected' : ''}>${label}</option>`).join('')}</select></label>
     </div><details data-skew-expirations${config.expirationsExpanded !== false ? ' open' : ''}><summary>Settings</summary>
     <div class="straddle-controls">
     <label class="straddle-checkbox" title="Mon–Fri, 09:30–16:00 America/New_York"><input data-skew-setting="rthOnly" type="checkbox"${config.rthOnly ? ' checked' : ''} /> RTH only</label>
+    ${config.rthOnly ? `<label title="Daily offset from 09:30 America/New_York">RTH start + (min) <input data-skew-setting="rthStartOffsetMinutes" type="number" min="0" max="390" step="1" value="${config.rthStartOffsetMinutes}" /></label>` : ''}
     <label>From <input data-skew-setting="startDate" type="date" value="${esc(config.startDate)}" />
-      <input data-skew-setting="startTime" type="time" step="1" aria-label="From time (local)" title="Local chart time; requires From date" value="${esc(config.startTime)}" /></label>
+      ${config.rthOnly ? '' : `<input data-skew-setting="startTime" type="time" step="1" aria-label="From time (local)" title="Local chart time; requires From date" value="${esc(config.startTime)}" />`}</label>
     <label>To <input data-skew-setting="endDate" type="date" value="${esc(config.endDate)}" />
-      <input data-skew-setting="endTime" type="time" step="1" aria-label="To time (local)" title="Local chart time; requires To date" value="${esc(config.endTime)}" /></label>
+      ${config.rthOnly ? '' : `<input data-skew-setting="endTime" type="time" step="1" aria-label="To time (local)" title="Local chart time; requires To date" value="${esc(config.endTime)}" />`}</label>
     </div><div class="multi-skew-expirations">
     ${config.expirations.map((expiry, i) => `<div class="multi-skew-expiry"><label>Exp <input data-skew-expiry="${i}" type="date" value="${esc(dateInput(expiry))}" /></label><button type="button" class="btn btn-compact" data-skew-remove="${i}" aria-label="Remove expiration">×</button></div>`).join('')}
     <button type="button" class="btn btn-compact" data-skew-add>Add expiration</button></div></details>`;
@@ -61,19 +70,24 @@ export function destroyMultiExpirySkewWidget(container) {
 
 export const multiExpirySkewWidget = {
   type: 'multi-expiry-skew', defaultTitle: 'Skew. Multi-Expiry', mode: 'table', gridSpan: 3, heightUnits: 2, requiresHistory: true,
-  defaultConfig: { targetDelta: 0.25, expirations: [], hiddenExpirations: [], expirationsExpanded: true, startDate: '', endDate: '', startTime: '', endTime: '', smoothing: 'linear', rthOnly: false },
+  defaultConfig: { side: 'both', rthStartOffsetMinutes: 0, hiddenSeries: [], targetDelta: 0.25, expirations: [], hiddenExpirations: [], expirationsExpanded: true, startDate: '', endDate: '', startTime: '', endTime: '', smoothing: 'linear', rthOnly: false },
   destroy: destroyMultiExpirySkewWidget,
   async render({ container, source, snapshot, history, widget, widgetData, onConfigChange, isCurrent = () => true }) {
     destroyMultiExpirySkewWidget(container);
     const state = {};
     states.set(container, state);
     const current = () => states.get(container) === state && isCurrent();
+    widget.config ||= {};
+    migrateMultiExpirySkewConfig({ type: 'multi-expiry-skew', config: widget.config });
     const config = { ...multiExpirySkewWidget.defaultConfig, ...widget.config };
+    config.side = normalizeSkewSide(config.side);
+    config.hiddenSeries = [...config.hiddenSeries];
     config.expirations = Array.isArray(config.expirations) ? [...config.expirations] : [];
     config.hiddenExpirations = normalizeSkewExpirations(config.hiddenExpirations);
     config.targetDelta = normalizeSkewDelta(config.targetDelta);
     config.smoothing = normalizeSkewSmoothing(config.smoothing);
     config.rthOnly = config.rthOnly === true;
+    config.rthStartOffsetMinutes = normalizeRthStartOffset(config.rthStartOffsetMinutes);
     container.innerHTML = `${controls(config)}<div data-skew-status class="multi-skew-status">Loading history…</div><div data-skew-chart class="multi-skew-chart"></div>`;
     const change = () => { widget.config = { ...config }; onConfigChange?.(); };
     const expirationDetails = container.querySelector('[data-skew-expirations]');
@@ -84,7 +98,7 @@ export const multiExpirySkewWidget = {
     });
     container.querySelectorAll('[data-skew-setting]').forEach((input) => input.addEventListener('change', () => {
       const key = input.dataset.skewSetting;
-      config[key] = key === 'rthOnly' ? input.checked : key === 'targetDelta' ? normalizeSkewDelta(input.value) : input.value;
+      config[key] = key === 'rthOnly' ? input.checked : key === 'targetDelta' ? normalizeSkewDelta(input.value) : key === 'rthStartOffsetMinutes' ? normalizeRthStartOffset(input.value) : input.value;
       change();
     }));
     container.querySelectorAll('[data-skew-expiry]').forEach((input) => input.addEventListener('change', () => {
@@ -119,11 +133,24 @@ export const multiExpirySkewWidget = {
         const saveError = skewHistorySession.error(identity);
         if (saveError) warnings.push(`Save failed (will retry): ${saveError}`);
         const points = mergeSkewPoints(archived, skewHistorySession.points(identity));
-        if (points.at(-1)?.warning) warnings.push(`${expiration}: ${points.at(-1).warning}`);
+        const latest = points.at(-1);
+        if (latest?.warning) {
+          const relevant = latest.warning.split('; ').filter((message) =>
+            message === 'No valid ATM pair' ? config.side !== 'spread'
+              : message === 'No put delta bracket' ? config.side !== 'call'
+                : message === 'No call delta bracket' ? config.side !== 'put' : true);
+          if (relevant.length) warnings.push(`${expiration}: ${relevant.join('; ')}`);
+        }
         return { expiration, points };
       }));
       if (!current()) return;
       const series = buildMultiExpirySeries(lines, config);
+      if (config.side !== 'spread') {
+        const missingAtm = new Set(series.lines.flatMap((line) => line.meta
+          .filter((p) => p && !Number.isFinite(p.atmIV))
+          .map((p) => `${line.expiration}:${p.timestamp}`)));
+        if (missingAtm.size) warnings.push(`${missingAtm.size} observations lack ATM IV; wing history requires original snapshots`);
+      }
       const pointCount = series.lines.reduce((n, l) => n + l.data.filter(Number.isFinite).length, 0);
       status.textContent = `${pointCount} points${warnings.length ? ` · ${[...new Set(warnings)].join(' | ')}` : ''}`;
       widgetData?.publish?.({ type: 'multi-expiry-skew', status: warnings.length ? 'warning' : 'ok', config, series, warnings });

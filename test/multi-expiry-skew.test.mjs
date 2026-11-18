@@ -4,7 +4,7 @@ import { mkdtemp, readdir, readFile, writeFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { buildMultiExpirySeries, calculateMultiExpiryPoints, mergeSkewPoints, normalizeSkewExpirations, skewIdentity } from '../src/shared/multi-expiry-skew.mjs';
+import { buildMultiExpirySeries, calculateMultiExpiryPoints, mergeSkewPoints, normalizeSkewExpirations, skewIdentity, migrateMultiExpirySkewConfig, normalizeRthStartOffset } from '../src/shared/multi-expiry-skew.mjs';
 import { createSkewHistorySession } from '../src/renderer/skew-history.js';
 import { multiExpirySkewWidget, multiExpiryVisibilityOptions } from '../src/renderer/widgets/multi-expiry-skew-widget.js';
 import { getWidgetDefinition } from '../src/renderer/widgets/index.js';
@@ -36,7 +36,7 @@ test('registered widget is routed to TradingView and starts without expirations'
   assert.deepEqual(normalizeSkewExpirations(['2026-10-30', '20261030', 'today', '', '20260230']), ['20261030']);
 });
 
-test('multiple expirations share delta, retain quotes in compact history and show only skew', () => {
+test('multiple expirations share delta, retain compact quotes and preserve the legacy spread', () => {
   const s = snapshot();
   const compact = trimSnapshotForWidgets(s, { widgets: [widget] });
   for (const expiry of config.expirations) assert.equal(compact.byExpiry[expiry].optionQuotes.length, 4);
@@ -46,7 +46,7 @@ test('multiple expirations share delta, retain quotes in compact history and sho
   assert.ok(Math.abs(series.lines[0].data[0] - 4) < 1e-9);
   assert.ok(Math.abs(series.lines[1].data[0] - 3) < 1e-9);
   assert.equal(lines[0].points[0].targetDelta, lines[1].points[0].targetDelta);
-  assert.equal(lines[0].points[0].putWing, undefined);
+  assert.equal(lines[0].points[0].putWing, null);
   assert.equal(calculateMultiExpiryPoints([compact], { ...config, targetDelta: 0.01 })[0].points[0].skew, null);
 });
 
@@ -86,7 +86,7 @@ test('empty, single-point and filtered series preserve alignment and local calen
   assert.deepEqual(filtered.lines[0].data, [4]);
   assert.deepEqual(filtered.lines[0].meta, [points[0]]);
   const empty = buildMultiExpirySeries([{ expiration: '20261030', points }], { startDate: '2026-10-28' });
-  assert.deepEqual(empty, { x: [], lines: [{ expiration: '20261030', meta: [], data: [] }] });
+  assert.deepEqual(empty, { x: [], lines: [{ id: '20261030:spread', metric: 'spread', expiration: '20261030', meta: [], data: [] }] });
 });
 
 test('smoothing uses trailing valid windows of 5 or 15 points without changing raw metadata', () => {
@@ -145,7 +145,7 @@ test('RTH boundaries follow New York DST independently of the computer timezone'
       const weekends = ['2026-10-24T12:00:00-04:00', '2026-10-25T12:00:00-04:00']
         .map((timestamp) => ({ timestamp, skew: 0.04 }));
       assert.deepEqual(buildMultiExpirySeries([{ expiration: '20261218', points: weekends }], { rthOnly: true }),
-        { x: [], lines: [{ expiration: '20261218', data: [], meta: [] }] });
+        { x: [], lines: [{ id: '20261218:spread', metric: 'spread', expiration: '20261218', data: [], meta: [] }] });
     `], { env: { ...process.env, TZ: timezone }, encoding: 'utf8' });
     assert.equal(result.status, 0, `${timezone}: ${result.stderr || result.error || result.stdout}`);
   }
@@ -170,8 +170,8 @@ test('RTH intersects local bounds before smoothing and preserves alignment and r
     const pad = (n) => String(n).padStart(2, '0');
     const cut = buildMultiExpirySeries(lines, { rthOnly: true, smoothing,
       startDate: `${localStart.getFullYear()}-${pad(localStart.getMonth() + 1)}-${pad(localStart.getDate())}`,
-      startTime: `${pad(localStart.getHours())}:${pad(localStart.getMinutes())}:${pad(localStart.getSeconds())}` });
-    assert.deepEqual(cut.lines.map((l) => l.data), [[300, 400], [300, 400]]);
+      rthStartOffsetMinutes: 390 });
+    assert.deepEqual(cut.lines.map((l) => l.data), [[300], [300]]);
   }
   assert.deepEqual(lines, original);
   assert.equal(buildMultiExpirySeries(lines, { rthOnly: false }).x.length, points.length);
@@ -319,7 +319,7 @@ test('legend visibility survives refreshes, reordering and restored config, inde
   };
   toggle(1, false);
   await Promise.resolve();
-  assert.deepEqual(config.hiddenExpirations, ['20261030']);
+  assert.deepEqual(config.hiddenSeries, ['20261030:spread']);
   assert.equal(changes, 1);
   const restored = multiExpiryVisibilityOptions([...lines].reverse(), JSON.parse(JSON.stringify(config)), () => {});
   assert.deepEqual(restored.series.slice(1).map((series) => series.show), [true, false]);
@@ -328,7 +328,7 @@ test('legend visibility survives refreshes, reordering and restored config, inde
   toggle(1, true);
   toggle(2, false); // A grouped legend action should persist once.
   await Promise.resolve();
-  assert.deepEqual(config.hiddenExpirations, ['20261106']);
+  assert.deepEqual(config.hiddenSeries, ['20261106:spread']);
   assert.equal(changes, 2);
   toggle(1, false);
   await Promise.resolve();
@@ -336,7 +336,7 @@ test('legend visibility survives refreshes, reordering and restored config, inde
   toggle(1, true);
   toggle(2, true);
   await Promise.resolve();
-  assert.deepEqual(config.hiddenExpirations, []);
+  assert.deepEqual(config.hiddenSeries, []);
   const count = changes;
   options.hooks.setSeries[0](plot, 1, { focus: true });
   await Promise.resolve();
@@ -344,7 +344,7 @@ test('legend visibility survives refreshes, reordering and restored config, inde
   toggle(1, false);
   current = false; // A refresh disposed this plot before the queued hook ran.
   await Promise.resolve();
-  assert.deepEqual(config.hiddenExpirations, []);
+  assert.deepEqual(config.hiddenSeries, []);
   assert.equal(changes, count);
 });
 
@@ -485,4 +485,180 @@ test('archive uses New York date, preserves malformed documents and ignores malf
   await assert.rejects(store.saveSkewHistory(directory, { identity, points: [point()] }), /Invalid existing/);
   assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), broken);
   assert.equal(calculateMultiExpiryPoints([snapshot(Date.parse('2026-10-26T15:00:00Z'))], config)[0].points.length, 1);
+});
+
+function wingSnapshot(time) {
+  const s = snapshot(time);
+  for (const chain of Object.values(s.byExpiry)) chain.optionQuotes.push(q('put', 100, -0.5, 0.19), q('call', 100, 0.5, 0.21));
+  return s;
+}
+
+test('side modes use wing-minus-ATM formulas and retain stable metric IDs', () => {
+  const s = wingSnapshot();
+  const compact = trimSnapshotForWidgets(s, { widgets: [widget] });
+  const lines = calculateMultiExpiryPoints([compact], config);
+  const p = lines[0].points[0];
+  assert.equal(p.atmIV, 0.2);
+  assert.equal(p.atmStrike, 100);
+  for (const [side, expected] of [['put', [4, 3]], ['call', [0, 0]], ['spread', [4, 3]], ['both', [4, 0, 3, 0]]]) {
+    const series = buildMultiExpirySeries(lines, { side });
+    assert.equal(series.lines.length, expected.length);
+    series.lines.forEach((line, i) => {
+      assert.ok(Math.abs(line.data[0] - expected[i]) < 1e-9);
+      assert.equal(line.id, `${line.expiration}:${line.metric}`);
+    });
+  }
+  const noAtm = calculateMultiExpiryPoints([snapshot()], config);
+  assert.equal(buildMultiExpirySeries(noAtm, { side: 'both' }).lines.every((l) => l.data[0] === null), true);
+  assert.ok(Number.isFinite(buildMultiExpirySeries(noAtm, { side: 'spread' }).lines[0].data[0]));
+  s.byExpiry['20261030'].optionQuotes = s.byExpiry['20261030'].optionQuotes.filter((v) => v.type !== 'call' || v.strike === 100);
+  const missingCall = calculateMultiExpiryPoints([s], config)[0].points[0];
+  assert.ok(Number.isFinite(missingCall.putWing));
+  assert.equal(missingCall.callWing, null);
+  assert.equal(missingCall.skew, null);
+});
+
+test('legacy config migrates once; new widgets default to Both; selector persists every mode', async () => {
+  const old = { type: widget.type, config: { hiddenExpirations: ['20261030'] } };
+  assert.equal(migrateMultiExpirySkewConfig(old), true);
+  assert.equal(old.config.side, 'spread');
+  assert.deepEqual(old.config.hiddenSeries, ['20261030:spread']);
+  assert.equal(migrateMultiExpirySkewConfig(old), false);
+  assert.equal(multiExpirySkewWidget.defaultConfig.side, 'both');
+  let handler, saved;
+  const select = { dataset: { skewSetting: 'side' }, value: '', addEventListener: (_e, fn) => { handler = fn; } };
+  const container = { innerHTML: '', querySelectorAll: (selector) => selector === '[data-skew-setting]' ? [select] : [], querySelector: () => ({ addEventListener() {} }) };
+  const instance = { type: widget.type, config: {} };
+  const render = () => multiExpirySkewWidget.render({ container, widget: instance, onConfigChange: () => { saved = JSON.stringify(instance.config); } });
+  await render();
+  assert.match(container.innerHTML, /value="spread" selected/);
+  for (const side of ['put', 'call', 'both', 'spread']) {
+    select.value = side;
+    handler();
+    instance.config = JSON.parse(saved);
+    await render();
+    assert.equal(instance.config.side, side);
+    assert.ok(container.innerHTML.includes(`value="${side}" selected`));
+  }
+  multiExpirySkewWidget.destroy(container);
+});
+
+test('wing smoothing skips independent gaps and applies RTH and date filters first', () => {
+  const points = [
+    { ...point('2026-10-26T13:00:00Z'), putWing: 1, callWing: 1 },
+    { ...point('2026-10-26T14:00:00Z'), putWing: 0.01, callWing: null },
+    { ...point('2026-10-26T15:00:00Z'), putWing: null, callWing: 0.04 },
+    { ...point('2026-10-26T16:00:00Z'), putWing: 0.03, callWing: 0.06 }
+  ];
+  const series = buildMultiExpirySeries([{ expiration: '20261030', points }], {
+    side: 'both', smoothing: 'ma5', rthOnly: true, startDate: '2026-10-26', endDate: '2026-10-26'
+  });
+  assert.deepEqual(series.lines.map((l) => l.data), [[1, null, 2], [null, 4, 5]]);
+  assert.equal(points[0].putWing, 1);
+});
+
+test('wing legend shares expiry colors, distinguishes sides and persists each line across mode changes', async () => {
+  const lines = buildMultiExpirySeries(calculateMultiExpiryPoints([wingSnapshot()], config), { side: 'both' }).lines;
+  const cfg = { hiddenSeries: [] };
+  const options = multiExpiryVisibilityOptions(lines, cfg, () => {});
+  assert.equal(options.series[1].stroke, options.series[2].stroke);
+  assert.notEqual(options.series[1].stroke, options.series[3].stroke);
+  assert.deepEqual(options.series[1].dash, []);
+  assert.deepEqual(options.series[2].dash, [6, 4]);
+  assert.equal(options.series[2].label, '20261030 Call');
+  options.series[2].show = false;
+  options.hooks.setSeries[0]({ series: options.series }, 2, { show: false });
+  await Promise.resolve();
+  const restored = JSON.parse(JSON.stringify(cfg));
+  assert.deepEqual(restored.hiddenSeries, ['20261030:call']);
+  const call = multiExpiryVisibilityOptions(lines.filter((l) => l.metric === 'call').reverse(), restored, () => {});
+  assert.deepEqual(call.series.slice(1).map((s) => s.show), [true, false]);
+  const put = multiExpiryVisibilityOptions(lines.filter((l) => l.metric === 'put'), restored, () => {});
+  assert.equal(put.series[1].show, true);
+});
+
+test('archive enriches legacy points and partial wing observations cannot erase valid measurements', async (t) => {
+  const directory = await temporary(t);
+  const original = calculateMultiExpiryPoints([wingSnapshot()], config)[0].points[0];
+  const legacy = { ...original };
+  for (const field of ['atmIV', 'atmStrike', 'putWing', 'callWing']) delete legacy[field];
+  await store.saveSkewHistory(directory, { identity, points: [legacy] });
+  const load = async () => (await store.loadSkewHistory(directory, { identity })).documents[0].points;
+  assert.equal(buildMultiExpirySeries([{ expiration: identity.expiration, points: await load() }], { side: 'put' }).lines[0].data[0], null);
+  await store.saveSkewHistory(directory, { identity, points: [original] });
+  const partial = { ...original, skew: null, putWing: null, put: { iv: null, contracts: [] }, callWing: 0.01 };
+  await store.saveSkewHistory(directory, { identity, points: [partial] });
+  const disk = (await load())[0];
+  const memory = mergeSkewPoints([legacy], [original], [partial])[0];
+  assert.deepEqual(disk, memory);
+  assert.equal(disk.putWing, original.putWing);
+  assert.equal(disk.skew, original.skew);
+  assert.equal(disk.put.iv, original.put.iv);
+  assert.equal(disk.callWing, 0.01);
+  await assert.rejects(store.saveSkewHistory(directory, { identity, points: [{ ...original, atmIV: 'bad' }] }), /Invalid skew history point/);
+  const session = createSkewHistorySession(() => ({ saveSkewHistory: (payload) => store.saveSkewHistory(directory, payload) }));
+  for (const side of ['put', 'call', 'both', 'spread']) await session.capture(source, [{ ...widget, config: { ...config, side } }], [wingSnapshot()]);
+  assert.equal((await readdir(directory)).length, 2); // One archive per expiry, shared across sides.
+  assert.ok(Number.isFinite(session.points(identity)[0].callWing));
+});
+
+
+test('RTH daily opening offset follows New York DST independently of local timezone', () => {
+  const moduleUrl = new URL('../src/shared/multi-expiry-skew.mjs', import.meta.url).href;
+  for (const timezone of ['UTC', 'Asia/Nicosia', 'America/New_York']) {
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
+      import assert from 'node:assert/strict';
+      import { buildMultiExpirySeries } from ${JSON.stringify(moduleUrl)};
+      const points = [
+        ['2026-03-06', '-05:00'], ['2026-03-09', '-04:00'],
+        ['2026-10-23', '-04:00'], ['2026-10-26', '-04:00'],
+        ['2026-11-02', '-05:00'], ['2026-11-03', '-05:00']
+      ].flatMap(([date, offset]) => ['09:30:00', '09:59:59.999', '10:00:00', '10:00:00.001', '16:00:00', '16:00:00.001']
+        .map((time) => ({timestamp:new Date(date+'T'+time+offset).toISOString(),skew:0.04,putWing:0.02,callWing:-0.02})));
+      const lines = [{expiration:'20261218',points}];
+      const config = {rthOnly:true,rthStartOffsetMinutes:30,side:'both',smoothing:'ma5'};
+      const expected = points.filter((_p,i)=>[2,3,4].includes(i%6));
+      for (const bounds of [{}, {startDate:'2026-03-06',endDate:'2026-11-03'}]) {
+        const series = buildMultiExpirySeries(lines,{...config,...bounds});
+        assert.deepEqual(series.lines[0].meta,expected);
+        assert.deepEqual(series.lines[1].meta,expected);
+        assert.ok(series.lines[0].data.every((v)=>v===2));
+      }
+      assert.deepEqual(buildMultiExpirySeries(lines,{...config,startTime:'23:59',endTime:'00:01'}),buildMultiExpirySeries(lines,config));
+      assert.equal(buildMultiExpirySeries(lines,{rthStartOffsetMinutes:30}).x.length,points.length);
+      assert.equal(buildMultiExpirySeries(lines,{rthOnly:true,rthStartOffsetMinutes:0}).x.length,30);
+      assert.deepEqual(buildMultiExpirySeries(lines,{...config,rthStartOffsetMinutes:390}).lines[0].meta,points.filter((_p,i)=>i%6===4));
+      const weekend = [{timestamp:'2026-10-24T14:00:00Z',skew:0.04}];
+      assert.equal(buildMultiExpirySeries([{expiration:'20261218',points:weekend}],config).x.length,0);
+      const cut = buildMultiExpirySeries(lines,{...config,startDate:'2026-11-02',endDate:'2026-11-03'});
+      assert.deepEqual(cut.lines[0].meta,expected.slice(-6));
+    `], {env:{...process.env,TZ:timezone},encoding:'utf8'});
+    assert.equal(result.status,0,timezone+': '+(result.stderr||result.error||result.stdout));
+  }
+  for (const [value, expected] of [[undefined,0],['bad',0],[-10,0],[400,390],['30',30],[30.9,30]]) {
+    assert.equal(normalizeRthStartOffset(value),expected);
+  }
+});
+
+test('RTH offset control persists and replaces local start time only in RTH mode', async () => {
+  let handler, saved;
+  const input = {dataset:{skewSetting:'rthStartOffsetMinutes'},value:'30',addEventListener:(_e,fn)=>{handler=fn;}};
+  const container = {innerHTML:'',querySelectorAll:(selector)=>selector==='[data-skew-setting]'?[input]:[],querySelector:()=>({addEventListener(){}})};
+  const instance = {type:widget.type,config:{rthOnly:true,startTime:'15:00'}};
+  const render=()=>multiExpirySkewWidget.render({container,widget:instance,onConfigChange:()=>{saved=JSON.stringify(instance.config);}});
+  await render();
+  assert.ok(container.innerHTML.includes('RTH start + (min)'));
+  assert.ok(!container.innerHTML.includes('data-skew-setting="startTime"'));
+  assert.ok(!container.innerHTML.includes('data-skew-setting="endTime"'));
+  handler();
+  instance.config=JSON.parse(saved);
+  await render();
+  assert.equal(instance.config.rthStartOffsetMinutes,30);
+  assert.equal(instance.config.startTime,'15:00');
+  instance.config.rthOnly=false;
+  await render();
+  assert.ok(container.innerHTML.includes('data-skew-setting="startTime"'));
+  assert.ok(container.innerHTML.includes('data-skew-setting="endTime"'));
+  assert.ok(!container.innerHTML.includes('data-skew-setting="rthStartOffsetMinutes"'));
+  multiExpirySkewWidget.destroy(container);
 });
