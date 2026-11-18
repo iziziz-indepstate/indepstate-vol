@@ -5,7 +5,7 @@ const { loadLocalMarketSeries } = require('./local-market-data.cjs');
 const SYMBOL_MAP = {
   fred: { SPX: 'SP500', VIX: 'VIXCLS' },
   yahoo: { SPX: '^GSPC', VIX: '^VIX', VIX9D: '^VIX9D' },
-  cboe: { VIX: 'VIX', VIX9D: 'VIX9D' }
+  cboe: { VIX: 'VIX', VIX9D: 'VIX9D', COR1M: 'COR1M' }
 };
 
 const FALLBACK_PROVIDERS = {
@@ -37,8 +37,9 @@ function normalizeBars(rows, symbol, source) {
   const byDate = new Map();
   for (const row of Array.isArray(rows) ? rows : []) {
     const date = normalizeDate(field(row, ['date', 'Date', 'DATE', 'observation_date']));
-    const close = Number(field(row, ['close', 'Close', 'CLOSE', 'Last', 'last', 'value', 'Value']));
-    if (!date || !Number.isFinite(close) || close <= 0) continue;
+    const rawClose = field(row, ['close', 'Close', 'CLOSE', 'Last', 'last', 'value', 'Value']);
+    const close = Number(rawClose);
+    if (!date || rawClose == null || !Number.isFinite(close) || (symbol !== 'COR1M' && close <= 0)) continue;
     const numberOrUndefined = (names) => {
       const rawValue = field(row, names);
       if (rawValue == null) return undefined;
@@ -118,7 +119,8 @@ async function getFredHistory(params, fetchImpl) {
 }
 
 async function getYahooHistory(params, fetchImpl) {
-  const providerSymbol = SYMBOL_MAP.yahoo[params.symbol];
+  const providerSymbol = SYMBOL_MAP.yahoo[params.symbol] || (params.priceMode === 'adjusted'
+    && /^[A-Z0-9][A-Z0-9.-]{0,19}$/.test(params.symbol) ? params.symbol.replaceAll('.', '-') : null);
   if (!providerSymbol) throw new Error(`Yahoo does not support ${params.symbol}`);
   const now = Math.floor(Date.now() / 1000);
   const query = new URLSearchParams({
@@ -131,12 +133,16 @@ async function getYahooHistory(params, fetchImpl) {
   const result = data?.chart?.result?.[0];
   if (!result) throw new Error(data?.chart?.error?.description || `Yahoo symbol not found: ${providerSymbol}`);
   const quote = result.indicators?.quote?.[0] || {};
+  const adjusted = result.indicators?.adjclose?.[0]?.adjclose;
+  if (params.priceMode === 'adjusted' && !Array.isArray(adjusted)) {
+    throw new Error(`Yahoo adjusted close unavailable: ${providerSymbol}`);
+  }
   const rows = (result.timestamp || []).map((timestamp, index) => ({
     date: new Date(timestamp * 1000).toISOString().slice(0, 10),
     open: quote.open?.[index],
     high: quote.high?.[index],
     low: quote.low?.[index],
-    close: quote.close?.[index]
+    close: params.priceMode === 'adjusted' ? adjusted[index] : quote.close?.[index]
   }));
   return normalizeBars(rows, params.symbol, 'yahoo');
 }
@@ -199,6 +205,8 @@ function createMarketDataService({ cacheDir, fetchImpl = global.fetch }) {
   }
 
   async function getDailyHistory(params) {
+    // Adjusted histories must never reuse the raw-close cache used by IV/RV.
+    const cacheSymbol = params.priceMode === 'adjusted' ? `adjusted-${params.symbol}` : params.symbol;
     const mode = params.dataMode || 'remote';
     if (mode === 'local') {
       const bars = normalizeBars(loadLocalMarketSeries(params.localSource), params.symbol, 'local');
@@ -212,7 +220,7 @@ function createMarketDataService({ cacheDir, fetchImpl = global.fetch }) {
       const provider = candidates[index];
       const cached = params.cache === false
         ? null
-        : readCache(cacheDir, provider, params.symbol, DEFAULT_CACHE_TTL_MINUTES);
+        : readCache(cacheDir, provider, cacheSymbol, DEFAULT_CACHE_TTL_MINUTES);
       if (!params.forceRefresh && cached?.fresh && cacheCovers(cached, params.startDate, params.endDate)) {
         return {
           bars: filterDates(cached.bars, params.startDate, params.endDate),
@@ -225,7 +233,7 @@ function createMarketDataService({ cacheDir, fetchImpl = global.fetch }) {
       }
       try {
         const bars = await loadRemote(provider, params);
-        const saved = params.cache === false ? null : writeCache(cacheDir, provider, params.symbol, bars);
+        const saved = params.cache === false ? null : writeCache(cacheDir, provider, cacheSymbol, bars);
         return { bars, provider, cached: false, fallback: index > 0, updatedAt: saved?.updatedAt || new Date().toISOString() };
       } catch (error) {
         errors.push(`${provider}: ${error?.message || error}`);

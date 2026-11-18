@@ -14,6 +14,7 @@ import {
 import { nDateSkewBidIVRatioWidget } from './ndate-bidiv-ratio-widget.js';
 import { spreadOptimizerWidget } from './spread-optimizer-widget.js';
 import { ivRvWidget } from './iv-rv-widget.js';
+import { realizedCorrelationWidget } from './realized-correlation-widget.js';
 import { atmStraddleWidget } from './atm-straddle-widget.js';
 import { volUpfrontWidget } from './vol-upfront-widget.js';
 import { nDeltaIVWidget } from './n-delta-iv-widget.js';
@@ -27,7 +28,7 @@ import { appPluginWidgets } from '../../plugins/index.js';
 
 // Provider ownership is part of the widget definition contract.
 const tapeWidgets = new Set([optionFlowTickWidget, optionFlowBalancedTickWidget, gammaFlowWidget, gammaImbalanceWidget]);
-const independentWidgets = new Set([volUpfrontWidget, ivRvWidget, ...appPluginWidgets]);
+const independentWidgets = new Set([volUpfrontWidget, ivRvWidget, realizedCorrelationWidget, ...appPluginWidgets]);
 
 export const widgetDefinitions = [
   atmStraddleWidget,
@@ -52,6 +53,7 @@ export const widgetDefinitions = [
   nDateSkewBidIVRatioWidget,
   spreadOptimizerWidget,
   ivRvWidget,
+  realizedCorrelationWidget,
   ...appPluginWidgets,
   ...theBlockWidgets
 ].map((definition) => Object.assign(definition, {

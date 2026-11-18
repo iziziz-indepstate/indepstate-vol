@@ -1100,6 +1100,26 @@ select option {
   height: 220px !important;
 }
 
+.rc-widget .rc-summary {
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+}
+
+.rc-widget .rc-charts {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.rc-basket {
+  margin-top: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  max-height: 260px;
+  overflow: auto;
+}
+
+.rc-basket summary { cursor: pointer; }
+.rc-basket table { width: 100%; text-align: left; border-collapse: collapse; }
+.rc-basket th, .rc-basket td { padding: 4px 6px; border-bottom: 1px solid var(--border); }
+
 .ivrv-warning,
 .ivrv-error {
   color: #fbbf24;

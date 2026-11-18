@@ -274,6 +274,8 @@ Option-side balances are calculated as bought contracts minus sold contracts for
 
 ## Implementation Notes
 
+`Realized Correlation` publishes its current-basket RC5/RC10/RC21, configurable RC EWMA (`rcEwma`, default half-life 10 sessions), aligned COR1M and spread series, dated weights, EWMA method parameters and source metadata. Its type is `realized-correlation`; status is `ok`, `partial` or `error`. See the complete [calculation and data contract](realized-correlation.md#ipc-and-published-output).
+
 - The widget data store is local to the renderer runtime.
 - `publishWidgetData` notifies plugin data subscribers after updating the widget data store and MCP runtime store.
 - Widget data subscriber failures are caught and logged; they must not break widget rendering.

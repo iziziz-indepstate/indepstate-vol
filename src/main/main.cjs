@@ -3,6 +3,7 @@ const { app, BrowserWindow, ipcMain, Menu } = require('electron');
 const { loadState, saveUiState } = require('./store.cjs');
 const { loadLocalMarketSeries } = require('./local-market-data.cjs');
 const { createMarketDataService } = require('./market-data-providers.cjs');
+const { createRealizedCorrelationService } = require('./realized-correlation-provider.cjs');
 const { createTradingCalendarProvider } = require('./trading-calendar-provider.cjs');
 const { startAutoUpdater } = require('./auto-updater.cjs');
 const { startMcpServer } = require('./mcp-server.cjs');
@@ -236,6 +237,9 @@ app.whenReady().then(async () => {
   const marketDataService = createMarketDataService({
     cacheDir: path.join(app.getPath('userData'), 'market-data-cache')
   });
+  const correlationService = createRealizedCorrelationService({
+    cacheDir: path.join(app.getPath('userData'), 'realized-correlation-cache')
+  });
   const tradingCalendarProvider = createTradingCalendarProvider({
     cacheDir: path.join(app.getPath('userData'), 'trading-calendar-cache')
   });
@@ -405,6 +409,12 @@ app.whenReady().then(async () => {
       provider: params?.provider,
       dataMode: params?.dataMode
     }, () => marketDataService.getDailyHistory(params || {}));
+  });
+
+  ipcMain.handle('market-data:get-realized-correlation-inputs', async (_evt, params) => {
+    return profiler.measure('market-data:get-realized-correlation-inputs', {
+      startDate: params?.startDate, endDate: params?.endDate
+    }, () => correlationService.getInputs(params || {}));
   });
 
   ipcMain.handle('tradingview:get-snapshot', async (_evt, params) => {

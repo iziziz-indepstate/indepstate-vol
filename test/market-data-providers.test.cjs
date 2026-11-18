@@ -5,6 +5,33 @@ const os = require('os');
 const path = require('path');
 const { createMarketDataService, normalizeBars } = require('../src/main/market-data-providers.cjs');
 
+test('Yahoo adjusted close translates share classes and cannot reuse raw price caches', async (t) => {
+  const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'is-vol-adjusted-'));
+  t.after(() => fs.rmSync(cacheDir, { recursive: true, force: true }));
+  let count = 0;
+  const service = createMarketDataService({ cacheDir, fetchImpl: async (url) => {
+    count += 1;
+    assert.match(url, /BRK-B/);
+    return response({ chart: { result: [{ timestamp: [1780358400], indicators: {
+      quote: [{ close: [500] }], adjclose: [{ adjclose: [450] }]
+    } }] } }, { json: true });
+  } });
+  fs.writeFileSync(path.join(cacheDir, 'yahoo-BRK.B.json'), JSON.stringify({ updatedAt: new Date().toISOString(), bars: [{ date: '2026-06-02', close: 999 }] }));
+  const request = { symbol: 'BRK.B', provider: 'yahoo', priceMode: 'adjusted' };
+  assert.equal((await service.getDailyHistory(request)).bars[0].close, 450);
+  assert.equal((await service.getDailyHistory(request)).cached, true);
+  assert.equal(count, 1);
+});
+
+test('missing Yahoo adjusted prices do not fall back to raw closes; COR1M permits zero and negative points', async () => {
+  const service = createMarketDataService({ cacheDir: '', fetchImpl: async () => response({ chart: { result: [{
+    timestamp: [1780358400], indicators: { quote: [{ close: [500] }] }
+  }] } }, { json: true }) });
+  await assert.rejects(service.getDailyHistory({ symbol: 'AAPL', provider: 'yahoo', priceMode: 'adjusted', cache: false }), /adjusted close unavailable/);
+  assert.deepEqual(normalizeBars([{ date: '2026-06-02', close: 0 }, { date: '2026-06-03', close: -1 },
+    { date: '2026-06-04', close: '' }], 'COR1M', 'cboe').map((row) => row.close), [0, -1]);
+});
+
 function response(body, { status = 200, json = false } = {}) {
   return {
     ok: status >= 200 && status < 300,
