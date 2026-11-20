@@ -431,6 +431,7 @@ function copyRootFields(snapshot, primaryExpiry, primarySnapshot, byExpiry) {
     upper: primarySnapshot?.upper ?? snapshot?.upper ?? null,
     dAtm: snapshot?.dAtm ?? null,
     metrics: snapshot?.metrics && typeof snapshot.metrics === 'object' ? { ...snapshot.metrics } : undefined,
+    marketData: snapshot?.marketData ? { ...snapshot.marketData, updateModes: [...(snapshot.marketData.updateModes || [])] } : undefined,
     expiryPlaceholders: snapshot?.expiryPlaceholders && typeof snapshot.expiryPlaceholders === 'object'
       ? { ...snapshot.expiryPlaceholders }
       : undefined,

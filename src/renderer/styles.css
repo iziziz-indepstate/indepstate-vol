@@ -53,6 +53,20 @@ body {
 
 .status { color: var(--muted); }
 
+.datasource-data-notice {
+  margin: 8px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+}
+.datasource-data-notice.is-warning {
+  color: #ffd78a;
+  border-color: #b88028;
+  background: rgba(184, 128, 40, 0.13);
+}
+.datasource-data-notice.is-success { color: #94dfb0; }
+
 .panel {
   margin-top: 12px;
   background: var(--panel);

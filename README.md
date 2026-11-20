@@ -13,6 +13,8 @@ npm install
 npm start
 ```
 
+TradingView session cookies can be configured in `Documents/IS-VOL/config.json`, created automatically on first launch. See [TradingView configuration](docs/tradingview-configuration.md).
+
 ## Current Implementation
 
 - **Provider abstraction**: the renderer keeps a `providers[providerKey]` map. The current live option-chain provider is `TradingViewProvider`.

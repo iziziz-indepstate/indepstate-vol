@@ -8,6 +8,61 @@ function jsonResponse(body) {
   };
 }
 
+test('TradingView cookie reaches all option requests, never Yahoo or snapshot data', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  const calls = [];
+  globalThis.fetch = async (url, options = {}) => {
+    calls.push({ url, options });
+    return String(url).includes('query1.finance.yahoo.com')
+      ? jsonResponse({ chart: { result: [{ meta: { regularMarketPrice: 100 } }] } })
+      : jsonResponse({ fields: [], symbols: [] });
+  };
+  const config = { apiBase: 'https://scanner.tradingview.com', ticker: 'AMEX:SPY', root: 'SPY', expiryStart: '20261120,20261127' };
+  const cookie = 'sessionid=test-session; sessionid_sign=test-signature';
+  const snapshot = await new TradingViewProvider({ cookie }).fetchSnapshot(config);
+  assert.equal(calls.length, 3);
+  assert.equal(calls[0].options.headers?.cookie, undefined);
+  for (const { options } of calls.slice(1)) {
+    assert.equal(options.headers.cookie, cookie);
+    assert.equal(options.redirect, 'error');
+  }
+  assert.ok(!JSON.stringify(snapshot).includes('test-session'));
+  calls.length = 0;
+  await new TradingViewProvider().fetchSnapshot(config);
+  for (const { options } of calls) assert.equal(options.headers?.cookie, undefined);
+
+  calls.length = 0;
+  await assert.rejects(new TradingViewProvider({ cookie }).fetchSnapshot({ ...config, apiBase: 'https://other.example' }), /session cookies require/);
+  assert.equal(calls.length, 1);
+  assert.ok(String(calls[0].url).includes('query1.finance.yahoo.com'));
+});
+
+test('TradingViewProvider checks modes across every requested expiry and handles missing metadata', async (t) => {
+  const originalFetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = originalFetch; });
+  let secondExpiryModes = ['delayed_streaming_900'];
+  globalThis.fetch = async (url, options = {}) => {
+    if (String(url).includes('query1.finance.yahoo.com')) {
+      return jsonResponse({ chart: { result: [{ meta: { regularMarketPrice: 100 } }] } });
+    }
+    const body = JSON.parse(options.body);
+    assert.ok(body.columns.includes('update_mode'));
+    const expiry = body.filter.find((item) => item.left === 'expiration').right;
+    const modes = expiry === 20261120 ? ['streaming'] : secondExpiryModes;
+    return jsonResponse({ fields: ['strike', 'option-type', 'update_mode'], symbols: modes.map((mode) => ({ f: [100, 'call', mode] })) });
+  };
+  const config = { apiBase: 'https://scanner.tradingview.com', ticker: 'AMEX:SPY', root: 'SPY', expiryStart: '20261120,20261127' };
+  const provider = new TradingViewProvider();
+  assert.equal((await provider.fetchSnapshot(config)).marketData.status, 'delayed');
+  secondExpiryModes = ['streaming'];
+  assert.equal((await provider.fetchSnapshot(config)).marketData.status, 'realtime');
+  secondExpiryModes = [];
+  assert.equal((await provider.fetchSnapshot(config)).marketData.status, 'unknown');
+  secondExpiryModes = [null];
+  assert.equal((await provider.fetchSnapshot(config)).marketData.status, 'unknown');
+});
+
 test('buildExpiryList keeps comma-separated expiries in user order', () => {
   assert.deepEqual(
     buildExpiryList('20260626, 20260612,20260619', '20260630'),

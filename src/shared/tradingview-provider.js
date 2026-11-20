@@ -1,4 +1,5 @@
 import { findStrikesAroundPrice } from './option-chain-utils.js';
+import { summarizeTradingViewModes } from './tradingview-data-status.mjs';
 import {
   buildExpiryList,
   collectExpiryPlaceholderKeys,
@@ -17,12 +18,18 @@ function buildUrl(apiBase, path) {
   return `${apiBase.replace(/\/+$/, '')}${path}?label-product=options-builder`;
 }
 
-async function tvPostOptions(apiBase, bodyText) {
-  const res = await fetch(buildUrl(apiBase, '/options/scan2'), {
+async function tvPostOptions(apiBase, bodyText, cookie = '') {
+  const url = buildUrl(apiBase, '/options/scan2');
+  if (cookie && new URL(url).origin !== 'https://scanner.tradingview.com') {
+    throw new Error('TradingView session cookies require https://scanner.tradingview.com as the API base.');
+  }
+  const res = await fetch(url, {
     method: 'POST',
+    ...(cookie ? { redirect: 'error' } : {}),
     headers: {
       accept: 'application/json',
-      'content-type': 'text/plain;charset=UTF-8'
+      'content-type': 'text/plain;charset=UTF-8',
+      ...(cookie ? { cookie } : {})
     },
     body: bodyText
   });
@@ -32,7 +39,7 @@ async function tvPostOptions(apiBase, bodyText) {
 
 function buildOptionsBody({ root, expiry, ticker }) {
   return JSON.stringify({
-    columns: ['ask', 'bid', 'currency', 'delta', 'expiration', 'gamma', 'iv', 'option-type', 'pricescale', 'rho', 'root', 'strike', 'theoPrice', 'theta', 'vega', 'bid_iv', 'ask_iv'],
+    columns: ['ask', 'bid', 'currency', 'delta', 'expiration', 'gamma', 'iv', 'option-type', 'pricescale', 'rho', 'root', 'strike', 'theoPrice', 'theta', 'vega', 'bid_iv', 'ask_iv', 'update_mode'],
     filter: [
       { left: 'type', operation: 'equal', right: 'option' },
       { left: 'expiration', operation: 'equal', right: Number(expiry) },
@@ -276,6 +283,7 @@ function buildBasePoint(px, byTypeStrike, nowIso) {
 export class TradingViewProvider {
   constructor(options = {}) {
     this.marketCalendar = options.marketCalendar || null;
+    this.cookie = options.cookie || '';
   }
 
   key = 'tradingview';
@@ -306,8 +314,13 @@ export class TradingViewProvider {
     if (!expiryList.length) throw new Error('Expiry start is required');
 
     const byExpiry = {};
+    const updateModes = [];
     for (const expiry of expiryList) {
-      const options = await tvPostOptions(config.apiBase, buildOptionsBody({ ...config, expiry }));
+      const options = await tvPostOptions(config.apiBase, buildOptionsBody({ ...config, expiry }), this.cookie);
+      const modeIndex = options?.fields?.indexOf('update_mode') ?? -1;
+      const rows = options?.symbols || [];
+      if (!rows.length) updateModes.push(null);
+      for (const row of rows) updateModes.push(modeIndex >= 0 ? row?.f?.[modeIndex] : null);
       const { byTypeStrike } = parseOptions(options);
       byExpiry[expiry] = buildBasePoint(px, byTypeStrike, nowIso);
     }
@@ -326,6 +339,7 @@ export class TradingViewProvider {
       ...basePoint,
       ...metrics,
       metrics,
+      marketData: summarizeTradingViewModes(updateModes),
       expiryPlaceholders
     };
   }

@@ -1,6 +1,7 @@
 import { migrateMultiExpirySkewConfig } from '../shared/multi-expiry-skew.mjs';
 import { DATA_SOURCE_LABELS, ensureDataSource, normalizeTabDataSources, sourceForWidget, sourceView } from '../shared/data-sources.mjs';
 import { TradingViewProvider } from '../shared/tradingview-provider.js';
+import { tradingViewStatusNotice } from '../shared/tradingview-data-status.mjs';
 import { TheBlockProvider } from '../shared/theblock-provider.js';
 import { getWidgetDefinition, widgetDefinitions } from './widgets/index.js';
 import { migrateWidgetTitles } from './widget-title-migrations.mjs';
@@ -229,6 +230,14 @@ function showSourceStatuses() {
   if (root) root.textContent = (tab?.dataSources || []).map((source) =>
     `${DATA_SOURCE_LABELS[source.providerKey] || source.providerKey}: ${tabStatus[source.id] || 'ready'}`
   ).join(' | ');
+  const notice = $('tradingViewDataNotice');
+  if (notice) {
+    const source = selectedSource(tab);
+    notice.hidden = source?.providerKey !== 'tradingview';
+    const status = tradingViewStatusNotice(latestBySource.get(source?.id));
+    notice.textContent = notice.hidden ? '' : status.text;
+    notice.className = `datasource-data-notice is-${status.level}`;
+  }
 }
 
 function isActiveTabId(tabId) {
