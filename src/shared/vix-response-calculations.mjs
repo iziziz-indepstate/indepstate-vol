@@ -2,17 +2,6 @@ export const VIX_RESPONSE_MODEL = Object.freeze({
   method: 'rolling-ols', windowSessions: 60, spxReturnUnit: 'percent', vixChangeUnit: 'points'
 });
 
-export function calculateResidualBands(series) {
-  const residuals = series.map((row) => row.residual).filter(Number.isFinite);
-  const count = residuals.length;
-  if (count < 2) return null;
-
-  const mean = residuals.reduce((sum, value) => sum + value, 0) / count;
-  const variance = residuals.reduce((sum, value) => sum + (value - mean) ** 2, 0) / count;
-  const sigma = Math.sqrt(variance);
-  return { count, mean, sigma, lower: mean - 3 * sigma, upper: mean + 3 * sigma };
-}
-
 function change(previous, current, relative = false) {
   if (!Number.isFinite(previous) || previous <= 0 || !Number.isFinite(current) || current <= 0) return null;
   return relative ? 100 * (current / previous - 1) : current - previous;
@@ -33,7 +22,11 @@ function fitResponse(training) {
   // Identical returns may differ by floating-point roundoff after conversion to percent.
   if (variance <= count * (Number.EPSILON * Math.max(100, Math.abs(meanX))) ** 2) return null;
   const beta = covariance / variance;
-  return { alpha: meanY - beta * meanX, beta };
+  const alpha = meanY - beta * meanX;
+  // The OLS intercept makes the mean training error zero.
+  const squaredError = training.reduce((sum, row) => sum + (row.actualChange - (alpha + beta * row.spxReturn)) ** 2, 0);
+  const sigma = Math.sqrt(squaredError / count);
+  return { coefficients: { alpha, beta }, residualBands: { count, mean: 0, sigma, lower: -3 * sigma, upper: 3 * sigma } };
 }
 
 export function calculateVixResponse({ sessions, spxBars, vixBars }) {
@@ -46,10 +39,11 @@ export function calculateVixResponse({ sessions, spxBars, vixBars }) {
   }));
   const { windowSessions } = VIX_RESPONSE_MODEL;
   return daily.map((row, index) => {
-    const coefficients = index > windowSessions ? fitResponse(daily.slice(index - windowSessions, index)) : null;
+    const fit = index > windowSessions ? fitResponse(daily.slice(index - windowSessions, index)) : null;
+    const coefficients = fit?.coefficients ?? null;
     const expectedChange = coefficients && row.spxReturn !== null
       ? coefficients.alpha + coefficients.beta * row.spxReturn : null;
     const residual = expectedChange !== null && row.actualChange !== null ? row.actualChange - expectedChange : null;
-    return { ...row, expectedChange, residual, coefficients };
+    return { ...row, expectedChange, residual, coefficients, residualBands: fit?.residualBands ?? null };
   });
 }

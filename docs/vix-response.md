@@ -10,7 +10,7 @@ Use `Start date` and `End date` to set the inclusive display range. With both fi
 
 The widget requests additional closes before the display range so the first visible session can use its full 60-session training window. It uses the US market calendar and aligns daily closes by trading date. Each source uses its own closing time. A missing close leaves gaps in changes and in subsequent model windows that depend on it. An incomplete training window or constant SPX returns leave the expected change and residual empty.
 
-The residual chart draws purple horizontal lines at the mean residual ±3 standard deviations and red lines at ±4 standard deviations. The mean and population standard deviation use only the finite residuals in the selected display range. The lines appear when two or more residuals are available.
+The residual chart draws rolling ±3σ bounds in purple and ±4σ bounds in red. For each date, σ is the root mean square of the 60 training errors from that date's regression. The intercept centers these errors at zero. The bounds depend on the training window, so changing the display range leaves the bounds on overlapping dates unchanged when the same source data is available. Missing training data leaves a gap. The bounds can still appear if the current session's close is unavailable.
 
 Choose Yahoo or FRED for SPX and Cboe, Yahoo or FRED for VIX. Yahoo and Cboe are selected by default. The widget saves the selection and loads the newly selected history as soon as a selection changes. `Refresh` requests both selected sources again. [Yahoo SPX](https://finance.yahoo.com/quote/%5EGSPC/history/) · [FRED SPX](https://fred.stlouisfed.org/series/SP500) · [Cboe VIX](https://www.cboe.com/tradable_products/vix/vix_historical_data) · [Yahoo VIX](https://finance.yahoo.com/quote/%5EVIX/history/) · [FRED VIX](https://fred.stlouisfed.org/series/VIXCLS)
 
@@ -25,8 +25,8 @@ The widget uses the same daily provider service as `SPX IV / RV`. In Hybrid mode
 | `status` | `ok` when the latest residual is available from current data, `partial` when a usable residual history remains with a missing latest result or stale cache, or `error` when no residual can be calculated. |
 | `startDate`, `endDate` | Effective inclusive display bounds as `YYYY-MM-DD`. |
 | `latest` | Last completed session in the display range, even if values are missing. `null` if the range has no sessions or loading failed before the session could be determined. |
-| `series` | Display rows in ascending order, each with `date`, `spxReturn`, `actualChange`, `expectedChange`, `residual` and `coefficients` (`alpha`, `beta`). Unavailable values are `null`. |
-| `residualBands` | `count`, `mean`, `sigma`, `lower` and `upper` for the displayed residuals, or `null` when fewer than two are available. The bounds are at ±3σ, and the chart derives ±4σ from `mean` and `sigma`. |
+| `series` | Display rows in ascending order, each with `date`, `spxReturn`, `actualChange`, `expectedChange`, `residual`, `coefficients` (`alpha`, `beta`) and `residualBands`. Unavailable values are `null`. |
+| `residualBands` | The last session's `residualBands`, or `null` if the model could not be fitted. Each row's band object has `count` (60), `mean` (0), `sigma`, `lower` (−3σ) and `upper` (+3σ). The chart also plots ±4σ. |
 | `model` | `method`, `windowSessions`, `spxReturnUnit` and `vixChangeUnit`. |
 | `sources` | Metadata keyed by `spx` and `vix` with `requestedProvider`, actual `provider` (or `null`), `fallback`, `latestDate`, `updatedAt`, `cached` and `stale`. |
 | `warnings`, `error` | Source availability, cache or model messages. `error` is present when `status` is `error`. |

@@ -97,9 +97,10 @@ export const vixResponseWidget = {
         const { spxProvider, ivProvider, startDate, endDate } = config;
         const result = await window.appBridge.getVixResponse({ spxProvider, ivProvider, startDate, endDate, forceRefresh });
         if (!current()) return;
-        const { latest, sources, series, residualBands, model, warnings, error } = result;
+        const { latest, sources, series, model, warnings, error } = result;
         const summary = sources.spx?.latestDate === latest?.date && sources.vix?.latestDate === latest?.date ? latest : null;
-        const hasChart = series.some(({ actualChange }) => actualChange !== null);
+        const hasBands = series.some(({ residualBands }) => residualBands != null);
+        const hasChart = hasBands || series.some(({ actualChange, expectedChange }) => actualChange !== null || expectedChange !== null);
         state.charts.forEach((chart) => chart.destroy());
         state.charts = [];
         content.innerHTML = `<div class="ivrv-summary rc-summary">
@@ -114,7 +115,7 @@ export const vixResponseWidget = {
         ${warnings.map((warning) => `<div class="ivrv-warning" role="status">${escape(warning)}</div>`).join('')}
         ${hasChart ? `<div class="ivrv-charts">
           <div><h4>Actual and expected ΔVIX · points</h4><canvas data-vix-response-chart></canvas></div>
-          <div><h4>Residual · actual minus expected · points${residualBands ? ' · ±3σ and ±4σ' : ''}</h4><canvas data-vix-residual-chart></canvas></div>
+          <div><h4>Residual · actual minus expected · points${hasBands ? ' · ±3σ and ±4σ' : ''}</h4><canvas data-vix-residual-chart></canvas></div>
         </div>` : ''}`;
         publish(result);
         if (!hasChart) return;
@@ -129,16 +130,14 @@ export const vixResponseWidget = {
             dataset('Residual', series.map((row) => row.residual), '#f59e0b'),
             { ...dataset('Zero', series.map(() => 0), '#888894'), borderDash: [4, 4] }
           ];
-          if (residualBands) {
-            const { mean, sigma, upper, lower } = residualBands;
+          if (hasBands) {
             const levels = [
-              ['Mean + 3σ', upper, '#a78bfa'],
-              ['Mean − 3σ', lower, '#a78bfa'],
-              ['Mean + 4σ', mean + 4 * sigma, '#ef4444'],
-              ['Mean − 4σ', mean - 4 * sigma, '#ef4444']
+              ['+3σ', 3, '#a78bfa'], ['−3σ', -3, '#a78bfa'],
+              ['+4σ', 4, '#ef4444'], ['−4σ', -4, '#ef4444']
             ];
-            for (const [label, level, color] of levels) {
-              residualDatasets.push({ ...dataset(label, series.map(() => level), color), borderDash: [7, 4], order: 1 });
+            for (const [label, multiplier, color] of levels) {
+              const values = series.map(({ residualBands }) => residualBands ? multiplier * residualBands.sigma : null);
+              residualDatasets.push({ ...dataset(label, values, color), borderDash: [7, 4], order: 1 });
             }
           }
           state.charts.push(new Chart(content.querySelector('[data-vix-residual-chart]'), chartConfig(series, residualDatasets, false)));

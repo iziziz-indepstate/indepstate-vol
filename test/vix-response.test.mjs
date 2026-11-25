@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createVixResponseService } from '../src/main/vix-response-service.cjs';
-import { calculateResidualBands, calculateVixResponse } from '../src/shared/vix-response-calculations.mjs';
+import { calculateVixResponse } from '../src/shared/vix-response-calculations.mjs';
 import { sourceForWidget } from '../src/shared/data-sources.mjs';
 import { getWidgetDefinition } from '../src/renderer/widgets/index.js';
 
-function sample(sessions, returnAt = (i) => i % 4 - 1.5) {
+function sample(sessions, returnAt = (i) => i % 4 - 1.5, noiseAt = () => 0) {
   const spxBars = [];
   const vixBars = [];
   let spx = 100;
@@ -13,14 +13,14 @@ function sample(sessions, returnAt = (i) => i % 4 - 1.5) {
   for (const [i, date] of sessions.entries()) {
     const move = returnAt(i);
     spx *= 1 + move / 100;
-    vix -= 2 * move - 0.1;
+    vix += 0.1 - 2 * move + noiseAt(i);
     spxBars.push({ date, close: spx });
     vixBars.push({ date, close: vix });
   }
   return { sessions, spxBars, vixBars };
 }
 
-const sessionDates = Array.from({ length: 100 }, (_, i) => new Date(Date.UTC(2026, 0, i + 1)))
+const sessionDates = Array.from({ length: 185 }, (_, i) => new Date(Date.UTC(2026, 0, i + 1)))
   .filter((day) => day.getUTCDay() > 0 && day.getUTCDay() < 6)
   .map((day) => day.toISOString().slice(0, 10));
 
@@ -28,14 +28,19 @@ test('fits exactly 60 prior changes and keeps the scored close out of the fit', 
   const inputs = sample(sessionDates);
   const before = calculateVixResponse(inputs);
   assert.equal(before[60].expectedChange, null);
+  assert.equal(before[60].residualBands, null);
   assert.ok(Math.abs(before[61].coefficients.alpha - 0.1) < 1e-12);
   assert.ok(Math.abs(before[61].coefficients.beta + 2) < 1e-12);
   assert.ok(Math.abs(before[61].residual) < 1e-12);
-  inputs.vixBars[61].close += 1.5;
+  for (const bar of inputs.vixBars.slice(61)) bar.close += 1.5;
   const after = calculateVixResponse(inputs);
   assert.deepEqual(after[61].coefficients, before[61].coefficients);
   assert.equal(after[61].expectedChange, before[61].expectedChange);
   assert.ok(Math.abs(after[61].residual - 1.5) < 1e-12);
+  assert.deepEqual(after[61].residualBands, before[61].residualBands);
+  assert.ok(after[62].residualBands.sigma > before[62].residualBands.sigma);
+  assert.ok(after[121].residualBands.sigma > before[121].residualBands.sigma);
+  assert.ok(Math.abs(after[122].residualBands.sigma - before[122].residualBands.sigma) < 1e-12);
   assert.notDeepEqual(after[62].coefficients, before[62].coefficients);
 });
 
@@ -46,14 +51,24 @@ test('preserves missing sessions and rejects constant SPX returns', () => {
   assert.equal(series[63].spxReturn, null);
   assert.equal(series[64].spxReturn, null);
   assert.equal(series[65].coefficients, null);
+  assert.notEqual(series[63].residualBands, null);
+  assert.equal(series[64].residualBands, null);
+  assert.notEqual(series[125].residualBands, null);
   assert.equal(series.length, sessionDates.length);
-  assert.equal(calculateVixResponse(sample(sessionDates, () => 0.5)).at(-1).expectedChange, null);
+  const flatReturn = calculateVixResponse(sample(sessionDates, () => 0.5)).at(-1);
+  assert.equal(flatReturn.expectedChange, null);
+  assert.equal(flatReturn.residualBands, null);
 });
 
-test('centers three-sigma bands on the mean of finite displayed residuals', () => {
-  const series = [{ residual: 1 }, { residual: null }, { residual: 3 }, { residual: NaN }];
-  assert.deepEqual(calculateResidualBands(series), { count: 2, mean: 2, sigma: 1, lower: -1, upper: 5 });
-  assert.equal(calculateResidualBands(series.slice(0, 2)), null);
+test('variance uses the 60 errors from the same fitted regression', () => {
+  // Both SPX return groups have 15 errors at +1 and 15 at −1. SSE is 60.
+  const inputs = sample(sessionDates, (i) => i % 2 ? 1 : -1, (i) => i % 4 < 2 ? 1 : -1);
+  const { count, mean, sigma, lower, upper } = calculateVixResponse(inputs)[61].residualBands;
+  assert.equal(count, 60);
+  assert.equal(mean, 0);
+  assert.ok(Math.abs(sigma - 1) < 1e-12);
+  assert.ok(Math.abs(lower + 3) < 1e-12);
+  assert.ok(Math.abs(upper - 3) < 1e-12);
 });
 
 test('loads a completed-session chart with explicit delay, stale cache and error states', async () => {
@@ -100,7 +115,8 @@ test('loads a completed-session chart with explicit delay, stale cache and error
   assert.notEqual(delayed.series[0].residual, null);
   assert.ok(delayed.series.every(({ date }) => date !== holiday));
   assert.ok(delayed.series.some(({ residual }) => residual !== null));
-  assert.equal(delayed.residualBands.count, delayed.series.filter(({ residual }) => residual !== null).length);
+  assert.equal(delayed.residualBands.count, 60);
+  assert.deepEqual(delayed.residualBands, delayed.latest.residualBands);
   assert.deepEqual(requests.map(({ symbol, provider }) => [symbol, provider]), [['SPX', 'yahoo'], ['VIX', 'cboe']]);
   assert.ok(requests.every((request) => request.dataMode === 'hybrid' && request.fallbackProviders === undefined));
 
@@ -127,7 +143,8 @@ test('loads a completed-session chart with explicit delay, stale cache and error
   assert.notEqual(singleDate, monthEnd);
   const [single, month] = await Promise.all([singleDate, monthEnd]);
   assert.equal(single.status, 'ok');
-  assert.equal(single.residualBands, null);
+  assert.equal(single.residualBands.count, 60);
+  assert.deepEqual(single.residualBands, single.latest.residualBands);
   assert.deepEqual(single.series, [yahooResult.series.find(({ date }) => date === '2026-10-02')]);
   assert.equal(month.startDate, '2026-08-30');
   assert.equal(month.latest.date, '2026-11-30');
@@ -176,7 +193,7 @@ test('registers a standalone widget and refreshes its charts and published data'
   const published = [];
   const pending = Promise.withResolvers();
   let configChanges = 0;
-  const row = { date: '2026-11-27', spxReturn: -1, actualChange: 3.5, expectedChange: 2, residual: 1.5 };
+  const row = { date: '2026-11-27', spxReturn: -1, actualChange: 3.5, expectedChange: 2, residual: 1.5, residualBands: null };
   const previousWindow = global.window;
   t.after(() => { global.window = previousWindow; });
   global.window = {
@@ -188,10 +205,13 @@ test('registers a standalone widget and refreshes its charts and published data'
       calls.push(request);
       const { spxProvider, ivProvider, forceRefresh } = request;
       if (spxProvider === 'fred' && ivProvider === 'cboe') await pending.promise;
-      const latest = forceRefresh ? { ...row, date: '2026-11-30', actualChange: null, residual: null } : row;
-      const series = forceRefresh ? [row, latest] : [{ ...row, date: '2026-11-25', actualChange: 1.5, residual: -0.5 }, row];
+      const latest = forceRefresh ? { ...row, date: '2026-11-30', actualChange: null, residual: null, residualBands: { sigma: 3 } }
+        : { ...row, residualBands: { sigma: 2 } };
+      const series = forceRefresh ? [row, latest] : [
+        { ...row, date: '2026-11-25', actualChange: 1.5, residual: -0.5, residualBands: { sigma: 1 } }, latest
+      ];
       return { status: forceRefresh ? 'partial' : 'ok', startDate: request.startDate || '2026-08-27', endDate: request.endDate || latest.date,
-        latest, series, residualBands: calculateResidualBands(series), model: { windowSessions: 60 },
+        latest, series, residualBands: latest.residualBands, model: { windowSessions: 60 },
         sources: { spx: { provider: 'yahoo', requestedProvider: spxProvider, latestDate: latest.date },
           vix: { provider: ivProvider, requestedProvider: ivProvider, latestDate: row.date } }, warnings: [] };
     } }
@@ -207,9 +227,11 @@ test('registers a standalone widget and refreshes its charts and published data'
   assert.equal(charts.length, 2);
   assert.equal(charts[0].config.data.datasets.length, 2);
   assert.deepEqual(charts[1].config.data.datasets.slice(2).map(({ label, data, borderColor }) => [label, data, borderColor]), [
-    ['Mean + 3σ', [3.5, 3.5], '#a78bfa'], ['Mean − 3σ', [-2.5, -2.5], '#a78bfa'],
-    ['Mean + 4σ', [4.5, 4.5], '#ef4444'], ['Mean − 4σ', [-3.5, -3.5], '#ef4444']
+    ['+3σ', [3, 6], '#a78bfa'], ['−3σ', [-3, -6], '#a78bfa'],
+    ['+4σ', [4, 8], '#ef4444'], ['−4σ', [-4, -8], '#ef4444']
   ]);
+  const tooltip = charts[1].config.options.plugins.tooltip.callbacks;
+  assert.equal(tooltip.label({ dataset: charts[1].config.data.datasets[4], parsed: { y: 8 } }), '+4σ: +8.00 pts');
   await button.click();
   const initialRequest = { spxProvider: 'yahoo', ivProvider: 'cboe', startDate: '', endDate: '', forceRefresh: false };
   assert.deepEqual(calls, [initialRequest, { ...initialRequest, forceRefresh: true }]);
@@ -217,7 +239,8 @@ test('registers a standalone widget and refreshes its charts and published data'
   assert.match(content.innerHTML, /Residual<\/span><strong>—/);
   assert.deepEqual(charts.at(-1).config.data.datasets[0].data, [1.5, null]);
   assert.deepEqual(charts.at(-1).config.data.datasets[1].data, [0, 0]);
-  assert.equal(charts.at(-1).config.data.datasets.length, 2);
+  assert.deepEqual(charts.at(-1).config.data.datasets[2].data, [null, 9]);
+  assert.equal(charts.at(-1).config.data.datasets[2].spanGaps, false);
   assert.ok(charts[0].destroyed && charts[1].destroyed);
 
   controls[0].value = 'fred';

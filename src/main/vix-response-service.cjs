@@ -38,7 +38,7 @@ function createVixResponseService({ marketData, getMarketHolidays, now = () => n
   const inFlight = new Map();
 
   async function load(spxProvider, ivProvider, startDate, endDate, forceRefresh) {
-    const { calculateResidualBands, calculateVixResponse, VIX_RESPONSE_MODEL } = await import('../shared/vix-response-calculations.mjs');
+    const { calculateVixResponse, VIX_RESPONSE_MODEL } = await import('../shared/vix-response-calculations.mjs');
     const end = Date.parse(endDate);
     const start = Date.parse(startDate) - WARMUP_DAYS * DAY;
     const holidays = await getMarketHolidays(new Date(`${endDate}T12:00:00Z`), { startYear: new Date(start).getUTCFullYear() });
@@ -74,7 +74,6 @@ function createVixResponseService({ marketData, getMarketHolidays, now = () => n
       if (source && lastCloseDate !== latestDate) warnings.push(`${symbol} close for ${latestDate} is unavailable.`);
     }
     const series = calculateVixResponse({ sessions, spxBars: bars[0], vixBars: bars[1] }).slice(firstDisplayIndex);
-    const residualBands = calculateResidualBands(series);
     const latest = series.at(-1);
     const hasResponse = series.some((row) => row.residual !== null);
     const stale = Object.values(sources).some((source) => source.stale);
@@ -82,7 +81,7 @@ function createVixResponseService({ marketData, getMarketHolidays, now = () => n
     if (status === 'partial' && latest.residual === null && sources.spx.latestDate === latestDate && sources.vix.latestDate === latestDate) {
       warnings.push(`Response unavailable for ${latestDate}. The model requires 60 complete prior sessions with varying SPX returns.`);
     }
-    return { status, startDate, endDate, latest, series, residualBands, model: VIX_RESPONSE_MODEL, sources, warnings,
+    return { status, startDate, endDate, latest, series, residualBands: latest.residualBands, model: VIX_RESPONSE_MODEL, sources, warnings,
       ...(hasResponse ? {} : { error: 'No response could be calculated from the available daily closes.' }) };
   }
 
