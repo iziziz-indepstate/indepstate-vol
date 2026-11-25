@@ -306,3 +306,7 @@ presentation concern. See [chart behavior](tape-contract-datasource.md#underlyin
 ## VIX. Response
 
 `VIX. Response` publishes daily actual and expected VIX changes, residuals, SPX returns, model coefficients and source freshness as `vix-response`. See the [published contract](vix-response.md#ipc-and-widget-output).
+
+## VIX. VIXEQ Dynamics
+
+`VIX. VIXEQ Dynamics` publishes daily VIXEQ, VIX, their spread and COR1M, along with five- and twenty-session changes, rolling Z-scores and source freshness as `vixeq-dynamics`. See the [published contract](vixeq-dynamics.md#ipc-and-widget-output).

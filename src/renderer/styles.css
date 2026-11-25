@@ -1122,6 +1122,57 @@ select option {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.ivrv-controls.vixeq-controls {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.vixeq-widget .rc-summary {
+  grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr));
+}
+
+.vixeq-summary {
+  margin: 4px 0 8px;
+  font-size: 12px;
+}
+
+.vixeq-summary:has(+ .vixeq-explanation) {
+  margin-bottom: 3px;
+}
+
+.vixeq-explanation {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.vixeq-chart-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+}
+
+.vixeq-chart-header select {
+  font-size: 11px;
+}
+
+.vixeq-plot {
+  position: relative;
+  height: 160px;
+  min-width: 0;
+}
+
+.vixeq-plot canvas {
+  height: 100% !important;
+}
+
+.vixeq-chart-note {
+  margin-top: 6px;
+}
+
 .rc-basket {
   margin-top: 10px;
   font-size: 11px;

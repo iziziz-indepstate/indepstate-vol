@@ -5,7 +5,7 @@ const { loadLocalMarketSeries } = require('./local-market-data.cjs');
 const SYMBOL_MAP = {
   fred: { SPX: 'SP500', VIX: 'VIXCLS' },
   yahoo: { SPX: '^GSPC', VIX: '^VIX', VIX9D: '^VIX9D' },
-  cboe: { VIX: 'VIX', VIX9D: 'VIX9D', COR1M: 'COR1M' }
+  cboe: { VIX: 'VIX', VIX9D: 'VIX9D', COR1M: 'COR1M', VIXEQ: 'VIXEQ' }
 };
 
 const FALLBACK_PROVIDERS = {
@@ -37,7 +37,8 @@ function normalizeBars(rows, symbol, source) {
   const byDate = new Map();
   for (const row of Array.isArray(rows) ? rows : []) {
     const date = normalizeDate(field(row, ['date', 'Date', 'DATE', 'observation_date']));
-    const rawClose = field(row, ['close', 'Close', 'CLOSE', 'Last', 'last', 'value', 'Value']);
+    const rawClose = field(row, ['close', 'Close', 'CLOSE', 'Last', 'last', 'value', 'Value'])
+      ?? (source === 'cboe' && symbol === 'VIXEQ' ? field(row, ['VIXEQ']) : null);
     const close = Number(rawClose);
     if (!date || rawClose == null || !Number.isFinite(close) || (symbol !== 'COR1M' && close <= 0)) continue;
     const numberOrUndefined = (names) => {

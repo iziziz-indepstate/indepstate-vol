@@ -2157,8 +2157,9 @@ async function renderTableWidgetEntry(entry, latest, history) {
     },
     widget,
     eventPort,
-    onConfigChange: () => {
+    onConfigChange: ({ refresh = true } = {}) => {
       persistUiState();
+      if (!refresh) return;
       refreshSingleTableWidget(widget.id)
         .then(() => {
           if (widget.type === 'atm-straddle') return refreshVolUpfrontWidgets();

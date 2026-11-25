@@ -1,38 +1,10 @@
 const { completedSessionDate } = require('./realized-correlation-provider.cjs');
 const { FALLBACK_PROVIDERS } = require('./market-data-providers.cjs');
+const { isDate, threeMonthsBefore, tradingSessions } = require('./trading-calendar-provider.cjs');
 
 const DAY = 86400000;
 const WARMUP_DAYS = 120;
 const FIRST_VIX_DATE = '1990-01-02';
-
-function isoDate(date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function threeMonthsBefore(endDate) {
-  const date = new Date(endDate);
-  const day = date.getUTCDate();
-  date.setUTCMonth(date.getUTCMonth() - 3, 1);
-  const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
-  date.setUTCDate(Math.min(day, lastDay));
-  return isoDate(date);
-}
-
-function isDate(value) {
-  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
-    && Number.isFinite(Date.parse(value)) && isoDate(new Date(value)) === value;
-}
-
-function tradingSessions(start, cutoff, holidays) {
-  const closed = new Set(holidays);
-  const sessions = [];
-  for (let time = start; time <= cutoff; time += DAY) {
-    const day = new Date(time);
-    const date = day.toISOString().slice(0, 10);
-    if (day.getUTCDay() !== 0 && day.getUTCDay() !== 6 && !closed.has(date)) sessions.push(date);
-  }
-  return sessions;
-}
 
 function createVixResponseService({ marketData, getMarketHolidays, now = () => new Date() }) {
   const inFlight = new Map();

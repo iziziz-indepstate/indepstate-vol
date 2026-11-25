@@ -8,6 +8,7 @@ const { createRealizedCorrelationService } = require('./realized-correlation-pro
 const { createCorrelationHarService, createHarScheduler } = require('./correlation-har-service.cjs');
 const { createTradingCalendarProvider } = require('./trading-calendar-provider.cjs');
 const { createVixResponseService } = require('./vix-response-service.cjs');
+const { createVixeqDynamicsService } = require('./vixeq-dynamics-service.cjs');
 const { startAutoUpdater } = require('./auto-updater.cjs');
 const { startMcpServer } = require('./mcp-server.cjs');
 const { defaultRawSnapshotDir, saveRawSnapshotAsync } = require('./raw-snapshot-store.cjs');
@@ -254,6 +255,10 @@ app.whenReady().then(async () => {
     marketData: createMarketDataService({ cacheDir: path.join(app.getPath('userData'), 'vix-response-cache') }),
     getMarketHolidays: tradingCalendarProvider.getMarketHolidays
   });
+  const vixeqDynamicsService = createVixeqDynamicsService({
+    marketData: createMarketDataService({ cacheDir: path.join(app.getPath('userData'), 'vixeq-dynamics-cache') }),
+    getMarketHolidays: tradingCalendarProvider.getMarketHolidays
+  });
   const harService = createCorrelationHarService({ directory: path.join(app.getPath('documents'), 'IS-VOL', 'Data', 'Correlation-HAR'),
     getMarketHolidays: (date) => tradingCalendarProvider.getMarketHolidays(date) });
   harScheduler = createHarScheduler({ service: harService,
@@ -438,6 +443,10 @@ app.whenReady().then(async () => {
   ipcMain.handle('market-data:get-vix-response', (_evt, params) => vixResponseService.getState({
     spxProvider: params?.spxProvider, ivProvider: params?.ivProvider,
     startDate: params?.startDate, endDate: params?.endDate, forceRefresh: params?.forceRefresh === true
+  }));
+  ipcMain.handle('market-data:get-vixeq-dynamics', (_evt, params) => vixeqDynamicsService.getState({
+    startDate: params?.startDate, endDate: params?.endDate,
+    vixeqLocalSource: params?.vixeqLocalSource, forceRefresh: params?.forceRefresh === true
   }));
 
   ipcMain.handle('tradingview:get-snapshot', async (_evt, params) => {

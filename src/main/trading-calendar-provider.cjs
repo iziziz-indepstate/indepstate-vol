@@ -3,6 +3,36 @@ const path = require('path');
 
 const API_BASE = 'https://the-calendar.net';
 const MARKET_HOLIDAYS_ENDPOINT = '/api/finance/market-holidays';
+const DAY = 86_400_000;
+
+function isoDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function threeMonthsBefore(endDate) {
+  const date = new Date(endDate);
+  const day = date.getUTCDate();
+  date.setUTCMonth(date.getUTCMonth() - 3, 1);
+  const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+  date.setUTCDate(Math.min(day, lastDay));
+  return isoDate(date);
+}
+
+function isDate(value) {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+    && Number.isFinite(Date.parse(value)) && isoDate(new Date(value)) === value;
+}
+
+function tradingSessions(start, cutoff, holidays) {
+  const closed = new Set(holidays);
+  const sessions = [];
+  for (let time = start; time <= cutoff; time += DAY) {
+    const day = new Date(time);
+    const date = isoDate(day);
+    if (day.getUTCDay() !== 0 && day.getUTCDay() !== 6 && !closed.has(date)) sessions.push(date);
+  }
+  return sessions;
+}
 
 function cacheFile(cacheDir) {
   return path.join(cacheDir, 'us-market-holidays.json');
@@ -211,6 +241,9 @@ function createTradingCalendarProvider({ cacheDir, fetchImpl = global.fetch, now
 
 module.exports = {
   createTradingCalendarProvider,
+  isDate,
+  threeMonthsBefore,
+  tradingSessions,
   normalizeMarketHolidays,
   requiredYears,
   cacheIsCurrent,

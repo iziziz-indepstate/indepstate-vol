@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('appBridge', {
   getRealizedCorrelationInputs: (params) => ipcRenderer.invoke('market-data:get-realized-correlation-inputs', params),
   getCorrelationHarState: (params) => ipcRenderer.invoke('market-data:get-correlation-har-state', params),
   getVixResponse: (params) => ipcRenderer.invoke('market-data:get-vix-response', params),
+  getVixeqDynamics: (params) => ipcRenderer.invoke('market-data:get-vixeq-dynamics', params),
   getTradingViewSnapshot: (params) => ipcRenderer.invoke('tradingview:get-snapshot', params),
   getTheBlockSnapshot: (params) => ipcRenderer.invoke('theblock:get-snapshot', params),
   getDataSourceSnapshot: (providerKey, params) => ipcRenderer.invoke(`${providerKey}:get-snapshot`, params),
