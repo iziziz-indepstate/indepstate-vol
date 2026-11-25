@@ -2132,7 +2132,10 @@ async function renderTableWidgetEntry(entry, latest, history) {
   const tab = activeTab();
   const source = sourceForWidget(tab, widget, getWidgetDefinition);
   const generation = sourceGenerations.get(source?.id) || 0;
+  const renderVersion = (entry.tableRenderVersion || 0) + 1;
+  entry.tableRenderVersion = renderVersion;
   const isCurrent = () => activeTab() === tab && chartInstances.get(widget.id) === entry
+    && entry.tableRenderVersion === renderVersion
     && generation === (sourceGenerations.get(source?.id) || 0);
   let publishedStructuredData = false;
 

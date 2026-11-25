@@ -172,15 +172,20 @@ function flattenYears(years, byYear) {
 function createTradingCalendarProvider({ cacheDir, fetchImpl = global.fetch, now = () => new Date() } = {}) {
   if (!cacheDir) throw new Error('cacheDir is required');
 
-  async function getMarketHolidays(referenceDate) {
+  async function getMarketHolidays(referenceDate, { startYear } = {}) {
     const currentNow = referenceDate || now();
     const years = requiredYears(currentNow);
+    if (Number.isInteger(startYear) && startYear < years[0]) {
+      const historicalYears = Array.from({ length: years[0] - startYear }, (_, index) => startYear + index);
+      years.unshift(...historicalYears);
+    }
     const cached = readCache(cacheDir);
     if (cacheIsCurrent(cached, years, currentNow)) return flattenYears(years, cached.years);
 
     try {
       const nextYears = { ...(cached?.years || {}) };
       for (const year of years) {
+        if (cached?.cacheYear === localYear(currentNow) && Array.isArray(nextYears[year])) continue;
         try {
           nextYears[String(year)] = await fetchYear(year, fetchImpl);
         } catch (error) {

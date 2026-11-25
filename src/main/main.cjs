@@ -7,6 +7,7 @@ const { createMarketDataService } = require('./market-data-providers.cjs');
 const { createRealizedCorrelationService } = require('./realized-correlation-provider.cjs');
 const { createCorrelationHarService, createHarScheduler } = require('./correlation-har-service.cjs');
 const { createTradingCalendarProvider } = require('./trading-calendar-provider.cjs');
+const { createVixResponseService } = require('./vix-response-service.cjs');
 const { startAutoUpdater } = require('./auto-updater.cjs');
 const { startMcpServer } = require('./mcp-server.cjs');
 const { defaultRawSnapshotDir, saveRawSnapshotAsync } = require('./raw-snapshot-store.cjs');
@@ -249,6 +250,10 @@ app.whenReady().then(async () => {
   const tradingCalendarProvider = createTradingCalendarProvider({
     cacheDir: path.join(app.getPath('userData'), 'trading-calendar-cache')
   });
+  const vixResponseService = createVixResponseService({
+    marketData: createMarketDataService({ cacheDir: path.join(app.getPath('userData'), 'vix-response-cache') }),
+    getMarketHolidays: tradingCalendarProvider.getMarketHolidays
+  });
   const harService = createCorrelationHarService({ directory: path.join(app.getPath('documents'), 'IS-VOL', 'Data', 'Correlation-HAR'),
     getMarketHolidays: (date) => tradingCalendarProvider.getMarketHolidays(date) });
   harScheduler = createHarScheduler({ service: harService,
@@ -430,6 +435,10 @@ app.whenReady().then(async () => {
     }, () => correlationService.getInputs(params || {}));
   });
   ipcMain.handle('market-data:get-correlation-har-state', (_evt, params) => harService.getState({ refresh: params?.refresh === true }));
+  ipcMain.handle('market-data:get-vix-response', (_evt, params) => vixResponseService.getState({
+    spxProvider: params?.spxProvider, ivProvider: params?.ivProvider,
+    startDate: params?.startDate, endDate: params?.endDate, forceRefresh: params?.forceRefresh === true
+  }));
 
   ipcMain.handle('tradingview:get-snapshot', async (_evt, params) => {
     const { TradingViewProvider } = await import('../shared/tradingview-provider.js');

@@ -117,30 +117,27 @@ test('falls back from unavailable Cboe to Yahoo and reports actual provider', as
   assert.equal(result.bars[0].close, 13.2);
 });
 
-test('hybrid mode uses stale cache when remote refresh fails', async () => {
+test('hybrid mode uses stale cache before falling back after a provider failure', async () => {
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'is-vol-cache-'));
-  fs.writeFileSync(path.join(cacheDir, 'fred-SPX.json'), JSON.stringify({
-    provider: 'fred',
-    symbol: 'SPX',
-    updatedAt: '2020-01-01T00:00:00.000Z',
-    bars: [{ date: '2026-06-01', symbol: 'SPX', close: 6000, source: 'fred' }]
-  }));
   const service = createMarketDataService({
     cacheDir,
-    fetchImpl: async () => response('', { status: 503 })
+    fetchImpl: async (url) => url.includes('finance.yahoo.com') ? response('', { status: 503 })
+      : response('observation_date,SP500\n2026-06-01,6001\n')
   });
 
-  const result = await service.getDailyHistory({
-    dataMode: 'hybrid',
-    provider: 'fred',
-    fallbackProviders: [],
-    symbol: 'SPX',
-    cache: true,
-    forceRefresh: true
-  });
-  assert.equal(result.cached, true);
-  assert.equal(result.cacheFresh, false);
-  assert.match(result.warning, /stale cache/i);
+  const fallback = await service.getDailyHistory({ dataMode: 'hybrid', provider: 'yahoo', symbol: 'SPX', forceRefresh: true });
+  assert.equal(fallback.provider, 'fred');
+  assert.equal(fallback.fallback, true);
+
+  fs.writeFileSync(path.join(cacheDir, 'yahoo-SPX.json'), JSON.stringify({
+    updatedAt: '2020-01-01T00:00:00.000Z', bars: [{ date: '2026-06-01', close: 6000 }]
+  }));
+  const cached = await service.getDailyHistory({ dataMode: 'hybrid', provider: 'yahoo', symbol: 'SPX', forceRefresh: true });
+  assert.equal(cached.provider, 'yahoo');
+  assert.equal(cached.fallback, false);
+  assert.equal(cached.cached, true);
+  assert.equal(cached.cacheFresh, false);
+  assert.match(cached.warning, /stale cache/i);
 });
 
 test('force refresh bypasses fresh cache and replaces it with remote data', async () => {

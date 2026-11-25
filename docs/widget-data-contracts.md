@@ -302,3 +302,7 @@ presentation concern. See [chart behavior](tape-contract-datasource.md#underlyin
 ## COR. Correlation HAR
 
 `COR. Correlation HAR` publishes its latest issued 21-session forecast, archived predictions, subsequent facts, OLS parameters and data-source status as `correlation-har`. See [COR. Correlation HAR](correlation-har.md#ipc-and-widget-output).
+
+## VIX. Response
+
+`VIX. Response` publishes daily actual and expected VIX changes, residuals, SPX returns, model coefficients and source freshness as `vix-response`. See the [published contract](vix-response.md#ipc-and-widget-output).

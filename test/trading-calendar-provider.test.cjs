@@ -58,6 +58,25 @@ test('calendar provider uses current cache without fetching', async () => {
   assert.deepEqual(await provider.getMarketHolidays(), ['2026-01-01', '2027-01-01']);
 });
 
+test('calendar provider extends its current cache back to a requested historical year', async () => {
+  const dir = cacheDir();
+  writeCache(dir, { cacheYear: 2026, years: { 2026: ['2026-01-01'], 2027: ['2027-01-01'] } });
+  const calls = [];
+  const provider = createTradingCalendarProvider({
+    cacheDir: dir,
+    now: () => new Date('2026-02-01T12:00:00Z'),
+    fetchImpl: async (url) => {
+      const year = /([0-9]{4})\.json$/.exec(url)[1];
+      calls.push(year);
+      return response({ holidays: [{ date: `${year}-01-01`, status: 'Closed' }] });
+    }
+  });
+  assert.deepEqual(await provider.getMarketHolidays(undefined, { startYear: 2024 }),
+    ['2024-01-01', '2025-01-01', '2026-01-01', '2027-01-01']);
+  assert.deepEqual(calls, ['2024', '2025']);
+  assert.deepEqual(await provider.getMarketHolidays(), ['2026-01-01', '2027-01-01']);
+});
+
 test('calendar provider fetches missing cache years and writes cache', async () => {
   const dir = cacheDir();
   const calls = [];
