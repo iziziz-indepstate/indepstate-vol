@@ -52,7 +52,7 @@ TradingView session cookies can be configured in `Documents/IS-VOL/config.json`,
 - **SPX IV / RV**: standalone table and chart widget for implied-vs-realized volatility comparisons.
 - **COR. Realized Correlation**: standalone RC5/RC10/RC21 and configurable EWMA charts for the current Top 50 IVV basket, with COR1M and correlation spread. Details: [COR. Realized Correlation](docs/realized-correlation.md).
 - **VIX. Response** shows daily actual and expected VIX changes given the SPX return, plus the residual. Details in [VIX. Response](docs/vix-response.md).
-- **VIX. VIXEQ Dynamics** shows VIXEQ, VIX, their spread and COR1M, with a breakdown of five-session spread changes. Details in [VIX. VIXEQ Dynamics](docs/vixeq-dynamics.md).
+- **VIX. VIXEQ Dynamics** shows VIXEQ, VIX, their spread and COR1M, with a market regime panel linked to same-tab VIX Response. Details in [VIX. VIXEQ Dynamics](docs/vixeq-dynamics.md).
 - **Flow. TICK**: four-line option-flow chart for bought/sold calls and puts from `tape-contract` snapshots, filtered by observed strikes around tape `underlying_price`, with cumulative/trailing MA modes and display-only point window controls. Details: [Tape Contract Datasource](docs/tape-contract-datasource.md).
 - **Flow. Balanced TICK**: four-line option-flow balance chart for calls, puts, directional balance (`Calls balance - Puts balance`), and imbalance ratio over the same ATM strike window as `Flow. TICK`, with cumulative/trailing MA modes and display-only point window controls. Details: [Tape Contract Datasource](docs/tape-contract-datasource.md).
 

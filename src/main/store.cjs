@@ -4,6 +4,7 @@ const path = require('path');
 const CONFIG_FILE_NAME = 'dashboard-config.json';
 const LEGACY_FILE_NAME = 'dashboard-state.json';
 const BACKUP_COUNT = 3;
+const pendingConfigWrites = new Map();
 
 function configPath(userDataPath) {
   return path.join(userDataPath, CONFIG_FILE_NAME);
@@ -102,11 +103,9 @@ async function rotateConfigBackups(userDataPath) {
   await fs.promises.copyFile(current, backupPath(userDataPath, 1));
 }
 
-async function saveUiState(userDataPath, uiState) {
+async function writeUiConfig(userDataPath, raw) {
   const file = configPath(userDataPath);
   const tmp = tempConfigPath(userDataPath);
-  const config = configFromUiState(uiState);
-  const raw = `${JSON.stringify(config, null, 2)}\n`;
 
   try {
     await fs.promises.mkdir(userDataPath, { recursive: true });
@@ -116,6 +115,19 @@ async function saveUiState(userDataPath, uiState) {
   } catch (err) {
     await removeFileBestEffort(tmp);
     throw err;
+  }
+}
+
+async function saveUiState(userDataPath, uiState) {
+  const directory = path.resolve(userDataPath);
+  const raw = `${JSON.stringify(configFromUiState(uiState), null, 2)}\n`;
+  const previous = pendingConfigWrites.get(directory) ?? Promise.resolve();
+  const pending = previous.catch(() => {}).then(() => writeUiConfig(directory, raw));
+  pendingConfigWrites.set(directory, pending);
+  try {
+    await pending;
+  } finally {
+    if (pendingConfigWrites.get(directory) === pending) pendingConfigWrites.delete(directory);
   }
 }
 

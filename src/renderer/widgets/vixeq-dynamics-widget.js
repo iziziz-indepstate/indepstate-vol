@@ -1,5 +1,7 @@
 import { CONTEXT_SESSIONS, VIXEQ_LAUNCH_DATE, VIXEQ_SERIES, explainVixeqDynamics } from '../../shared/vixeq-dynamics-calculations.mjs';
+import { evaluateVolatilityRegime } from '../../shared/volatility-regime-engine.mjs';
 import { ensureChartJsRuntime } from './widget-renderers.js';
+import { renderVolatilityRegimePanel, selectRegimeResponse } from './volatility-regime-panel.js';
 
 const states = new WeakMap();
 const labels = { vixeq: 'VIXEQ', vix: 'VIX', spread: 'VIXEQ − VIX', cor1m: 'COR1M' };
@@ -166,24 +168,34 @@ function renderCharts(Chart, content, rows, state, spreadView, onViewChange) {
 }
 
 export const vixeqDynamicsWidget = {
-  type: 'vixeq-dynamics', defaultTitle: 'VIX. VIXEQ Dynamics', mode: 'table', gridSpan: 6,
-  refreshOnDashboardRefresh: false, defaultConfig: { startDate: '', endDate: '', vixeqLocalSource: '', spreadView: 'level' },
+  type: 'vixeq-dynamics', defaultTitle: 'VIX. VIXEQ Dynamics', mode: 'table', gridSpan: 6, consumesWidgetData: true,
+  refreshOnDashboardRefresh: false, waitForWidgetData: false,
+  defaultConfig: { startDate: '', endDate: '', vixeqLocalSource: '', spreadView: 'level', responseWidgetId: '', regimeCollapsed: false },
   destroy(container) {
     const state = states.get(container);
-    if (state) destroyCharts(state);
+    if (state) {
+      state.unsubscribe?.();
+      destroyCharts(state);
+    }
     states.delete(container);
   },
-  async render({ container, widget, widgetData, onConfigChange }) {
+  async render({ container, widget, widgets = [], widgetData, onConfigChange }) {
     vixeqDynamicsWidget.destroy(container);
     const state = { charts: [], hoverIndex: null };
     states.set(container, state);
     const current = () => states.get(container) === state;
     const config = { ...vixeqDynamicsWidget.defaultConfig, ...widget.config };
     if (config.spreadView !== 'contributions') config.spreadView = vixeqDynamicsWidget.defaultConfig.spreadView;
-    const publish = (result) => widgetData?.publish?.({
-      ...result, type: vixeqDynamicsWidget.type, title: widget.title || vixeqDynamicsWidget.defaultTitle, config: { ...config }
+    config.regimeCollapsed = config.regimeCollapsed === true;
+    let result;
+    let regime;
+    const publish = () => widgetData?.publish?.({
+      ...result, regime, type: vixeqDynamicsWidget.type, title: widget.title || vixeqDynamicsWidget.defaultTitle, config: { ...config }
     });
-    container.innerHTML = `<div class="ivrv-controls vixeq-controls">
+    container.innerHTML = `<details class="volatility-regime" data-vixeq-regime${config.regimeCollapsed ? '' : ' open'}>
+      <summary>Market Regime</summary>
+      <div data-vixeq-regime-content><p role="status">Loading market observations…</p></div>
+    </details><div class="ivrv-controls vixeq-controls">
       <label>Start date<input type="date" data-vixeq-config="startDate" value="${escape(config.startDate)}"></label>
       <label>End date<input type="date" data-vixeq-config="endDate" value="${escape(config.endDate)}"></label>
       <label>VIXEQ local CSV<input type="text" data-vixeq-config="vixeqLocalSource" value="${escape(config.vixeqLocalSource)}" placeholder="Optional path"></label>
@@ -191,6 +203,37 @@ export const vixeqDynamicsWidget = {
     </div><div class="rc-widget vixeq-widget" data-vixeq-content></div>`;
     const button = container.querySelector('[data-vixeq-refresh]');
     const content = container.querySelector('[data-vixeq-content]');
+    const details = container.querySelector('[data-vixeq-regime]');
+    const panel = container.querySelector('[data-vixeq-regime-content]');
+
+    details.addEventListener('toggle', () => {
+      const collapsed = !details.open;
+      if (!current() || collapsed === config.regimeCollapsed) return;
+      widget.config ??= {};
+      widget.config.regimeCollapsed = collapsed;
+      config.regimeCollapsed = collapsed;
+      onConfigChange({ refresh: false });
+      if (result) publish();
+    });
+
+    function updateRegime() {
+      if (!current() || !result) return;
+      const response = selectRegimeResponse(widgets, widgetData?.readByType?.('vix-response') ?? [], config.responseWidgetId);
+      regime = evaluateVolatilityRegime({ ...result, ...response });
+      renderVolatilityRegimePanel(panel, regime, response, config.responseWidgetId, (responseWidgetId) => {
+        widget.config ??= {};
+        widget.config.responseWidgetId = responseWidgetId;
+        config.responseWidgetId = responseWidgetId;
+        onConfigChange({ refresh: false });
+        updateRegime();
+        panel.querySelector('[data-regime-source]')?.focus();
+      });
+      publish();
+    }
+
+    state.unsubscribe = widgetData?.subscribeByType?.('vix-response', ({ widgetId } = {}) => {
+      if (!regime || regime.data_quality.response_widget_id === widgetId) updateRegime();
+    });
     for (const control of container.querySelectorAll('[data-vixeq-config]')) {
       control.addEventListener('change', () => {
         widget.config ??= {};
@@ -204,8 +247,9 @@ export const vixeqDynamicsWidget = {
       button.textContent = 'Loading…';
       try {
         const { startDate, endDate, vixeqLocalSource } = config;
-        const result = await window.appBridge.getVixeqDynamics({ startDate, endDate, vixeqLocalSource, forceRefresh });
+        const loaded = await window.appBridge.getVixeqDynamics({ startDate, endDate, vixeqLocalSource, forceRefresh });
         if (!current()) return;
+        result = loaded;
         destroyCharts(state);
         const { latest, sources, series, summary, warnings, error, status } = result;
         const retrospective = series.some((row) => row.retrospective);
@@ -228,7 +272,7 @@ export const vixeqDynamicsWidget = {
             <div><h4>Implied correlation · correlation points</h4><div class="vixeq-plot"><canvas data-vixeq-chart="correlation" role="img" aria-label="Daily COR1M"></canvas></div></div>
           </div>
           <div class="ivrv-freshness vixeq-chart-note">Z-scores use ${CONTEXT_SESSIONS} prior sessions.${retrospective ? ` Shading marks back-tested VIXEQ before ${VIXEQ_LAUNCH_DATE}.` : ''}</div>` : ''}`;
-        publish(result);
+        updateRegime();
         if (status === 'error') return;
         try {
           const Chart = await ensureChartJsRuntime();
@@ -238,7 +282,7 @@ export const vixeqDynamicsWidget = {
             widget.config.spreadView = spreadView;
             config.spreadView = spreadView;
             onConfigChange({ refresh: false });
-            publish(result);
+            publish();
           });
         } catch (error) {
           if (!current()) return;
@@ -250,8 +294,9 @@ export const vixeqDynamicsWidget = {
         destroyCharts(state);
         const message = error?.message || String(error);
         content.innerHTML = `<div class="ivrv-error" role="status">Unable to load VIXEQ dynamics. ${escape(message)}</div>`;
-        publish({ status: 'error', startDate: config.startDate, endDate: config.endDate, latest: null, series: [],
-          sources: {}, warnings: [], summary: '', error: message });
+        result = { status: 'error', startDate: config.startDate, endDate: config.endDate, latest: null, series: [],
+          sources: {}, warnings: [], summary: '', error: message };
+        updateRegime();
       } finally {
         if (current()) {
           button.disabled = false;

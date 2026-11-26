@@ -49,7 +49,7 @@ test('requires an exact date match and a complete prior-only Z-score window', ()
   };
   const rows = calculateVixeqDynamics(sessions, histories);
   assert.equal(rows[251].zScore.vixeq, null);
-  assert.deepEqual(rows[252].zScore, { vixeq: 29, spread: 29 });
+  assert.deepEqual(rows[252].zScore, { vixeq: 29, spread: 29, vix: null, cor1m: null });
   assert.equal(rows[252].change20.vixeq, 15);
   assert.equal(rows.find(({ date }) => date === '2024-11-01').retrospective, true);
   assert.equal(rows.find(({ date }) => date === '2024-11-04').retrospective, false);
@@ -61,7 +61,7 @@ test('requires an exact date match and a complete prior-only Z-score window', ()
   assert.equal(gaps[247].spread, null);
   assert.equal(gaps[252].change5.spread, null);
   assert.equal(gaps[252].change5.vixeq, 14);
-  assert.deepEqual(gaps[252].zScore, { vixeq: 29, spread: null });
+  assert.deepEqual(gaps[252].zScore, { vixeq: 29, spread: null, vix: null, cor1m: null });
   assert.match(describeVixeqDynamics(gaps.at(-1)), /COR1M change unavailable/);
 
   histories.vixeq = closes(sessions, () => 30.1);
@@ -151,7 +151,34 @@ test('registers an independent VIXEQ widget with its own daily inputs', () => {
   assert.equal(definition.mode, 'table');
 });
 
-test('saves the spread view without loading data and restores it on a new render', async (t) => {
+test('extends a sparse momentum lookback and keeps the latest observations independent of the display start', async () => {
+  const sessions = sessionsFrom('2023-01-01', 1000);
+  const date = sessions.at(-1);
+  const missing = new Set(sessions.slice(-170, -110));
+  const requests = [];
+  const service = createVixeqDynamicsService({
+    now: () => new Date(`${date}T23:00:00Z`),
+    getMarketHolidays: async () => [],
+    marketData: { async getDailyHistory(request) {
+      requests.push(request);
+      const bars = closes(sessions, (i) => 30 + 3 * Math.sin(i / 6))
+        .filter((row) => row.date >= request.startDate && row.date <= request.endDate
+          && (request.symbol !== 'COR1M' || !missing.has(row.date)));
+      return { bars, provider: 'cboe' };
+    } }
+  });
+  const narrow = await service.getState({ startDate: date });
+  assert.equal(narrow.series.length, 1);
+  assert.equal(narrow.regimeObservations.momentum[20].cor1m.count, 252);
+  assert.ok(narrow.regimeObservations.momentum[20].cor1m.sigma > 0);
+  assert.equal(narrow.latest.zScore.cor1m, null);
+  assert.ok(requests.filter(({ symbol }) => symbol === 'COR1M').length > 1);
+  const wide = await service.getState({ startDate: sessions.at(-300), endDate: date });
+  assert.deepEqual(wide.regimeObservations, narrow.regimeObservations);
+  assert.deepEqual(wide.latest, narrow.latest);
+});
+
+test('saves the spread view and regime panel state without loading data and restores them on a new render', async (t) => {
   const definition = getWidgetDefinition('vixeq-dynamics');
   const widget = { type: definition.type };
   const view = { addEventListener(_event, listener) { this.change = listener; } };
@@ -161,7 +188,11 @@ test('saves the spread view without loading data and restores it on a new render
     '[data-vixeq-view]': view,
     '[data-vixeq-chart="spread"]': spread
   })[selector] ?? {} };
-  const container = { querySelector: (selector) => selector === '[data-vixeq-refresh]' ? button : content, querySelectorAll: () => [] };
+  const panel = { querySelector: () => null };
+  const details = { open: true, addEventListener(_event, listener) { this.toggle = listener; } };
+  const elements = { '[data-vixeq-refresh]': button, '[data-vixeq-regime]': details,
+    '[data-vixeq-regime-content]': panel, '[data-vixeq-content]': content };
+  const container = { querySelector: (selector) => elements[selector], querySelectorAll: () => [] };
   const latest = calculateVixeqDynamics(['2026-11-30'], { vixeq: [], vix: [], cor1m: [] })[0];
   const requests = [];
   const published = [];
@@ -192,6 +223,13 @@ test('saves the spread view without loading data and restores it on a new render
 
   await render(widget);
   assert.match(content.innerHTML, /value="level" selected/);
+  assert.match(container.innerHTML, /data-vixeq-regime open>/);
+  details.toggle();
+  assert.equal(saved, undefined);
+  details.open = false;
+  details.toggle();
+  assert.equal(saved.regimeCollapsed, true);
+  assert.equal(published.at(-1).config.regimeCollapsed, true);
   view.change({ target: { value: 'contributions' } });
   assert.equal(requests.length, 1);
   assert.equal(saved.spreadView, 'contributions');
@@ -202,7 +240,11 @@ test('saves the spread view without loading data and restores it on a new render
   assert.match(content.innerHTML, /value="contributions" selected/);
   await render({ type: definition.type, config: saved });
   assert.match(content.innerHTML, /value="contributions" selected/);
+  assert.match(container.innerHTML, /data-vixeq-regime>/);
   assert.equal(spread.chart.data.datasets.length, 3);
+  details.open = true;
+  details.toggle();
+  assert.equal(saved.regimeCollapsed, false);
   view.change({ target: { value: 'level' } });
   assert.equal(saved.spreadView, 'level');
   assert.equal(spread.chart.data.datasets.length, 1);

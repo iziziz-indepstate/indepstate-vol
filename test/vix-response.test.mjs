@@ -38,6 +38,7 @@ test('fits exactly 60 prior changes and keeps the scored close out of the fit', 
   assert.equal(after[61].expectedChange, before[61].expectedChange);
   assert.ok(Math.abs(after[61].residual - 1.5) < 1e-12);
   assert.deepEqual(after[61].residualBands, before[61].residualBands);
+  assert.equal(after[61].standardizedResidual, after[61].residual / before[61].residualBands.sigma);
   assert.ok(after[62].residualBands.sigma > before[62].residualBands.sigma);
   assert.ok(after[121].residualBands.sigma > before[121].residualBands.sigma);
   assert.ok(Math.abs(after[122].residualBands.sigma - before[122].residualBands.sigma) < 1e-12);

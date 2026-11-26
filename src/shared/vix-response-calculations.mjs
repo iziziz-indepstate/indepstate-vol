@@ -44,6 +44,9 @@ export function calculateVixResponse({ sessions, spxBars, vixBars }) {
     const expectedChange = coefficients && row.spxReturn !== null
       ? coefficients.alpha + coefficients.beta * row.spxReturn : null;
     const residual = expectedChange !== null && row.actualChange !== null ? row.actualChange - expectedChange : null;
-    return { ...row, expectedChange, residual, coefficients, residualBands: fit?.residualBands ?? null };
+    const residualBands = fit?.residualBands ?? null;
+    const standardized = residual === null || !(residualBands?.sigma > 0) ? null : residual / residualBands.sigma;
+    const standardizedResidual = Number.isFinite(standardized) ? standardized : null;
+    return { ...row, expectedChange, residual, standardizedResidual, coefficients, residualBands };
   });
 }

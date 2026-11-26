@@ -1,6 +1,7 @@
 export const VIXEQ_LAUNCH_DATE = '2024-11-04';
 export const CONTEXT_SESSIONS = 252;
 export const VIXEQ_SERIES = ['vixeq', 'vix', 'cor1m'];
+export const VIXEQ_METRICS = [...VIXEQ_SERIES, 'spread'];
 
 function change(current, earlier) {
   return current == null || earlier == null ? null : current - earlier;
@@ -17,16 +18,43 @@ function changes(row, earlier) {
   };
 }
 
+function historicalStats(previous) {
+  const count = previous.length;
+  if (count < CONTEXT_SESSIONS) return { count, sigma: null, origin: null, meanOffset: null };
+  // Center around the first value so constant history has exact zero variance.
+  const origin = previous[0];
+  const meanOffset = previous.reduce((sum, value) => sum + (value - origin), 0) / count;
+  const variance = previous.reduce((sum, value) => sum + (value - origin - meanOffset) ** 2, 0) / count;
+  return { count, sigma: Math.sqrt(variance), origin, meanOffset };
+}
+
+function levelHistory(rows, index, key) {
+  return historicalStats(rows.slice(Math.max(0, index - CONTEXT_SESSIONS), index).map((row) => row[key]).filter(Number.isFinite));
+}
+
 function zScore(rows, index, key) {
   const current = rows[index][key];
   if (current === null || index < CONTEXT_SESSIONS) return null;
-  const previous = rows.slice(index - CONTEXT_SESSIONS, index).map((row) => row[key]);
-  if (previous.includes(null)) return null;
-  // Center around the first value so constant history has exact zero variance.
-  const origin = previous[0];
-  const meanOffset = previous.reduce((sum, value) => sum + (value - origin), 0) / CONTEXT_SESSIONS;
-  const variance = previous.reduce((sum, value) => sum + (value - origin - meanOffset) ** 2, 0) / CONTEXT_SESSIONS;
-  return variance > 0 ? (current - origin - meanOffset) / Math.sqrt(variance) : null;
+  const { sigma, origin, meanOffset } = levelHistory(rows, index, key);
+  return sigma > 0 ? (current - origin - meanOffset) / sigma : null;
+}
+
+export function getVixeqRegimeObservations(rows, index = rows.length - 1) {
+  const byMetric = (callback) => Object.fromEntries(VIXEQ_METRICS.map((key) => [key, callback(key)]));
+  const momentum = Object.fromEntries([5, 20].map((horizon) => [horizon, byMetric((key) => {
+    const previous = [];
+    for (let i = index - 1; i >= 0 && previous.length < CONTEXT_SESSIONS; i -= 1) {
+      const value = rows[i][`change${horizon}`][key];
+      if (Number.isFinite(value)) previous.push(value);
+    }
+    const { count, sigma } = historicalStats(previous);
+    return { count, sigma };
+  })]));
+  const levels = byMetric((key) => {
+    const { count, sigma } = levelHistory(rows, index, key);
+    return { count, sigma };
+  });
+  return { levels, momentum };
 }
 
 export function calculateVixeqDynamics(sessions, histories) {
@@ -45,7 +73,7 @@ export function calculateVixeqDynamics(sessions, histories) {
     ...row,
     change5: changes(row, rows[index - 5]),
     change20: changes(row, rows[index - 20]),
-    zScore: { vixeq: zScore(rows, index, 'vixeq'), spread: zScore(rows, index, 'spread') }
+    zScore: Object.fromEntries(VIXEQ_METRICS.map((key) => [key, zScore(rows, index, key)]))
   }));
 }
 

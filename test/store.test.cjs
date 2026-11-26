@@ -105,6 +105,20 @@ test('creates and rotates up to 3 config backups before replacing valid config',
   assert.equal(fs.existsSync(backupPath(dir, 4)), false);
 });
 
+test('serializes concurrent saves and retains the last requested settings', async (t) => {
+  const dir = makeTempDir();
+  t.after(() => fs.promises.rm(dir, { recursive: true, force: true }));
+  const state = config('regime-tab');
+  const widget = { id: 'regime', type: 'vixeq-dynamics', config: { regimeCollapsed: false } };
+  state.tabs[0].widgets.push(widget);
+  const expanded = saveUiState(dir, state);
+  widget.config.regimeCollapsed = true;
+  const collapsed = saveUiState(dir, state);
+  await Promise.all([expanded, collapsed]);
+  assert.equal(loadState(dir, defaults).tabs[0].widgets[0].config.regimeCollapsed, true);
+  assert.equal(readJson(backupPath(dir, 1)).tabs[0].widgets[0].config.regimeCollapsed, false);
+});
+
 test('corrupt config does not overwrite existing backups during the next save', async () => {
   const dir = makeTempDir();
   fs.writeFileSync(configPath(dir), '{ broken', 'utf-8');

@@ -16,6 +16,8 @@ Choose Yahoo or FRED for SPX and Cboe, Yahoo or FRED for VIX. Yahoo and Cboe are
 
 The widget uses the same daily provider service as `SPX IV / RV`. In Hybrid mode, a failed request uses the provider's available cache. With no cache available, the service tries the next provider in its fallback chain. The widget shows which provider supplied each series. If the returned history stops before the last completed session in the display range, the summary leaves that session's figures blank and the charts show the available history.
 
+The standardized residual divides the same-session residual by the prior training error σ. It is empty when the residual is unavailable or σ is zero. The Market Regime panel consumes this daily value.
+
 ## IPC and widget output
 
 `appBridge.getVixResponse({ spxProvider?, ivProvider?, startDate?, endDate?, forceRefresh? })` returns the calculation result. The widget publishes it with its `type`, `title` and `config`, including the provider selections and saved date fields.
@@ -25,7 +27,7 @@ The widget uses the same daily provider service as `SPX IV / RV`. In Hybrid mode
 | `status` | `ok` when the latest residual is available from current data, `partial` when a usable residual history remains with a missing latest result or stale cache, or `error` when no residual can be calculated. |
 | `startDate`, `endDate` | Effective inclusive display bounds as `YYYY-MM-DD`. |
 | `latest` | Last completed session in the display range, even if values are missing. `null` if the range has no sessions or loading failed before the session could be determined. |
-| `series` | Display rows in ascending order, each with `date`, `spxReturn`, `actualChange`, `expectedChange`, `residual`, `coefficients` (`alpha`, `beta`) and `residualBands`. Unavailable values are `null`. |
+| `series` | Display rows in ascending order, each with `date`, `spxReturn`, `actualChange`, `expectedChange`, `residual`, `standardizedResidual`, `coefficients` (`alpha`, `beta`) and `residualBands`. Unavailable values are `null`. |
 | `residualBands` | The last session's `residualBands`, or `null` if the model could not be fitted. Each row's band object has `count` (60), `mean` (0), `sigma`, `lower` (−3σ) and `upper` (+3σ). The chart also plots ±4σ. |
 | `model` | `method`, `windowSessions`, `spxReturnUnit` and `vixChangeUnit`. |
 | `sources` | Metadata keyed by `spx` and `vix` with `requestedProvider`, actual `provider` (or `null`), `fallback`, `latestDate`, `updatedAt`, `cached` and `stale`. |

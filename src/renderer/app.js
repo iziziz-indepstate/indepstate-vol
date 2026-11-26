@@ -2117,9 +2117,10 @@ async function refreshCharts(dataSourceId = null) {
       ? renderTableWidgetEntry(entry, context.latest, context.history)
       : refreshChartEntry(entry, context);
   };
-  await Promise.all(entries.filter((entry) => !entry.definition.consumesWidgetData).map(renderEntry));
+  const waitsForWidgetData = ({ definition }) => definition.consumesWidgetData && definition.waitForWidgetData !== false;
+  await Promise.all(entries.filter((entry) => !waitsForWidgetData(entry)).map(renderEntry));
   if (!isActiveTabId(tabId) || generation !== chartGeneration) return;
-  await Promise.all(entries.filter((entry) => entry.definition.consumesWidgetData).map(renderEntry));
+  await Promise.all(entries.filter(waitsForWidgetData).map(renderEntry));
 }
 
 async function renderTableWidgetEntry(entry, latest, history) {
@@ -2153,7 +2154,10 @@ async function renderTableWidgetEntry(entry, latest, history) {
         publishWidgetData(tab?.id, widget.id, data, latest?.time || null);
       },
       clear: () => clearWidgetData(tab?.id, widget.id),
-      readByType: (type) => readWidgetDataByType(tab, type)
+      readByType: (type) => readWidgetDataByType(tab, type),
+      subscribeByType: (type, callback) => widgetDataPublishBus.subscribe(({ tab: publishedTab, widget: producer, output }) => {
+        if (isCurrent() && publishedTab?.id === tab?.id && producer?.type === type) callback(output);
+      })
     },
     widget,
     eventPort,
