@@ -1306,6 +1306,65 @@ select option {
 .multi-skew-chart .u-legend { color: var(--text); font-size: 11px; }
 .multi-skew-status { font-size: 11px; color: var(--muted); margin: 6px 0; overflow-wrap: anywhere; }
 
+.iv-skew-controls, .iv-skew-segments, .iv-skew-shade-key {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.iv-skew-controls { align-items: end; gap: 8px 14px; }
+.iv-skew-controls label { display: grid; gap: 2px; color: var(--muted); font-size: 11px; }
+.iv-skew-controls select { width: 122px; }
+.iv-skew-segments [aria-pressed="true"] {
+  color: var(--text);
+  border-color: #7aa2ff99;
+  background: #7aa2ff2b;
+}
+.iv-skew-controls [hidden], .widget-body > [hidden].iv-skew-plot,
+.widget-body > [hidden].iv-skew-shade-key, .widget-body > [hidden].iv-skew-table { display: none; }
+.iv-skew-summary, .iv-skew-status, .iv-skew-shade-key {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 6px 0;
+}
+.iv-skew-summary:empty { display: none; }
+.iv-skew-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 4px 0 6px;
+}
+.iv-skew-metrics > div {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+}
+.iv-skew-metrics dt, .iv-skew-metrics .iv-skew-unit { color: var(--muted); font-size: 11px; }
+.iv-skew-metrics dd { margin: 2px 0 0; font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.iv-skew-metrics .iv-skew-unit { font-weight: 400; }
+.widget-card[data-height-units="2"] .widget-body > .iv-skew-plot {
+  position: relative;
+  flex: 1;
+  min-height: 205px;
+}
+.iv-skew-shade-key { gap: 12px; padding-left: 6px; }
+.iv-skew-shade-key span::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 5px;
+  background: #f17b9555;
+}
+.iv-skew-shade-key span + span::before { background: #4dd9a455; }
+.widget-card[data-height-units="2"] .widget-body > .iv-skew-table {
+  flex: 1;
+  min-height: 100px;
+}
+.iv-skew-table { font-variant-numeric: tabular-nums; }
+.iv-skew-put { color: #f17b95; }
+.iv-skew-call { color: #4dd9a4; }
+
 .widget-card-straddle-compact:not(.widget-card-collapsed) {
   height: var(--straddle-compact-height);
   display: flex;

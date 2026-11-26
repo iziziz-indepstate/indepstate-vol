@@ -48,6 +48,7 @@ TradingView session cookies can be configured in `Documents/IS-VOL/config.json`,
 - **IV Dynamics**: heatmap widget for intraday changes in IV or IV minus ATM across configurable put/call deltas.
 - **Skew. 0DTE**: intraday put-minus-call IV skew and both wings relative to ATM, with configurable symmetric delta. Details: [Skew. 0DTE](docs/zero-dte-skew.md).
 - **Skew. Multi-Expiry**: skew lines for fixed expiration dates with shared delta and automatic history persistence across restarts and datasource resets. Details: [Skew. Multi-Expiry](docs/multi-expiry-skew.md).
+- **Skew. Overview** shows the latest TradingView smile, term structure, and strike table with ATM, skew, butterfly, and slope metrics. [Skew. Overview](docs/skew-overview.md)
 - **Spread Optimizer**: table widget that ranks candidate vertical spreads by configurable risk, liquidity, and regime inputs.
 - **SPX IV / RV**: standalone table and chart widget for implied-vs-realized volatility comparisons.
 - **COR. Realized Correlation**: standalone RC5/RC10/RC21 and configurable EWMA charts for the current Top 50 IVV basket, with COR1M and correlation spread. Details: [COR. Realized Correlation](docs/realized-correlation.md).
