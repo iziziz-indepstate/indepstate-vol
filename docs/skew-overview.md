@@ -4,6 +4,8 @@ This widget uses the latest full snapshot from the tab's TradingView datasource.
 
 **Smile** plots implied volatility against strike, with brighter OTM lines, muted ITM lines, spot and ATM reference lines, and interpolated 25Δ wings. Shading shows where valid OTM bid IV is above or below ATM IV. **Term** plots ATM IV and both 25Δ wing IVs by calendar DTE. **Table** shows the contracts at each displayed strike, including their delta, IV, bid IV, bid, and ask.
 
+When ATM IV and both quotes nearest to spot on the OTM lines are valid, the put and call lines meet in a yellow dot at spot and ATM IV. The dot is a chart reference. Tooltips show the original quotes, including any quotes at the spot strike.
+
 The strike range applies to Smile and Table. **Auto** starts at ±5% of spot and extends to include any available 25Δ wing strikes. **±5%**, **±10%**, and **±20%** are fixed around spot. **All** shows the entire chain. The selected view, expiration mode, and range are saved per widget instance.
 
 ## Metrics

@@ -16,10 +16,11 @@ const format = (value, digits = 2) => Number.isFinite(value) ? value.toFixed(dig
 const iv = (value) => Number.isFinite(value) ? `${(value * 100).toFixed(2)}%` : 'N/A';
 const xy = (x, value) => ({ x, y: value == null ? null : value * 100 });
 
-function smileChart(model, { min, max }) {
+export function buildSmileChart(model, { min, max }) {
   const { spot, atmIV, wing25, quotes } = model;
   const datasets = [];
   const markers = [];
+  const otmLines = {};
   for (const type of ['put', 'call']) {
     const side = quotes.filter((q) => q.type === type);
     const label = type === 'put' ? 'Put' : 'Call';
@@ -30,10 +31,14 @@ function smileChart(model, { min, max }) {
         || (otm && q.moneyness == null))
         .map((q) => ({ ...xy(q.strike, q.valid ? q.iv : null), quote: q }));
       if (!data.some((point) => point.y != null)) continue;
-      datasets.push({
+      const dataset = {
         label: `${spot == null ? '' : otm ? 'OTM ' : 'ITM '}${label}s`, data, borderColor: otm ? color : `${color}55`,
-        pointBackgroundColor: color, borderWidth: otm ? 2 : 1, pointRadius: otm ? 1.5 : 1, order: otm ? 1 : 2
-      });
+        pointBackgroundColor: color, borderWidth: otm ? 2 : 1, order: otm ? 1 : 2,
+        pointRadius: otm ? ({ raw }) => raw?.quote ? 1.5 : 0 : 1,
+        pointHitRadius: ({ raw }) => raw?.quote ? 8 : 0
+      };
+      if (otm) otmLines[type] = data;
+      datasets.push(dataset);
     }
     const bid = side.filter((q) => q.moneyness === 'otm' || q.moneyness === 'atm')
       .map((q) => xy(q.strike, q.valid ? q.bidIV : null));
@@ -53,8 +58,16 @@ function smileChart(model, { min, max }) {
       });
     }
   }
+  let atmJoin = null;
+  const putEdge = otmLines.put?.at(-1);
+  const callEdge = otmLines.call?.[0];
+  if (spot != null && atmIV != null && putEdge?.y != null && callEdge?.y != null) {
+    atmJoin = xy(spot, atmIV);
+    otmLines.put.push(atmJoin);
+    otmLines.call.unshift(atmJoin);
+  }
   return {
-    datasets, xTitle: 'Strike', min, max, spot, atmIV, markers,
+    datasets, xTitle: 'Strike', min, max, spot, atmIV, atmJoin, markers,
     shaded: datasets.some((dataset) => Boolean(dataset.fill))
   };
 }
@@ -106,15 +119,26 @@ function chartReferences(state) {
     },
     afterDatasetsDraw(chart) {
       const { ctx, chartArea: area, scales } = chart;
+      const { atmJoin, markers } = state.chartModel;
       ctx.save();
       ctx.font = '10px sans-serif';
-      for (const marker of state.chartModel.markers) {
+      for (const marker of markers) {
         const x = scales.x.getPixelForValue(marker.x);
         const y = scales.y.getPixelForValue(marker.y);
         if (y < area.top || y > area.bottom) continue;
         const left = Math.max(area.left, Math.min(x + 6, area.right - ctx.measureText(marker.label).width));
         ctx.fillStyle = marker.color;
         ctx.fillText(marker.label, left, Math.max(area.top + 10, y - 5));
+      }
+      if (atmJoin) {
+        const x = scales.x.getPixelForValue(atmJoin.x);
+        const y = scales.y.getPixelForValue(atmJoin.y);
+        if (x >= area.left && x <= area.right && y >= area.top && y <= area.bottom) {
+          ctx.fillStyle = COLORS.atm;
+          ctx.beginPath();
+          ctx.arc(x, y, 3.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
       ctx.restore();
     }
@@ -274,7 +298,7 @@ export const skewOverviewWidget = {
         <td>${iv(q.iv)}</td><td>${iv(q.bidIV)}</td><td>${format(q.bid)}</td><td>${format(q.ask)}</td></tr>`).join('');
     }
     const model = config.panel === 'term' ? termChart(overview.term, overview.expiration)
-      : config.panel === 'smile' && overview.smile ? smileChart(overview.smile, strikeWindow) : null;
+      : config.panel === 'smile' && overview.smile ? buildSmileChart(overview.smile, strikeWindow) : null;
     const hasPlot = model?.datasets.some((dataset) => dataset.order !== 3 &&
       dataset.data.some(({ x, y }) => y != null && (model.min == null || x >= model.min) && (model.max == null || x <= model.max)));
     let status = '';

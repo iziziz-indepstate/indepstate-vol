@@ -4,6 +4,7 @@ import { calculateSkewOverview, normalizeSkewOverviewConfig, skewOverviewWindow 
 import { calculateZeroDteSkewPoint } from '../src/shared/zero-dte-skew-calculations.mjs';
 import { trimSnapshotForWidgets } from '../src/shared/snapshot-trim.mjs';
 import { getWidgetDefinition } from '../src/renderer/widgets/index.js';
+import { buildSmileChart } from '../src/renderer/widgets/skew-overview-widget.js';
 
 const SESSION = '20261125';
 const NEAR = '20261126';
@@ -31,6 +32,49 @@ function chain(atmIV = 0.2) {
 function snapshot(byExpiry = { [SESSION]: chain() }) {
   return { time: '2026-11-26T01:00:00Z', px: 100, expiry: Object.keys(byExpiry)[0], byExpiry };
 }
+
+test('joins the OTM lines at spot and ATM IV while retaining real endpoints', () => {
+  for (const spot of [100, 99]) {
+    const strip = { ...chain(), px: spot };
+    const { smile } = calculateSkewOverview(snapshot({ [SESSION]: strip }));
+    const originalQuotes = structuredClone(smile.quotes);
+    const chart = buildSmileChart(smile, skewOverviewWindow(smile, 'auto'));
+    const put = chart.datasets.find(({ label }) => label === 'OTM Puts');
+    const call = chart.datasets.find(({ label }) => label === 'OTM Calls');
+    assert.equal(chart.atmJoin.x, spot);
+    near(chart.atmJoin.y, 20);
+    assert.deepEqual(put.data.at(-1), chart.atmJoin);
+    assert.deepEqual(call.data[0], chart.atmJoin);
+    assert.equal(put.data.at(-2).x, 99);
+    assert.equal(call.data[1].x, spot === 99 ? 99 : 101);
+    near(put.data.at(-2).y, 18);
+    near(call.data[1].y, spot === 99 ? 22 : 40);
+    assert.equal(put.data.at(-2).quote.type, 'put');
+    assert.equal(call.data[1].quote.type, 'call');
+    assert.equal(put.pointHitRadius({ raw: chart.atmJoin }), 0);
+    assert.deepEqual(smile.quotes, originalQuotes);
+  }
+});
+
+test('leaves the smile disconnected when ATM, a side, or an edge quote is unavailable', () => {
+  const invalidEdge = chain();
+  invalidEdge.optionQuotes.find((q) => q.type === 'put' && q.strike === 99).bid = null;
+  const withoutAtm = chain();
+  withoutAtm.optionQuotes = withoutAtm.optionQuotes.filter(({ strike }) => strike !== 99 && strike !== 101);
+  const withoutOtmCall = chain();
+  withoutOtmCall.optionQuotes = withoutOtmCall.optionQuotes.filter((q) => q.type !== 'call' || q.strike < 100);
+  for (const strip of [invalidEdge, withoutAtm, withoutOtmCall]) {
+    const { smile } = calculateSkewOverview(snapshot({ [SESSION]: strip }));
+    const chart = buildSmileChart(smile, skewOverviewWindow(smile, 'auto'));
+    assert.equal(chart.atmJoin, null);
+    if (strip === invalidEdge) {
+      const put = chart.datasets.find(({ label }) => label === 'OTM Puts');
+      near(chart.atmIV, 0.4);
+      assert.equal(put.data.at(-1).x, 99);
+      assert.equal(put.data.at(-1).y, null);
+    }
+  }
+});
 
 test('uses the shared quote rules, interpolates wing IV and strike, and reports signed metrics', () => {
   const data = snapshot();
