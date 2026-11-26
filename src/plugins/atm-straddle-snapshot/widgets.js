@@ -217,7 +217,7 @@ function controlsMarkup(config, mode) {
        <label class="straddle-snapshot-time-label">Start time <input data-straddle-snapshot-param="startTime" type="text" value="${esc(normalizeOptionalTime(config.startTime))}" placeholder="09:30" /></label>
        <label class="straddle-snapshot-time-label">End time <input data-straddle-snapshot-param="endTime" type="text" value="${esc(normalizeOptionalTime(config.endTime))}" placeholder="16:45" /></label>`
     : '';
-  return `<div class="straddle-snapshot-controls">${tenorSelect}${rangeControls}</div>`;
+  return `<div class="straddle-snapshot-controls straddle-snapshot-filters">${tenorSelect}${rangeControls}</div>`;
 }
 
 function bindControls(container, widget, onConfigChange) {
@@ -566,14 +566,18 @@ async function renderSnapshotChartWidget({ container, widget, widgetData, onConf
   });
   const status = container.querySelector('.straddle-snapshot-status');
   const pointCount = series.datasets.reduce((acc, dataset) => acc + (dataset.data || []).filter((value) => Number.isFinite(value)).length, 0);
-  if (!pointCount) {
-    status.textContent = mode === 'daily'
+  let statusText;
+  if (pointCount) {
+    statusText = `${documents.length} files, ${pointCount} points${result?.warnings?.length ? `, ${result.warnings.length} warnings` : ''}`;
+  } else {
+    statusText = mode === 'daily'
       ? 'No snapshot points for configured lines.'
       : `No ${config.tenor} snapshot dynamics in range.`;
-    return;
   }
+  status.textContent = statusText;
+  status.title = statusText;
+  if (!pointCount) return;
 
-  status.textContent = `${documents.length} files, ${pointCount} points${result?.warnings?.length ? `, ${result.warnings.length} warnings` : ''}`;
   await renderChart(container, series, mode);
 }
 

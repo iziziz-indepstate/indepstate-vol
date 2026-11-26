@@ -869,19 +869,57 @@ select option {
 .spread-opt-eff.good { color: #22c55e; }
 .spread-opt-eff.bad { color: #ef4444; }
 
+.widget-body:has(> .straddle-snapshot-controls) {
+  container-name: straddle-snapshot;
+  container-type: inline-size;
+}
+
 .straddle-snapshot-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: end;
+  --filter-row-height: 44px;
+  --filter-gap: 8px;
+  --filter-rows: 1;
+  --filter-columns: 92px 116px 116px 54px 54px;
   margin-bottom: 8px;
 }
 
+.straddle-snapshot-filters {
+  display: grid;
+  grid-template-columns: var(--filter-columns);
+  grid-auto-rows: var(--filter-row-height);
+  gap: var(--filter-gap);
+  align-items: end;
+}
+
+@container straddle-snapshot (width < 464px) {
+  .straddle-snapshot-controls {
+    --filter-rows: 2;
+    --filter-columns: 92px 116px 116px;
+  }
+}
+
+@container straddle-snapshot (width < 340px) {
+  .straddle-snapshot-controls {
+    --filter-rows: 3;
+    --filter-columns: repeat(2, 116px);
+  }
+}
+
+@container straddle-snapshot (width < 240px) {
+  .straddle-snapshot-controls {
+    --filter-rows: 5;
+    --filter-columns: minmax(0, 116px);
+  }
+}
+
 .straddle-snapshot-settings {
-  display: block;
+  min-height: calc(var(--filter-rows) * var(--filter-row-height) + (var(--filter-rows) - 1) * var(--filter-gap));
   border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 6px;
   padding: 6px;
+}
+
+.straddle-snapshot-settings:not([open]) {
+  align-content: center;
 }
 
 .straddle-snapshot-settings summary {
@@ -932,9 +970,15 @@ select option {
   min-width: 92px;
 }
 
-.straddle-snapshot-controls .straddle-snapshot-time-label {
-  min-width: 44px;
+.straddle-snapshot-filters label,
+.straddle-snapshot-filters input,
+.straddle-snapshot-filters select {
+  min-width: 0;
+}
+
+.straddle-snapshot-filters .straddle-snapshot-time-label {
   width: 54px;
+  max-width: 100%;
 }
 
 .straddle-snapshot-controls input,
@@ -951,7 +995,7 @@ select option {
   position: relative;
   width: 100%;
   min-width: 0;
-  min-height: 220px;
+  height: 220px;
   overflow: hidden;
 }
 
@@ -962,7 +1006,11 @@ select option {
 .straddle-snapshot-status {
   margin-top: 6px;
   font-size: 11px;
+  line-height: 15px;
   color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .straddle-snapshot-tooltip {
